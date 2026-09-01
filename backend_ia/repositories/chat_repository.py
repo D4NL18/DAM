@@ -1,5 +1,5 @@
 import logging
-from config.firebase import db
+from config import firebase
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -9,7 +9,7 @@ class ChatRepository:
 
     @staticmethod
     def save_log(remote_jid: str, from_me: bool, text: str, message_id: str = None):
-        if db is None:
+        if firebase.db is None:
             logger.warning("Firebase não inicializado, pulando salvamento de log.")
             return
 
@@ -22,14 +22,14 @@ class ChatRepository:
         if message_id:
             doc_data["messageId"] = message_id
 
-        db.collection(ChatRepository.COLLECTION).add(doc_data)
+        firebase.db.collection(ChatRepository.COLLECTION).add(doc_data)
 
     @staticmethod
     def get_recent_history(remote_jid: str, limit: int = 10):
-        if db is None:
+        if firebase.db is None:
             return []
 
-        docs = db.collection(ChatRepository.COLLECTION) \
+        docs = firebase.db.collection(ChatRepository.COLLECTION) \
                  .where("remoteJid", "==", remote_jid) \
                  .order_by("timestamp", direction="DESCENDING") \
                  .limit(limit) \

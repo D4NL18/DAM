@@ -10,14 +10,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def process_and_reply(remote_jid: str, text: str):
+    print(f"PROCESS AND REPLY INICIADO PARA {remote_jid} COM TEXTO: {text}")
     # 1. Obter resposta do Gemini (inclui recuperar histórico e enviar a nova msg)
     ai_response = AIService.process_message(remote_jid, text)
+    print(f"RESPOSTA DO GEMINI: {ai_response}")
     
     # 2. Enviar resposta para o WhatsApp
     WhatsAppService.send_text(remote_jid, ai_response)
+    print("MENSAGEM ENVIADA VIA WHATSAPP SERVICE")
     
     # 3. Salvar no Firestore a resposta do DAM
     ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=ai_response)
+    print("LOG SALVO NO FIREBASE")
 
 @router.post("/api/whatsapp/webhook")
 async def whatsapp_webhook(
@@ -26,18 +30,17 @@ async def whatsapp_webhook(
     authorization: Optional[str] = Header(None),
     apikey: Optional[str] = Header(None)
 ):
-    logger.warning(f"HEADERS CHEGANDO: {request.headers}")
+    print(f"WEBHOOK RECEBIDO! HEADERS: {request.headers}")
     # Security Audit: Validação de Token de Webhook (se configurado)
     if settings.WEBHOOK_TOKEN:
         token = authorization or apikey
-        logger.warning(f"TOKEN PARSED: {token} | ESPERADO: {settings.WEBHOOK_TOKEN}")
-        # Suporta tanto formato 'Bearer token' quanto enviar apenas o token diretamente
         if not token or (token != settings.WEBHOOK_TOKEN and token.replace("Bearer ", "") != settings.WEBHOOK_TOKEN):
-            logger.warning("Tentativa de acesso ao webhook com token inválido ou ausente.")
+            print("Tentativa de acesso ao webhook com token inválido ou ausente.")
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
         payload = await request.json()
+        print(f"PAYLOAD: {payload.get('event')}")
         
         # Filtro básico para Evolution API v2 (messages.upsert)
         if payload.get("event") == "messages.upsert":
@@ -56,6 +59,7 @@ async def whatsapp_webhook(
             # O WhatsApp pode ocultar o 9º dígito no Brasil, então pegamos os últimos 8 dígitos.
             phone_filter = settings.ALLOWED_PHONE_NUMBER[-8:] if settings.ALLOWED_PHONE_NUMBER else ""
             is_me = (phone_filter in remote_jid) if phone_filter else True
+            print(f"IS_ME: {is_me}, IS_GROUP: {is_group}, FROM_ME: {from_me}, REMOTE_JID: {remote_jid}")
             
             if is_me and not is_group:
                 # Extração do texto baseada na estrutura da Evolution API

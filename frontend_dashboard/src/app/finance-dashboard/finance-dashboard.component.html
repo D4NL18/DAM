@@ -1,0 +1,45 @@
+<div class="dashboard-container">
+  <div class="header-section">
+    <h1>Visão Geral: Finanças</h1>
+    <p>Acompanhe seus gastos mensais e transações recentes.</p>
+  </div>
+
+  <div class="cards-grid" *ngIf="!loading && summary">
+    <div class="stat-card glass-panel highlight">
+      <div class="icon">💰</div>
+      <div class="details">
+        <span class="label">Total Gasto (Mês)</span>
+        <span class="value">{{ summary.totalSpent | currency:summary.currency }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="content-grid" *ngIf="!loading && summary">
+    <div class="chart-container glass-panel">
+      <div class="chart-header">
+        <h2>Despesas por Categoria</h2>
+      </div>
+      <div echarts [options]="chartOption" class="echarts-instance"></div>
+    </div>
+
+    <div class="transactions-container glass-panel">
+      <div class="transactions-header">
+        <h2>Transações Recentes</h2>
+      </div>
+      <ul class="transaction-list">
+        <li class="transaction-item" *ngFor="let tx of summary.recentTransactions">
+          <div class="tx-info">
+            <div class="tx-icon">{{ tx.category.charAt(0) }}</div>
+            <div class="tx-details">
+              <span class="tx-desc">{{ tx.description }}</span>
+              <span class="tx-cat">{{ tx.category }} • {{ tx.date | date:'shortDate' }}</span>
+            </div>
+          </div>
+          <div class="tx-amount negative">
+            - {{ tx.amount | currency:summary.currency }}
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>

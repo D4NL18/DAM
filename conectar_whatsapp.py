@@ -23,7 +23,9 @@ def main():
     payload_create = {
         "instanceName": INSTANCE_NAME,
         "qrcode": True,
-        "integration": "WHATSAPP-BAILEYS"
+        "integration": "WHATSAPP-BAILEYS",
+        "syncFullHistory": False,
+        "readMessages": False
     }
     
     print(f"Criando instancia '{INSTANCE_NAME}'...")

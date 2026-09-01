@@ -1,0 +1,45 @@
+<div class="dashboard-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar glass-panel">
+    <div class="logo">
+      <h2>DAM Assistant</h2>
+    </div>
+    
+    <nav class="nav-menu">
+      <a routerLink="/health" routerLinkActive="active" class="nav-item">
+        <span class="icon">❤️</span>
+        <span>Saúde</span>
+      </a>
+      <a routerLink="/finance" routerLinkActive="active" class="nav-item">
+        <span class="icon">💰</span>
+        <span>Finanças</span>
+      </a>
+    </nav>
+    
+    <div class="user-profile">
+      <div class="avatar">
+        <span>U</span>
+      </div>
+      <div class="user-info">
+        <span class="name">Usuário</span>
+        <span class="role">Admin</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <header class="topbar glass-panel">
+      <div class="search-bar">
+        <input type="text" placeholder="Pesquisar...">
+      </div>
+      <div class="topbar-actions">
+        <button class="action-btn">🔔</button>
+      </div>
+    </header>
+    
+    <div class="content-area">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

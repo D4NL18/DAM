@@ -1,0 +1,39 @@
+<div class="dashboard-container">
+  <div class="header-section">
+    <h1>Visão Geral: Saúde</h1>
+    <p>Acompanhe seu progresso semanal e métricas vitais.</p>
+  </div>
+
+  <div class="cards-grid" *ngIf="!loading && summary">
+    <div class="stat-card glass-panel">
+      <div class="icon">🚶</div>
+      <div class="details">
+        <span class="label">Total de Passos</span>
+        <span class="value">{{ summary.totalSteps | number }}</span>
+      </div>
+    </div>
+    
+    <div class="stat-card glass-panel">
+      <div class="icon">🔥</div>
+      <div class="details">
+        <span class="label">Calorias Queimadas</span>
+        <span class="value">{{ summary.totalActiveEnergyBurned | number }} <small>kcal</small></span>
+      </div>
+    </div>
+
+    <div class="stat-card glass-panel">
+      <div class="icon">❤️</div>
+      <div class="details">
+        <span class="label">Média Frequência Cardíaca</span>
+        <span class="value">{{ summary.avgHeartRate }} <small>bpm</small></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-container glass-panel" *ngIf="!loading">
+    <div class="chart-header">
+      <h2>Atividade Semanal</h2>
+    </div>
+    <div echarts [options]="chartOption" class="echarts-instance"></div>
+  </div>
+</div>

@@ -124,3 +124,60 @@ class TestConsultarClashOfClans:
         r = consultar_clash_of_clans("raid")
         assert isinstance(r, str)
         assert any(w in r.lower() for w in ["indisponível", "erro", "não foi possível", "falha"])
+
+
+class TestAlertasBriefingCoC:
+    """Testes para _obter_alertas_coc no briefing matinal."""
+
+    @patch("services.briefing_service._fetch_coc_data")
+    @patch("services.briefing_service.settings")
+    def test_sem_configuracao_retorna_vazio(self, mock_settings, mock_fetch):
+        from services.briefing_service import _obter_alertas_coc
+        mock_settings.COC_API_TOKEN = ""
+        mock_settings.COC_CLAN_TAG = ""
+        mock_settings.COC_PLAYER_TAG = ""
+        resultado = _obter_alertas_coc()
+        assert resultado == ""
+        mock_fetch.assert_not_called()
+
+    @patch("services.briefing_service._fetch_coc_data")
+    @patch("services.briefing_service.settings")
+    def test_com_ataques_pendentes_retorna_alertas(self, mock_settings, mock_fetch):
+        from services.briefing_service import _obter_alertas_coc
+        mock_settings.COC_API_TOKEN = "fake"
+        mock_settings.COC_CLAN_TAG = "#XYZ123"
+        mock_settings.COC_PLAYER_TAG = "#ABC987"
+
+        def side_effect(endpoint):
+            if "capitalraidseasons" in endpoint:
+                return {"items": [{"state": "ongoing", "members": [
+                    {"tag": "#ABC987", "attacks": 2, "attackLimit": 6, "bonusAttackLimit": 0}
+                ]}]}
+            elif "currentwarleaguegroup" in endpoint:
+                raise Exception("not in league")
+            else:
+                return {"state": "notInWar", "attacksPerMember": 2, "clan": {"members": []}}
+
+        mock_fetch.side_effect = side_effect
+        resultado = _obter_alertas_coc()
+        assert "Raid Weekend" in resultado
+
+    @patch("services.briefing_service._fetch_coc_data")
+    @patch("services.briefing_service.settings")
+    def test_sem_pendencias_retorna_vazio(self, mock_settings, mock_fetch):
+        from services.briefing_service import _obter_alertas_coc
+        mock_settings.COC_API_TOKEN = "fake"
+        mock_settings.COC_CLAN_TAG = "#XYZ123"
+        mock_settings.COC_PLAYER_TAG = "#ABC987"
+
+        def side_effect(endpoint):
+            if "capitalraidseasons" in endpoint:
+                return {"items": [{"state": "ended", "members": []}]}
+            elif "currentwarleaguegroup" in endpoint:
+                raise Exception("not in league")
+            else:
+                return {"state": "notInWar", "attacksPerMember": 2, "clan": {"members": []}}
+
+        mock_fetch.side_effect = side_effect
+        resultado = _obter_alertas_coc()
+        assert resultado == ""

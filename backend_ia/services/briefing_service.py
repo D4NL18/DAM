@@ -9,6 +9,7 @@ from services.tools.calendar_tool import consultar_agenda
 from services.tools.notes_tool import listar_lembretes_pendentes
 from services.tools.esports_tool import consultar_jogos_cs2
 from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST
+from services.tools.clash_of_clans_tool import _fetch_coc_data, _encode_tag, _verificar_raid_season, _verificar_clan_war
 
 logger = logging.getLogger(__name__)
 
@@ -176,13 +177,94 @@ def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Di
                 })
     return animes_hoje
 
+def _obter_alertas_coc() -> str:
+    """
+    Consulta a API do Clash of Clans e retorna alertas de ataques pendentes.
+    Verifica Raid Weekend (Capital do Clã) e Guerra de Clãs ativa.
+    Retorna string vazia se não houver ataques pendentes ou CoC não configurado.
+    """
+    if not settings.COC_API_TOKEN or not settings.COC_CLAN_TAG or not settings.COC_PLAYER_TAG:
+        return ""
+
+    alertas = []
+    clan_tag_encoded = _encode_tag(settings.COC_CLAN_TAG)
+    player_tag = settings.COC_PLAYER_TAG
+
+    # 1. Raid Weekend (Capital do Clã)
+    try:
+        data = _fetch_coc_data(f"clans/{clan_tag_encoded}/capitalraidseasons?limit=1")
+        items = data.get("items", [])
+        if items:
+            msg = _verificar_raid_season(items[0], player_tag)
+            if msg:
+                alertas.append("• ⚔️ *Raid Weekend:* Você ainda tem ataques disponíveis na Capital do Clã!")
+    except Exception as e:
+        logger.warning(f"[CoC Briefing] Erro ao consultar Raid Weekend: {e}")
+
+    # 2. Guerra de Clãs
+    try:
+        data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwar")
+        msg = _verificar_clan_war(data, player_tag)
+        if msg:
+            alertas.append("• 🏹 *Guerra de Clãs:* Você ainda tem ataques de guerra não utilizados!")
+    except Exception as e:
+        logger.warning(f"[CoC Briefing] Erro ao consultar Guerra de Clãs: {e}")
+
+    # 3. Liga de Guerras (CWL — endpoint separado)
+    try:
+        data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwarleaguegroup")
+        rounds = data.get("rounds", [])
+        # Pega a guerra mais recente da Liga que ainda esteja ativa
+        for round_data in reversed(rounds):
+            for war_tag in round_data.get("warTags", []):
+                if war_tag == "#0":
+                    continue
+                try:
+                    war_tag_encoded = _encode_tag(war_tag)
+                    war_data = _fetch_coc_data(f"clanwarleagues/wars/{war_tag_encoded}")
+                    if war_data.get("state") == "inWar":
+                        # Verifica se o clã do usuário está nessa guerra
+                        clan_tags_guerra = [
+                            war_data.get("clan", {}).get("tag", ""),
+                            war_data.get("opponent", {}).get("tag", "")
+                        ]
+                        meu_clan_tag = settings.COC_CLAN_TAG.strip().upper()
+                        if any(t.upper() == meu_clan_tag for t in clan_tags_guerra):
+                            # Determina qual side é o nosso clã
+                            if war_data.get("clan", {}).get("tag", "").upper() == meu_clan_tag:
+                                side_data = war_data["clan"]
+                            else:
+                                side_data = war_data["opponent"]
+                            ataques_por_membro = war_data.get("attacksPerMember", 1)
+                            tag_norm = player_tag.strip().upper()
+                            membro = next(
+                                (m for m in side_data.get("members", []) if m.get("tag", "").upper() == tag_norm),
+                                None
+                            )
+                            if membro is not None:
+                                feitos = len(membro.get("attacks", []))
+                                if (ataques_por_membro - feitos) > 0:
+                                    alertas.append("• 🏆 *Liga de Guerras (CWL):* Você tem ataques pendentes na Liga!")
+                            break
+                except Exception:
+                    continue
+            else:
+                continue
+            break
+    except Exception as e:
+        logger.warning(f"[CoC Briefing] Erro ao consultar Liga de Guerras: {e}")
+
+    return "\n".join(alertas)
+
+
 def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
     """
-    Monta o texto completo do Morning Briefing com os 4 pilares:
+    Monta o texto completo do Morning Briefing com os 5 pilares:
     1. Eventos do dia no Google Calendar (estritamente o dia de hoje, sem dia seguinte)
     2. Tarefas e Lembretes do dia
     3. Jogos da FURIA no dia (resultado se 00h-08h, ou adversário e hora se após 08h)
     4. Animes acompanhados que lançam episódio hoje
+    5. Clash of Clans — alertas de ataques pendentes (Raid, Guerra, Liga). Omitido se sem pendências.
     """
     hoje = _obter_data_brasilia(data_alvo)
     hoje_str = hoje.strftime("%Y-%m-%d")
@@ -254,7 +336,15 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
     else:
         animes_txt = _obter_info_animes_briefing(hoje)
 
+    # 5. Clash of Clans — ataques pendentes (Raid, Guerra, Liga)
+    coc_alertas = _obter_alertas_coc()
+
     # Montagem do template executivo
+    coc_bloco = (
+        f"\n⚔️ *Clash of Clans — Ataques Pendentes:*\n"
+        f"{coc_alertas}\n"
+    ) if coc_alertas else ""
+
     template = (
         f"☀️ *Bom dia! Seu Resumo Matinal do DAM*\n"
         f"🗓️ *{dia_nome}, {data_formatada}* (08:00)\n"
@@ -266,7 +356,8 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
         f"🐾 *Jogos da FURIA (CS2):*\n"
         f"{furia_txt}\n\n"
         f"🎌 *Animes de Hoje:*\n"
-        f"{animes_txt}\n\n"
+        f"{animes_txt}\n"
+        f"{coc_bloco}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"💡 _Tenha um excelente e produtivo dia!_"
     )
@@ -333,11 +424,12 @@ def enviar_briefing_matinal(force: bool = False) -> str:
 def consultar_briefing_matinal() -> str:
     """
     Retorna o conteúdo oficial do Morning Briefing / mensagem de bom dia programada para hoje (08:00).
-    Reúne estritamente os 4 pilares:
+    Reúne os 5 pilares:
     1. Compromissos e eventos de hoje no Google Calendar (somente hoje, sem o dia seguinte).
     2. Tarefas e Lembretes pendentes de hoje.
     3. Partidas da FURIA Esports no dia (resultado se ocorreu de 00h às 08h, ou adversário e hora se for após 08h).
     4. Animes acompanhados que lançam episódio novo hoje.
+    5. Clash of Clans: alertas de ataques pendentes em Raid Weekend, Guerra de Clãs e Liga de Guerras (CWL). Omitido se não houver pendências.
 
     NÃO inclui status do veículo, NÃO inclui banco de horas e NÃO inclui compromissos do dia seguinte.
     """

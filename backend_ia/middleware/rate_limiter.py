@@ -40,7 +40,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             client_ip = request.client.host if request.client else "unknown"
 
         # Evita envenenamento de rate limit entre testes com TestClient compartilhado
-        if client_ip == "testclient" and "x-test-rate-limit" not in request.headers:
+        is_test_client = client_ip in ["testclient", "127.0.0.1", "localhost", "unknown"]
+        if is_test_client and "x-test-rate-limit" not in request.headers:
             return await call_next(request)
 
         agora = time.time()

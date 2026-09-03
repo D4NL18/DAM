@@ -254,3 +254,18 @@ def enviar_briefing_matinal(force: bool = False) -> str:
     except Exception as e:
         logger.error(f"Erro ao disparar mensagem de briefing no WhatsApp: {e}")
         return f"Erro ao enviar briefing matinal via WhatsApp: {e}"
+
+
+def consultar_briefing_matinal() -> str:
+    """
+    Retorna o conteúdo oficial do Morning Briefing / mensagem de bom dia programada para hoje (08:00).
+    Reúne estritamente os 4 pilares:
+    1. Compromissos e eventos de hoje no Google Calendar (somente hoje, sem o dia seguinte).
+    2. Tarefas e Lembretes pendentes de hoje.
+    3. Partidas da FURIA Esports no dia (resultado se ocorreu de 00h às 08h, ou adversário e hora se for após 08h).
+    4. Animes acompanhados que lançam episódio novo hoje.
+
+    NÃO inclui status do veículo, NÃO inclui banco de horas e NÃO inclui compromissos do dia seguinte.
+    """
+    return montar_resumo_matinal()
+

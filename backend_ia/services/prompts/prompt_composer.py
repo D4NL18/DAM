@@ -3,6 +3,7 @@ from services.prompts.system_base import get_system_base_prompt
 from services.prompts.financial_rules import get_financial_prompt
 from services.prompts.mobility_rules import get_mobility_prompt
 from services.prompts.anime_rules import get_anime_prompt
+from services.prompts.briefing_rules import get_briefing_prompt
 
 class PromptComposer:
     """
@@ -22,7 +23,8 @@ class PromptComposer:
             get_system_base_prompt(data_hora_atual),
             get_financial_prompt(),
             get_mobility_prompt(),
-            get_anime_prompt()
+            get_anime_prompt(),
+            get_briefing_prompt()
         ]
 
         return "\n".join(secoes)

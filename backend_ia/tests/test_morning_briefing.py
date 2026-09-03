@@ -144,6 +144,26 @@ class TestFase21MorningBriefing:
         assert res.status_code == 200
         assert res.json()["status"] == "ok"
 
+    @patch("services.briefing_service.consultar_agenda")
+    @patch("services.briefing_service.listar_lembretes_pendentes")
+    def test_consultar_briefing_matinal_pilares_estritos(self, mock_notes, mock_agenda):
+        from services.briefing_service import consultar_briefing_matinal
+        mock_agenda.return_value = "• 10:00 - Reunião de Planejamento"
+        mock_notes.return_value = "• Enviar relatório financeiro"
+
+        res = consultar_briefing_matinal()
+        # 4 pilares obrigatórios
+        assert "Compromissos de Hoje" in res
+        assert "Tarefas & Lembretes" in res
+        assert "Jogos da FURIA" in res
+        assert "Animes de Hoje" in res
+
+        # Exclusões obrigatórias solicitadas pelo usuário
+        assert "Fastback" not in res
+        assert "veículo" not in res.lower()
+        assert "banco de horas" not in res.lower()
+        assert "amanhã" not in res.lower()
+
     @patch("routers.briefing.montar_resumo_matinal")
     def test_router_preview_briefing_authorized(self, mock_montar):
         from fastapi.testclient import TestClient

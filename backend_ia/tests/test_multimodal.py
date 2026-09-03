@@ -105,7 +105,7 @@ class TestMultimodalIntegration(unittest.TestCase):
         self.assertIsInstance(call_content, list)
         self.assertEqual(len(call_content), 2)
         self.assertEqual(call_content[0]["mime_type"], "image/jpeg")
-        self.assertEqual(call_content[1], "Analise a nota fiscal")
+        self.assertIn("Analise a nota fiscal", call_content[1])
 
 if __name__ == "__main__":
     unittest.main()

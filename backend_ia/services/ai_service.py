@@ -58,6 +58,7 @@ from services.tools.anime_tracker_tool import (
     consultar_novas_temporadas,
     explorar_temporada_animes
 )
+from services.briefing_service import consultar_briefing_matinal
 from datetime import datetime
 
 from services.guardrails_service import GuardrailsService
@@ -115,7 +116,8 @@ AVAILABLE_TOOLS = [
     grade_semanal_animes,
     sincronizar_perfil_anilist,
     consultar_novas_temporadas,
-    explorar_temporada_animes
+    explorar_temporada_animes,
+    consultar_briefing_matinal
 ]
 
 class AIService:

@@ -1,45 +1,86 @@
-<div class="dashboard-layout">
-  <!-- Sidebar -->
-  <aside class="sidebar glass-panel">
-    <div class="logo">
-      <h2>DAM Assistant</h2>
+<div class="dam-layout">
+  <!-- Sidebar Desktop -->
+  <nav class="dam-sidebar">
+    <div class="sidebar-header">
+      <h1 class="logo-title">DAM</h1>
+      <p class="logo-subtitle">Unified Dashboard</p>
     </div>
     
-    <nav class="nav-menu">
-      <a routerLink="/health" routerLinkActive="active" class="nav-item">
-        <span class="icon">❤️</span>
-        <span>Saúde</span>
-      </a>
-      <a routerLink="/finance" routerLinkActive="active" class="nav-item">
-        <span class="icon">💰</span>
-        <span>Finanças</span>
-      </a>
-    </nav>
-    
-    <div class="user-profile">
-      <div class="avatar">
-        <span>U</span>
-      </div>
-      <div class="user-info">
-        <span class="name">Usuário</span>
-        <span class="role">Admin</span>
-      </div>
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a routerLink="/health" routerLinkActive="active" class="nav-link">
+          <span class="material-symbols-outlined icon">health_and_safety</span>
+          <span class="label">Saúde</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a routerLink="/finance" routerLinkActive="active" class="nav-link">
+          <span class="material-symbols-outlined icon" style="font-variation-settings: 'FILL' 1;">payments</span>
+          <span class="label">Finanças</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a routerLink="/agenda" routerLinkActive="active" class="nav-link">
+          <span class="material-symbols-outlined icon">calendar_today</span>
+          <span class="label">Agenda</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="nav-footer">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <a routerLink="/settings" routerLinkActive="active" class="nav-link">
+            <span class="material-symbols-outlined icon">settings</span>
+            <span class="label">Configurações</span>
+          </a>
+        </li>
+      </ul>
     </div>
-  </aside>
+  </nav>
 
   <!-- Main Content Area -->
-  <main class="main-content">
-    <header class="topbar glass-panel">
-      <div class="search-bar">
-        <input type="text" placeholder="Pesquisar...">
+  <main class="dam-main">
+    <header class="dam-header">
+      <div class="mobile-logo">
+        <h1>DAM</h1>
       </div>
-      <div class="topbar-actions">
-        <button class="action-btn">🔔</button>
+      
+      <div class="header-search">
+        <!-- Search could go here -->
+      </div>
+      
+      <div class="header-actions">
+        <button class="action-btn">
+          <span class="material-symbols-outlined">notifications</span>
+        </button>
+        <button class="action-btn">
+          <span class="material-symbols-outlined">today</span>
+        </button>
+        <div class="user-avatar">
+          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzTQFfaHNbuGPTqWeo8HrfdWt3rIqSmSJ72sv_lBCn49k3mNDl5Qoy9jYkGxwD-ggXy2V91RyaXH6V784wk1IwkKxvGqs9de6afXpzk2_V-tB3ThEZvHcLD11uIsJYVMEIhPR3NWCQQ6rgWfKB-n5Qwa_OR51gAjf3H_QFJdiA3XOCTaRhXug0UhRUtU06sF-eZo39oJLyPbuT3BDFOH4kRtVVf9vgyvIUx4ec6mLThe4E0mrsX3JT" alt="User Profile"/>
+        </div>
       </div>
     </header>
     
-    <div class="content-area">
+    <div class="dam-content">
       <router-outlet></router-outlet>
     </div>
   </main>
+
+  <!-- BottomNavBar (Mobile only) -->
+  <nav class="dam-bottom-nav">
+    <a routerLink="/health" routerLinkActive="active" class="bottom-nav-item">
+      <span class="material-symbols-outlined">health_and_safety</span>
+      <span class="label">Saúde</span>
+    </a>
+    <a routerLink="/finance" routerLinkActive="active" class="bottom-nav-item">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+      <span class="label">Finanças</span>
+    </a>
+    <a routerLink="/agenda" routerLinkActive="active" class="bottom-nav-item">
+      <span class="material-symbols-outlined">calendar_today</span>
+      <span class="label">Agenda</span>
+    </a>
+  </nav>
 </div>

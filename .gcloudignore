@@ -1,0 +1,13 @@
+.git
+.gitignore
+.gcloudignore
+__pycache__/
+*.pyc
+venv/
+.pytest_cache/
+frontend_dashboard/node_modules/
+frontend_dashboard/.angular/
+frontend_dashboard/dist/
+backend_ia/venv/
+backend_ia/.pytest_cache/
+backend_core/target/

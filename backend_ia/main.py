@@ -1,8 +1,15 @@
+import logging
 from fastapi import FastAPI
-from routers import webhook
+from routers import webhook, health, billing
 from config.firebase import init_firebase
 from services.ai_service import AIService
 from contextlib import asynccontextmanager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,6 +23,8 @@ app = FastAPI(title="DAM IA Assistant", lifespan=lifespan)
 
 # Registrando rotas
 app.include_router(webhook.router)
+app.include_router(health.router)
+app.include_router(billing.router)
 
 @app.get("/")
 def health_check():

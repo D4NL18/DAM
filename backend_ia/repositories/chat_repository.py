@@ -35,10 +35,14 @@ class ChatRepository:
                  .limit(limit) \
                  .stream()
 
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
         # O Firestore retorna descending, precisamos inverter para a ordem cronológica
         history = []
         for doc in docs:
-            history.append(doc.to_dict())
+            data = doc.to_dict()
+            if data.get("timestamp") and data["timestamp"] >= today_start:
+                history.append(data)
         
         history.reverse()
         return history

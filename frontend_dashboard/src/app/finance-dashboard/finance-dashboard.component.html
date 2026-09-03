@@ -1,45 +1,110 @@
-<div class="dashboard-container">
-  <div class="header-section">
-    <h1>Visão Geral: Finanças</h1>
-    <p>Acompanhe seus gastos mensais e transações recentes.</p>
-  </div>
-
-  <div class="cards-grid" *ngIf="!loading && summary">
-    <div class="stat-card glass-panel highlight">
-      <div class="icon">💰</div>
-      <div class="details">
-        <span class="label">Total Gasto (Mês)</span>
-        <span class="value">{{ summary.totalSpent | currency:summary.currency }}</span>
-      </div>
+<div class="finance-dashboard" *ngIf="!loading && summary">
+  <div class="dashboard-header">
+    <div class="title-area">
+      <h2 class="page-title">Dashboard Financeiro</h2>
+      <p class="page-subtitle">Visão geral das suas finanças</p>
+    </div>
+    <div class="period-selector">
+      <button class="period-btn">Semana</button>
+      <button class="period-btn active">Mês</button>
+      <button class="period-btn">Ano</button>
     </div>
   </div>
 
-  <div class="content-grid" *ngIf="!loading && summary">
-    <div class="chart-container glass-panel">
-      <div class="chart-header">
-        <h2>Despesas por Categoria</h2>
+  <div class="bento-grid">
+    <!-- Resumo de Saldo (Highlight Card) -->
+    <div class="bento-card bento-saldo">
+      <div class="card-header">
+        <h3 class="card-title">Saldo Disponível</h3>
+        <span class="material-symbols-outlined text-tertiary">account_balance</span>
       </div>
-      <div echarts [options]="chartOption" class="echarts-instance"></div>
+      <div class="card-body">
+        <div class="main-value">{{ 14520.00 | currency:summary.currency }}</div>
+        <div class="trend positive">
+          <span class="material-symbols-outlined">trending_up</span>
+          <span>+8.5% este mês</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="footer-item">
+          <p class="label">Projeção Fim do Mês</p>
+          <p class="value">R$ 12.100,00</p>
+        </div>
+        <div class="footer-item">
+          <p class="label">Gasto Estimado (Mês)</p>
+          <p class="value alert">{{ summary.totalSpent | currency:summary.currency }}</p>
+        </div>
+      </div>
     </div>
 
-    <div class="transactions-container glass-panel">
-      <div class="transactions-header">
-        <h2>Transações Recentes</h2>
+    <!-- Insights Financeiros -->
+    <div class="bento-card bento-insights bg-primary-container">
+      <div class="card-header">
+        <span class="material-symbols-outlined">lightbulb</span>
+        <h3 class="card-title">Insights Financeiros</h3>
       </div>
-      <ul class="transaction-list">
-        <li class="transaction-item" *ngFor="let tx of summary.recentTransactions">
-          <div class="tx-info">
-            <div class="tx-icon">{{ tx.category.charAt(0) }}</div>
-            <div class="tx-details">
-              <span class="tx-desc">{{ tx.description }}</span>
-              <span class="tx-cat">{{ tx.category }} • {{ tx.date | date:'shortDate' }}</span>
-            </div>
-          </div>
-          <div class="tx-amount negative">
-            - {{ tx.amount | currency:summary.currency }}
-          </div>
-        </li>
-      </ul>
+      <div class="insights-list">
+        <div class="insight-item">
+          <p class="insight-label">Economia</p>
+          <p class="insight-text">Você economizou <strong>R$ 200</strong> em lazer este mês comparado ao anterior.</p>
+        </div>
+        <div class="insight-item">
+          <p class="insight-label">Alerta</p>
+          <p class="insight-text">Seus gastos com <strong>transporte</strong> subiram 10% na última semana.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Despesas por Categoria (Chart) -->
+    <div class="bento-card bento-despesas">
+      <div class="card-header">
+        <h3 class="card-title">Despesas por Categoria</h3>
+      </div>
+      <div class="chart-wrapper">
+        <div echarts [options]="chartOption" class="echarts-instance"></div>
+      </div>
+    </div>
+
+    <!-- Últimas Transações -->
+    <div class="bento-card bento-transacoes">
+      <div class="card-header">
+        <h3 class="card-title">Últimas Transações</h3>
+        <button class="text-btn">Ver Todas</button>
+      </div>
+      <div class="filter-pills">
+        <button class="pill active">Todas</button>
+        <button class="pill">Entradas</button>
+        <button class="pill">Saídas</button>
+      </div>
+      <div class="table-container">
+        <table class="tx-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Categoria</th>
+              <th>Valor</th>
+              <th class="text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let tx of summary.recentTransactions">
+              <td>{{ tx.date | date:'shortDate' }}</td>
+              <td class="category-cell">
+                <div class="cat-icon bg-primary-light text-primary">
+                  <span class="material-symbols-outlined">{{ tx.category === 'Alimentação' ? 'restaurant' : (tx.category === 'Transporte' ? 'directions_car' : 'shopping_cart') }}</span>
+                </div>
+                {{ tx.description }}
+              </td>
+              <td class="value-cell" [class.negative]="tx.amount > 0">
+                {{ tx.amount | currency:summary.currency }}
+              </td>
+              <td class="text-right">
+                <span class="status-badge" [ngClass]="{'paid': true}">Pago</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

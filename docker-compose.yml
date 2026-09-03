@@ -36,6 +36,10 @@ services:
       - CACHE_REDIS_ENABLED=false
       - RABBITMQ_ENABLED=false
       - WEBSOCKET_ENABLED=false
+      - READ_MESSAGES=false
+      - READ_STATUS=false
+      - GROUPS_IGNORE=true
+      - ALWAYS_ONLINE=false
     env_file:
       - ./backend_ia/.env
     volumes:
@@ -49,7 +53,7 @@ services:
     container_name: backend_ia
     restart: always
     ports:
-      - "8000:8000"
+      - "8000:8080"
     env_file:
       - ./backend_ia/.env
     # Mapear a chave JSON do firebase

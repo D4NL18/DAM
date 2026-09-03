@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     ANILIST_USERNAME: str = ""
     ANILIST_ACCESS_TOKEN: str = ""
 
+    # Clash of Clans (Supercell API)
+    COC_API_TOKEN: str = ""
+    COC_CLAN_TAG: str = ""
+    COC_PLAYER_TAG: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

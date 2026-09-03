@@ -59,6 +59,7 @@ from services.tools.anime_tracker_tool import (
     explorar_temporada_animes
 )
 from services.briefing_service import consultar_briefing_matinal
+from services.tools.clash_of_clans_tool import consultar_clash_of_clans
 from datetime import datetime
 
 from services.guardrails_service import GuardrailsService
@@ -117,7 +118,8 @@ AVAILABLE_TOOLS = [
     sincronizar_perfil_anilist,
     consultar_novas_temporadas,
     explorar_temporada_animes,
-    consultar_briefing_matinal
+    consultar_briefing_matinal,
+    consultar_clash_of_clans
 ]
 
 class AIService:

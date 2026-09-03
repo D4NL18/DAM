@@ -7,6 +7,7 @@ from routers import webhook, health, billing, dashboard, briefing
 from config.firebase import init_firebase
 from services.ai_service import AIService
 from services.briefing_service import enviar_briefing_matinal
+from services.tools.clash_of_clans_tool import alerta_raid_capital, alerta_clan_war
 from contextlib import asynccontextmanager
 
 logging.basicConfig(
@@ -32,16 +33,48 @@ async def _rotina_briefing_diario():
         
         await asyncio.sleep(30)
 
+async def _rotina_raid_capital():
+    """Job: Todo domingo as 12:00 (Brasilia) — Alerta de Raid Weekend da Capital do Cla."""
+    tz_br = timezone(timedelta(hours=-3))
+    while True:
+        try:
+            agora = datetime.now(tz_br)
+            if agora.weekday() == 6 and agora.hour == 12 and agora.minute == 0:
+                logger.info("[CoC Scheduler] Disparando alerta de Raid Weekend (Domingo 12:00 Brasilia).")
+                await asyncio.to_thread(alerta_raid_capital)
+                await asyncio.sleep(65)
+        except Exception as e:
+            logger.error(f"[CoC Scheduler] Erro no scheduler de Raid Weekend: {e}")
+        await asyncio.sleep(30)
+
+async def _rotina_guerra_clas():
+    """Job: Diariamente as 06:00 (Brasilia) — Alerta de Guerra de Clas ativa."""
+    tz_br = timezone(timedelta(hours=-3))
+    while True:
+        try:
+            agora = datetime.now(tz_br)
+            if agora.hour == 6 and agora.minute == 0:
+                logger.info("[CoC Scheduler] Disparando alerta de Guerra de Clas (06:00 Brasilia).")
+                await asyncio.to_thread(alerta_clan_war)
+                await asyncio.sleep(65)
+        except Exception as e:
+            logger.error(f"[CoC Scheduler] Erro no scheduler de Guerra de Clas: {e}")
+        await asyncio.sleep(30)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicializações na subida do app
     init_firebase()
     AIService.setup()
     
-    # Inicia scheduler matinal em background
+    # Inicia schedulers em background
     scheduler_task = asyncio.create_task(_rotina_briefing_diario())
+    raid_task = asyncio.create_task(_rotina_raid_capital())
+    war_task = asyncio.create_task(_rotina_guerra_clas())
     yield
     scheduler_task.cancel()
+    raid_task.cancel()
+    war_task.cancel()
 
 from middleware.rate_limiter import RateLimiterMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware

@@ -38,7 +38,7 @@ export interface AgendaSummary {
   providedIn: 'root'
 })
 export class AgendaApiService {
-  private apiUrl = 'http://35.254.233.21:8000/api/v1/agenda';
+  private apiUrl = 'https://dam-backend-557716987299.us-central1.run.app/api/v1/agenda';
 
   constructor(private http: HttpClient) {}
 

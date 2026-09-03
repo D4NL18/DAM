@@ -22,7 +22,7 @@ export interface FinanceSummary {
   providedIn: 'root'
 })
 export class FinanceApiService {
-  private apiUrl = 'http://35.254.233.21:8000/api/v1/finance';
+  private apiUrl = 'https://dam-backend-557716987299.us-central1.run.app/api/v1/finance';
 
   constructor(private http: HttpClient) {}
 

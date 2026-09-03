@@ -11,4 +11,6 @@ update_webhook.py
 qrcode.*
 scratch/
 index.json
+.firebase/
+
 

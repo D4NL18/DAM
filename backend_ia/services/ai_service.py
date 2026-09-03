@@ -172,7 +172,7 @@ class AIService:
                     "mime_type": media_mimetype,
                     "data": media_bytes
                 }
-                response = chat.send_message([part, safe_prompt])
+                response = chat.send_message([part, user_text])
             else:
                 response = chat.send_message(safe_prompt)
 

@@ -99,7 +99,7 @@ class TestAPISecurityAndHeaders:
         # O limite da API geral é 100 req/min
         responses = []
         for _ in range(110):
-            r = client.get("/health")
+            r = client.get("/health", headers={"x-test-rate-limit": "true"})
             responses.append(r.status_code)
 
         assert 429 in responses

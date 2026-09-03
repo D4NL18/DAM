@@ -111,6 +111,7 @@ async def whatsapp_webhook(
         return {"status": "ignored", "reason": "invalid_key_format"}
 
     remote_jid = key.get("remoteJid", "")
+    message_id = key.get("id")
     masked_jid = SecurityService.mask_phone(remote_jid)
 
     # Guard clause: ignora grupos e canais

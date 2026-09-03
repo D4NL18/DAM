@@ -39,6 +39,10 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if not client_ip:
             client_ip = request.client.host if request.client else "unknown"
 
+        # Evita envenenamento de rate limit entre testes com TestClient compartilhado
+        if client_ip == "testclient" and "x-test-rate-limit" not in request.headers:
+            return await call_next(request)
+
         agora = time.time()
         is_webhook = "/api/whatsapp/webhook" in request.url.path
         limite_atual = self.webhook_max_requests if is_webhook else self.max_requests

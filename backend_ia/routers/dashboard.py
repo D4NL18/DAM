@@ -126,9 +126,9 @@ def get_health_summary(
 
 @router.get("/agenda")
 @router.get("/agenda/summary")
-def get_agenda_summary() -> Dict[str, Any]:
+def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
     """
-    Retorna a agenda do dia e lembretes consultando diretamente o Google Calendar e 'notes_reminders'.
+    Retorna a agenda (hoje, semana ou mês) e lembretes consultando diretamente o Google Calendar e 'notes_reminders'.
     Se não houver compromissos, retorna lista vazia.
     """
     upcoming_events: List[Dict[str, Any]] = []
@@ -138,8 +138,24 @@ def get_agenda_summary() -> Dict[str, Any]:
     if service:
         try:
             now = datetime.now(timezone.utc)
-            start_day = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-            end_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            hoje_inicio = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            if period == "semana":
+                dias_desde_domingo = (now.weekday() + 1) % 7
+                start_day_dt = hoje_inicio - timedelta(days=dias_desde_domingo)
+                end_day_dt = start_day_dt + timedelta(days=7)
+            elif period == "mes":
+                start_day_dt = hoje_inicio.replace(day=1)
+                if start_day_dt.month == 12:
+                    end_day_dt = start_day_dt.replace(year=start_day_dt.year + 1, month=1)
+                else:
+                    end_day_dt = start_day_dt.replace(month=start_day_dt.month + 1)
+            else:  # "hoje"
+                start_day_dt = hoje_inicio
+                end_day_dt = hoje_inicio + timedelta(days=1)
+
+            start_day = start_day_dt.isoformat()
+            end_day = end_day_dt.isoformat()
             calendar_id = settings.CALENDAR_ID if settings.CALENDAR_ID else 'primary'
 
             events_result = service.events().list(
@@ -161,11 +177,22 @@ def get_agenda_summary() -> Dict[str, Any]:
                     e_dt = datetime.fromisoformat(end)
                     duracao = (e_dt - s_dt).total_seconds() / 3600.0
                     meeting_hours += duracao
-                    hora_inicio = s_dt.strftime("%H:%M")
-                    hora_fim = e_dt.strftime("%H:%M")
+                    if period in ["semana", "mes"]:
+                        hora_inicio = s_dt.strftime("%d/%m %H:%M")
+                        hora_fim = e_dt.strftime("%H:%M")
+                    else:
+                        hora_inicio = s_dt.strftime("%H:%M")
+                        hora_fim = e_dt.strftime("%H:%M")
                 except Exception:
-                    hora_inicio = start[:5]
-                    hora_fim = end[:5]
+                    hora_inicio = start[:10] if len(start) >= 10 else start
+                    hora_fim = end[:10] if len(end) >= 10 else end
+
+                summary_lower = (item.get('summary') or '').lower()
+                cat = "reuniao" if any(w in summary_lower for w in ["reunião", "sync", "call", "meet", "alinhamento"]) else (
+                    "saude" if any(w in summary_lower for w in ["médic", "dentist", "exame", "treino", "academia"]) else (
+                        "pessoal" if any(w in summary_lower for w in ["almoço", "jantar", "aniversário", "cinema", "viagem"]) else "trabalho"
+                    )
+                )
 
                 upcoming_events.append({
                     "id": item.get('id', ''),
@@ -175,7 +202,7 @@ def get_agenda_summary() -> Dict[str, Any]:
                     "endTime": hora_fim,
                     "location": item.get('location', ''),
                     "meetUrl": item.get('hangoutLink', ''),
-                    "category": "trabalho",
+                    "category": cat,
                     "status": "confirmed"
                 })
         except Exception as e:

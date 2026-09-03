@@ -52,6 +52,7 @@ from services.tools.anime_tracker_tool import (
     consultar_proximo_episodio,
     listar_meus_animes,
     atualizar_progresso_anime,
+    marcar_anime_concluido,
     grade_semanal_animes,
     sincronizar_perfil_anilist,
     consultar_novas_temporadas,
@@ -108,6 +109,7 @@ AVAILABLE_TOOLS = [
     consultar_proximo_episodio,
     listar_meus_animes,
     atualizar_progresso_anime,
+    marcar_anime_concluido,
     grade_semanal_animes,
     sincronizar_perfil_anilist,
     consultar_novas_temporadas,
@@ -159,14 +161,16 @@ class AIService:
                     "- Ao dividir contas de restaurantes ou despesas de grupos/viagens, a divisão e o demonstrativo DEVEM ser organizados e agrupados estritamente pelo NOME DAS PESSOAS (ex: 'Você', 'João', 'Maria', 'Pedro'), discriminando o que cada um consumiu e o valor final individual. NUNCA separe contas por chave Pix.\n\n"
                     "### REGRA DE ROTAS E TRÂNSITO (FASE 8):\n"
                     "- Quando o usuário disser 'casa', utilize a residência configurada. Para qualquer outro destino que o usuário escrever (ex: 'Shopping da Bahia', 'Farol da Barra', 'Aeroporto', ou qualquer endereço/ponto turístico), consulte a rota e o trânsito buscando diretamente pelo nome do destino informado.\n\n"
-                    "### REGRA DE ANIMES E LANÇAMENTOS (ANILIST & CRUNCHYROLL):\n"
-                    "- Para perguntas sobre animes:\n"
-                    "  1. 'sincronizar_perfil_anilist': Use quando o usuário pedir para sincronizar seu perfil do AniList ou informar seu username.\n"
-                    "  2. 'consultar_novas_temporadas': Use para perguntas sobre próximas temporadas, sequências ou filmes anunciados ('vai ter 2 temporada de Frieren?', 'quando sai nova temporada de X?').\n"
-                    "  3. 'explorar_temporada_animes': Use para lançamentos sazonais e novos animes que estão estreando ('quais os lançamentos desta temporada?', 'animes da temporada de outono/inverno').\n"
-                    "  4. 'consultar_proximo_episodio': Use para datas de lançamentos de episódios ('quando sai ep de X?').\n"
-                    "  5. 'grade_semanal_animes': Use para ver a grade dos animes da lista do usuário que saem essa semana.\n"
-                    "  6. 'listar_meus_animes' e 'atualizar_progresso_anime': Para listar ou marcar progresso de episódios vistos."
+                    "### REGRA DE ANIMES E ANILIST:\n"
+                    "- Para interação com animes e com a conta do AniList:\n"
+                    "  1. 'adicionar_anime_watchlist': Quando o usuário disser para adicionar anime à lista ('adiciona Dandadan na minha lista', 'coloque Solo Leveling nos meus animes').\n"
+                    "  2. 'atualizar_progresso_anime': Quando o usuário disser que assistiu um episódio para subir o contador ('assisti o ep 8 de Frieren', 'vi mais um ep de One Piece' -> se for 'mais um ep', passe incrementar=True).\n"
+                    "  3. 'listar_meus_animes': Quando o usuário perguntar o que está assistindo ('o que eu to vendo?', 'o que estou assistindo?', 'meus animes em andamento'), chame listar_meus_animes(status='assistindo').\n"
+                    "  4. 'marcar_anime_concluido': Quando o usuário disser que terminou ou finalizou um anime ('terminei Frieren', 'acabei Solo Leveling, nota 9'). Se ele der uma nota, passe no argumento nota.\n"
+                    "  5. 'consultar_proximo_episodio': Quando perguntar datas de lançamento de novos episódios ('quando sai ep de X?').\n"
+                    "  6. 'consultar_novas_temporadas': Quando perguntar sobre continuações ('vai ter 2 temporada de X?').\n"
+                    "  7. 'grade_semanal_animes': Para a grade de lançamentos da semana dos animes acompanhados.\n"
+                    "  8. 'explorar_temporada_animes': Para saber lançamentos e novidades da temporada atual/futura."
                 )
             )
             

@@ -18,17 +18,22 @@ def _reset_memory_watchlist():
     """Auxiliar para testes unitários."""
     _MEMORY_WATCHLIST.clear()
 
-def _consultar_anilist_graphql(query: str, variables: dict) -> Optional[dict]:
-    """Executa uma query GraphQL contra a API pública do AniList."""
+def _consultar_anilist_graphql(query: str, variables: dict, token: Optional[str] = None) -> Optional[dict]:
+    """Executa uma query ou mutação GraphQL contra a API do AniList."""
     data_payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "DAM-Assistant/1.0"
+    }
+    tok = token or settings.ANILIST_ACCESS_TOKEN
+    if tok:
+        headers["Authorization"] = f"Bearer {tok.strip()}"
+
     req = urllib.request.Request(
         ANILIST_API_URL,
         data=data_payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "DAM-Assistant/1.0"
-        }
+        headers=headers
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -37,6 +42,52 @@ def _consultar_anilist_graphql(query: str, variables: dict) -> Optional[dict]:
     except Exception as e:
         logger.error(f"Erro na requisição GraphQL AniList: {e}")
         return None
+
+def _salvar_entrada_anilist_remoto(media_id: int, status: str, progress: int = 0, score: Optional[float] = None) -> bool:
+    """
+    Executa mutação oficial no AniList para salvar ou atualizar a entrada diretamente na conta do usuário no AniList.co.
+    """
+    if not settings.ANILIST_ACCESS_TOKEN:
+        return False
+
+    status_map = {
+        "assistindo": "CURRENT",
+        "current": "CURRENT",
+        "planejo_assistir": "PLANNING",
+        "planning": "PLANNING",
+        "concluido": "COMPLETED",
+        "completed": "COMPLETED",
+        "pausado": "PAUSED",
+        "paused": "PAUSED",
+        "dropado": "DROPPED",
+        "dropped": "DROPPED"
+    }
+    status_gql = status_map.get(status.lower(), "CURRENT")
+
+    mutation = """
+    mutation ($mediaId: Int, $status: MediaListStatus, $progress: Int, $score: Float) {
+      SaveMediaListEntry (mediaId: $mediaId, status: $status, progress: $progress, score: $score) {
+        id
+        status
+        progress
+        score
+      }
+    }
+    """
+    variables = {
+        "mediaId": int(media_id),
+        "status": status_gql,
+        "progress": int(progress)
+    }
+    if score is not None:
+        variables["score"] = float(score)
+
+    try:
+        res = _consultar_anilist_graphql(mutation, variables)
+        return res is not None and "SaveMediaListEntry" in res
+    except Exception as e:
+        logger.error(f"Erro ao salvar entrada remota no AniList: {e}")
+        return False
 
 def _format_timestamp_br(timestamp_epoch: int) -> str:
     """Converte timestamp UTC unix para data/hora amigável no fuso de Brasília (UTC-3)."""
@@ -159,7 +210,7 @@ def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
                 "anilist_id": media["id"],
                 "titulo_principal": titulo_principal,
                 "titulo_ingles": titulo_ingles,
-                "status_transmissao": media.get("status"),
+                "status_transmissao": media.get("status", "DESCONHECIDO"),
                 "total_episodios": media.get("episodes"),
                 "status_usuario": status_usuario,
                 "ultimo_episodio_visto": int(entry.get("progress", 0)),
@@ -613,7 +664,7 @@ def adicionar_anime_watchlist(
             "anilist_id": media["id"],
             "titulo_principal": titulo_principal,
             "titulo_ingles": titulo_ingles,
-            "status_transmissao": media["status"],
+            "status_transmissao": media.get("status", "DESCONHECIDO"),
             "total_episodios": media.get("episodes"),
             "status_usuario": status.lower(),
             "ultimo_episodio_visto": int(ultimo_episodio_visto),
@@ -633,6 +684,15 @@ def adicionar_anime_watchlist(
         except Exception as e:
             logger.error(f"Erro ao salvar anime no Firestore: {e}")
 
+    # Sincronização remota direta na conta do AniList.co (se houver anilist_id e token)
+    sincronizado_remoto = False
+    if anime_info.get("anilist_id"):
+        sincronizado_remoto = _salvar_entrada_anilist_remoto(
+            media_id=anime_info["anilist_id"],
+            status=status,
+            progress=ultimo_episodio_visto
+        )
+
     # Monta resposta amigável
     linhas = [
         f"🎌 *Anime Adicionado à sua Watchlist!*",
@@ -642,6 +702,9 @@ def adicionar_anime_watchlist(
         linhas.append(f"• Total de Episódios: {anime_info['total_episodios']}")
     linhas.append(f"• Seu progresso: Parou no Ep. {ultimo_episodio_visto}")
     
+    if sincronizado_remoto:
+        linhas.append("• ☁️ *Sincronizado diretamente na sua conta do AniList.co!*")
+
     if anime_info.get("proximo_episodio"):
         pep = anime_info["proximo_episodio"]
         tempo_str = _calcular_tempo_restante(pep["tempo_restante_segundos"])
@@ -654,11 +717,12 @@ def adicionar_anime_watchlist(
 
 def listar_meus_animes(status: Optional[str] = None) -> str:
     """
-    Lista todos os animes cadastrados na sua watchlist no banco de dados Firestore.
-    Mostra o progresso do usuário e os próximos episódios a serem lançados.
+    Lista os animes cadastrados na sua watchlist no banco de dados Firestore e sincronizados do AniList.
+    Use esta ferramenta quando o usuário perguntar: 'o que eu estou vendo?', 'quais animes estou assistindo?',
+    ou pedir para listar animes da watchlist.
 
     Args:
-        status (str, opcional): Filtrar por status ('assistindo', 'planejo_assistir', 'concluido').
+        status (str, opcional): Filtrar por status ('assistindo', 'planejo_assistir', 'concluido'). Default: None (ou 'assistindo' se for a intenção).
     """
     animes = list(_MEMORY_WATCHLIST.values())
 
@@ -680,8 +744,9 @@ def listar_meus_animes(status: Optional[str] = None) -> str:
         if not animes:
             return f"Você não possui animes com status '{status}' na sua lista."
 
+    titulo_cabecalho = "📺 *Animes que Você Está Assistindo no Momento*" if status_filtro == "assistindo" else "📋 *Sua Lista de Animes (DAM & AniList)*"
     linhas = [
-        "📋 *Sua Lista de Animes (DAM Watchlist)*",
+        titulo_cabecalho,
         "━━━━━━━━━━━━━━━━━━━━━━"
     ]
 
@@ -691,24 +756,33 @@ def listar_meus_animes(status: Optional[str] = None) -> str:
         total = a.get("total_episodios") or "?"
         status_u = a.get("status_usuario", "assistindo").capitalize()
         
-        info_linha = f"• **{nome}** — Progresso: Ep. {visto}/{total} ({status_u})"
+        info_linha = f"• **{nome}** — Progresso: Ep. {visto}/{total}"
+        if status_filtro != "assistindo":
+            info_linha += f" ({status_u})"
         
         pep = a.get("proximo_episodio")
         if pep and isinstance(pep, dict):
-            info_linha += f"\n  ↳ ⏰ *Ep. {pep.get('episodio')}* em {pep.get('data_formatada', 'Breve')}"
+            tempo_str = _calcular_tempo_restante(pep.get("tempo_restante_segundos", 0))
+            info_linha += f"\n  ↳ ⏰ *Ep. {pep.get('episodio')}* em {pep.get('data_formatada', 'Breve')} ({tempo_str})"
         
         linhas.append(info_linha)
 
     return "\n".join(linhas)
 
 
-def atualizar_progresso_anime(titulo: str, episodio_visto: int) -> str:
+def atualizar_progresso_anime(
+    titulo: str, 
+    episodio_visto: Optional[int] = None,
+    incrementar: bool = False
+) -> str:
     """
-    Atualiza o último episódio que você assistiu de um determinado anime.
+    Atualiza o último episódio que você assistiu de um determinado anime na sua lista e no AniList.co.
+    Se episodio_visto não for informado ou se incrementar=True, avança 1 episódio (+1) a partir do último visto.
 
     Args:
-        titulo (str): Nome do anime.
-        episodio_visto (int): Número do episódio que você acabou de assistir.
+        titulo (str): Nome do anime (ex: 'Mushoku Tensei', 'Solo Leveling', 'One Piece').
+        episodio_visto (int, opcional): Número do episódio que você assistiu (ex: 11).
+        incrementar (bool, opcional): Se True, avança 1 episódio em relação ao progresso atual.
     """
     titulo_busca = titulo.strip().lower()
     anime_encontrado_key = None
@@ -734,23 +808,147 @@ def atualizar_progresso_anime(titulo: str, episodio_visto: int) -> str:
         except Exception as e:
             logger.error(f"Erro ao buscar no Firestore: {e}")
 
-    if not anime_obj:
-        return adicionar_anime_watchlist(titulo=titulo, status="assistindo", ultimo_episodio_visto=episodio_visto)
+    # Calcula o novo número de episódio
+    if anime_obj:
+        ultimo_atual = int(anime_obj.get("ultimo_episodio_visto", 0))
+        if episodio_visto is None or incrementar:
+            novo_ep = ultimo_atual + 1
+        else:
+            novo_ep = int(episodio_visto)
+    else:
+        novo_ep = int(episodio_visto) if episodio_visto is not None else 1
+        return adicionar_anime_watchlist(titulo=titulo, status="assistindo", ultimo_episodio_visto=novo_ep)
 
-    anime_obj["ultimo_episodio_visto"] = int(episodio_visto)
+    anime_obj["ultimo_episodio_visto"] = novo_ep
+    anime_obj["status_usuario"] = "assistindo"
     anime_obj["updated_at"] = datetime.now(timezone.utc).isoformat()
     _MEMORY_WATCHLIST[anime_encontrado_key] = anime_obj
 
     if firebase.db is not None:
         try:
             firebase.db.collection("anime_watchlist").document(anime_encontrado_key).update({
-                "ultimo_episodio_visto": int(episodio_visto),
+                "ultimo_episodio_visto": novo_ep,
+                "status_usuario": "assistindo",
                 "updated_at": anime_obj["updated_at"]
             })
         except Exception as e:
             logger.error(f"Erro ao atualizar progresso no Firestore: {e}")
 
-    return f"✅ Progresso atualizado! Você agora está no **Episódio {episodio_visto}** de **{anime_obj.get('titulo_principal')}**."
+    # Sincronização remota no AniList.co
+    sincronizado_remoto = False
+    if anime_obj.get("anilist_id"):
+        sincronizado_remoto = _salvar_entrada_anilist_remoto(
+            media_id=anime_obj["anilist_id"],
+            status="CURRENT",
+            progress=novo_ep
+        )
+
+    remoto_str = " (sincronizado com seu perfil no AniList.co!)" if sincronizado_remoto else ""
+    return f"✅ Progresso atualizado! Você agora está no **Episódio {novo_ep}** de **{anime_obj.get('titulo_principal')}**{remoto_str}."
+
+
+def marcar_anime_concluido(titulo: str, nota: Optional[float] = None) -> str:
+    """
+    Marca um anime como concluído (COMPLETED) na sua lista pessoal e diretamente no seu perfil do AniList.co.
+    Atualiza o número de episódios para o total da temporada e registra a nota que você deu (opcional).
+
+    Args:
+        titulo (str): Nome do anime (ex: 'Frieren', 'Chainsaw Man', 'Solo Leveling').
+        nota (float, opcional): Nota pessoal de 0 a 10 dada ao anime.
+    """
+    titulo_busca = titulo.strip().lower()
+    anime_encontrado_key = None
+    anime_obj = None
+
+    # Procura na memória
+    for k, v in _MEMORY_WATCHLIST.items():
+        if titulo_busca in v.get("titulo_principal", "").lower() or titulo_busca in v.get("titulo_ingles", "").lower():
+            anime_encontrado_key = k
+            anime_obj = v
+            break
+
+    # Procura no Firestore
+    if not anime_obj and firebase.db is not None:
+        try:
+            docs = firebase.db.collection("anime_watchlist").stream()
+            for doc in docs:
+                data = doc.to_dict()
+                if titulo_busca in data.get("titulo_principal", "").lower() or titulo_busca in data.get("titulo_ingles", "").lower():
+                    anime_encontrado_key = doc.id
+                    anime_obj = data
+                    break
+        except Exception as e:
+            logger.error(f"Erro ao buscar no Firestore: {e}")
+
+    # Se não achou na lista local, busca no AniList
+    if not anime_obj:
+        graphql_query = """
+        query ($search: String) {
+          Media (search: $search, type: ANIME) {
+            id
+            title { romaji english }
+            episodes
+            siteUrl
+          }
+        }
+        """
+        data = _consultar_anilist_graphql(graphql_query, {"search": titulo_busca})
+        media = data.get("Media") if data else None
+        if not media:
+            return f"Não encontrei o anime '{titulo}' para marcar como concluído."
+        
+        anime_encontrado_key = str(media["id"])
+        anime_obj = {
+            "anilist_id": media["id"],
+            "titulo_principal": media["title"]["romaji"] or media["title"]["english"] or titulo,
+            "titulo_ingles": media["title"]["english"] or titulo,
+            "total_episodios": media.get("episodes"),
+            "ultimo_episodio_visto": media.get("episodes") or 12,
+            "status_usuario": "concluido"
+        }
+
+    total_eps = anime_obj.get("total_episodios") or anime_obj.get("ultimo_episodio_visto", 0)
+    anime_obj["status_usuario"] = "concluido"
+    if total_eps:
+        anime_obj["ultimo_episodio_visto"] = int(total_eps)
+    if nota is not None:
+        anime_obj["nota_usuario"] = float(nota)
+    anime_obj["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    _MEMORY_WATCHLIST[anime_encontrado_key] = anime_obj
+
+    if firebase.db is not None:
+        try:
+            update_data = {
+                "status_usuario": "concluido",
+                "ultimo_episodio_visto": anime_obj["ultimo_episodio_visto"],
+                "updated_at": anime_obj["updated_at"]
+            }
+            if nota is not None:
+                update_data["nota_usuario"] = float(nota)
+            firebase.db.collection("anime_watchlist").document(anime_encontrado_key).set(anime_obj)
+        except Exception as e:
+            logger.error(f"Erro ao salvar conclusão no Firestore: {e}")
+
+    # Sincronização remota no AniList.co
+    sincronizado_remoto = False
+    if anime_obj.get("anilist_id"):
+        sincronizado_remoto = _salvar_entrada_anilist_remoto(
+            media_id=anime_obj["anilist_id"],
+            status="COMPLETED",
+            progress=anime_obj["ultimo_episodio_visto"],
+            score=nota
+        )
+
+    nome_final = anime_obj.get("titulo_principal", titulo)
+    nota_str = f" | Sua Nota: ⭐ **{nota}/10**" if nota is not None else ""
+    remoto_str = "\n☁️ *Status atualizado para COMPLETED na sua conta oficial do AniList.co!*" if sincronizado_remoto else ""
+
+    return (
+        f"🏆 *Parabéns! Anime Concluído!*\n"
+        f"• Anime: **{nome_final}**\n"
+        f"• Progresso Final: **{anime_obj['ultimo_episodio_visto']}/{total_eps or '?'} episódios**{nota_str}{remoto_str}"
+    )
 
 
 def grade_semanal_animes() -> str:

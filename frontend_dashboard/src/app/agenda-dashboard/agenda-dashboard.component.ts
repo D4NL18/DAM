@@ -26,16 +26,30 @@ export class AgendaDashboardComponent implements OnInit {
     this.todayFormatted = today.toLocaleDateString('pt-BR', options);
 
     this.setupWeekDays(today);
+    this.loadAgenda();
+  }
 
-    this.agendaApi.getAgendaSummary().subscribe({
+  loadAgenda(): void {
+    this.loading = true;
+    this.agendaApi.getAgendaSummary(this.selectedPeriod).subscribe({
       next: (data) => {
         this.summary = data;
         this.loading = false;
+        this.updateWeekDaysEvents();
       },
       error: (err) => {
         console.error('Erro ao buscar dados da agenda:', err);
         this.loading = false;
       }
+    });
+  }
+
+  private updateWeekDaysEvents(): void {
+    if (!this.summary || !this.summary.upcomingEvents) return;
+    const eventTimes = this.summary.upcomingEvents.map(e => e.startTime);
+    this.daysOfWeek.forEach(d => {
+      const diaFormatado = d.dayNumber.toString().padStart(2, '0');
+      d.hasEvents = eventTimes.some(t => t.startsWith(diaFormatado + '/') || (d.active && this.summary!.todayTotalEvents > 0));
     });
   }
 
@@ -72,7 +86,9 @@ export class AgendaDashboardComponent implements OnInit {
   }
 
   setPeriod(period: 'hoje' | 'semana' | 'mes'): void {
+    if (this.selectedPeriod === period) return;
     this.selectedPeriod = period;
+    this.loadAgenda();
   }
 
   toggleReminder(id: string): void {

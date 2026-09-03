@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # Perfil AniList (Anime Tracker)
     ANILIST_USERNAME: str = ""
+    ANILIST_ACCESS_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

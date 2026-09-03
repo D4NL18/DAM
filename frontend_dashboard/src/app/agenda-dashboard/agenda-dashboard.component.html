@@ -7,7 +7,7 @@
         <span class="badge-text">Sincronizado com Google Calendar API</span>
       </div>
       <h2 class="page-title">Agenda & Compromissos</h2>
-      <p class="page-subtitle">{{ todayFormatted | titlecase }} • Gerenciado pelo DAM Bot</p>
+      <p class="page-subtitle">{{ selectedPeriod === 'hoje' ? (todayFormatted | titlecase) : (selectedPeriod === 'semana' ? 'Visão Semanal' : 'Visão Mensal') }} • Gerenciado pelo DAM Bot</p>
     </div>
     
     <div class="actions-area">
@@ -56,8 +56,8 @@
           <div class="empty-icon-circle">
             <span class="material-symbols-outlined text-primary">event_available</span>
           </div>
-          <h3 class="hero-title">Agenda Livre para Hoje</h3>
-          <p class="hero-desc">Você não possui reuniões ou compromissos agendados no Google Calendar para o dia de hoje.</p>
+          <h3 class="hero-title">{{ selectedPeriod === 'hoje' ? 'Agenda Livre para Hoje' : (selectedPeriod === 'semana' ? 'Sem Compromissos nesta Semana' : 'Sem Compromissos neste Mês') }}</h3>
+          <p class="hero-desc">{{ selectedPeriod === 'hoje' ? 'Você não possui reuniões ou compromissos agendados no Google Calendar para o dia de hoje.' : 'Nenhum evento registrado no Google Calendar para o período selecionado.' }}</p>
         </div>
       </ng-template>
 

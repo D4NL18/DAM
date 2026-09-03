@@ -42,7 +42,7 @@ export class AgendaApiService {
 
   constructor(private http: HttpClient) {}
 
-  getAgendaSummary(): Observable<AgendaSummary> {
+  getAgendaSummary(period: 'hoje' | 'semana' | 'mes' = 'hoje'): Observable<AgendaSummary> {
     const emptyState: AgendaSummary = {
       todayTotalEvents: 0,
       totalMeetingHours: 0,
@@ -52,7 +52,7 @@ export class AgendaApiService {
       reminders: []
     };
 
-    return this.http.get<AgendaSummary>(`${this.apiUrl}/summary`).pipe(
+    return this.http.get<AgendaSummary>(`${this.apiUrl}/summary?period=${period}`).pipe(
       catchError(err => {
         console.warn('Erro ao consultar API de agenda, retornando estado real zerado:', err);
         return of(emptyState);

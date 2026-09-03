@@ -240,3 +240,56 @@ class TestAnimeTracker:
         assert "Destaques da Temporada de Outono 2026" in res
         assert "Chainsaw Man" in res
         assert "MOVIE" in res
+
+    @patch("services.tools.anime_tracker_tool._salvar_entrada_anilist_remoto")
+    @patch("services.tools.anime_tracker_tool._consultar_anilist_graphql")
+    def test_atualizar_progresso_incrementar(self, mock_gql, mock_remoto):
+        mock_gql.return_value = {
+            "Media": {
+                "id": 777,
+                "title": {"romaji": "Dandadan", "english": "Dandadan"},
+                "status": "RELEASING",
+                "episodes": 12,
+                "nextAiringEpisode": None
+            }
+        }
+        mock_remoto.return_value = True
+
+        adicionar_anime_watchlist("Dandadan", status="assistindo", ultimo_episodio_visto=3)
+        res = atualizar_progresso_anime("Dandadan", incrementar=True)
+        assert "Episódio 4" in res
+        assert "Dandadan" in res
+
+    @patch("services.tools.anime_tracker_tool._salvar_entrada_anilist_remoto")
+    @patch("services.tools.anime_tracker_tool._consultar_anilist_graphql")
+    def test_marcar_anime_concluido_com_nota(self, mock_gql, mock_remoto):
+        from services.tools.anime_tracker_tool import marcar_anime_concluido
+        mock_gql.return_value = {
+            "Media": {
+                "id": 888,
+                "title": {"romaji": "Frieren", "english": "Frieren: Beyond Journey's End"},
+                "episodes": 28,
+                "siteUrl": "https://anilist.co/anime/888"
+            }
+        }
+        mock_remoto.return_value = True
+
+        adicionar_anime_watchlist("Frieren", status="assistindo", ultimo_episodio_visto=27)
+        res = marcar_anime_concluido("Frieren", nota=10.0)
+        assert "Anime Concluído" in res
+        assert "28/28" in res
+        assert "10.0/10" in res
+
+    def test_listar_meus_animes_assistindo(self):
+        from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST
+        _MEMORY_WATCHLIST["123"] = {
+            "titulo_principal": "One Piece",
+            "ultimo_episodio_visto": 1115,
+            "total_episodios": None,
+            "status_usuario": "assistindo"
+        }
+        res = listar_meus_animes(status="assistindo")
+        assert "Animes que Você Está Assistindo no Momento" in res
+        assert "One Piece" in res
+        assert "Ep. 1115" in res
+

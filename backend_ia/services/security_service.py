@@ -62,6 +62,25 @@ class SecurityService:
         return cls._CPF_PATTERN.sub(_replace_cpf, text)
 
     @classmethod
+    def mask_phone(cls, phone_or_jid: str) -> str:
+        """
+        Mascara números de telefone e JIDs para auditoria segura sem vazamento de dados pessoais (LGPD).
+        Ex: 5571991269995@s.whatsapp.net -> 5571****9995@s.whatsapp.net
+        """
+        if not phone_or_jid:
+            return ""
+        
+        parts = phone_or_jid.split("@")
+        num = parts[0]
+        suffix = f"@{parts[1]}" if len(parts) > 1 else ""
+        
+        if len(num) <= 6:
+            masked = "***"
+        else:
+            masked = f"{num[:4]}****{num[-4:]}"
+        return f"{masked}{suffix}"
+
+    @classmethod
     def mask_tokens_and_secrets(cls, text: str) -> str:
         """
         Mascara tokens Bearer, chaves de API e pares chave-valor contendo senhas/tokens.

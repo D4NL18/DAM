@@ -58,23 +58,23 @@ def is_allowed_user(remote_jid: str, allowed_phone: str) -> bool:
 
     return True
 
-def process_and_reply(
+async def process_and_reply(
     remote_jid: str, 
     text: str, 
     media_base64: Optional[str] = None, 
     media_mimetype: Optional[str] = None
 ):
+    masked_jid = SecurityService.mask_phone(remote_jid)
     safe_text = SecurityService.sanitize_log(text)
-    print(f"--> [BACKGROUND] Iniciando IA para {remote_jid}: '{safe_text}'", flush=True)
+    logger.info(f"--> [BACKGROUND] Processando mensagem para {masked_jid}: '{safe_text}'")
     try:
         ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
-        safe_resp = SecurityService.sanitize_log(ai_response)
-        print(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars). Enviando WhatsApp...", flush=True)
+        logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars). Enviando WhatsApp...")
         resp = WhatsAppService.send_text(remote_jid, ai_response)
-        print(f"--> [BACKGROUND] Envio WhatsApp resultado: {resp}", flush=True)
+        logger.info(f"--> [BACKGROUND] Mensagem entregue via WhatsApp para {masked_jid}")
         ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=ai_response)
     except Exception as e:
-        print(f"--> [BACKGROUND ERROR] Falha no processamento da mensagem: {e}", flush=True)
+        logger.error(f"--> [BACKGROUND ERROR] Falha no processamento da mensagem: {e}")
 
 @router.post("/api/whatsapp/webhook")
 async def whatsapp_webhook(
@@ -83,7 +83,7 @@ async def whatsapp_webhook(
     authorization: Optional[str] = Header(None),
     apikey: Optional[str] = Header(None)
 ):
-    # Security Audit: Validação de Token de Webhook (Fase 6)
+    # Validação de Token de Webhook (Segurança)
     if settings.WEBHOOK_TOKEN:
         token = authorization or apikey
         if not SecurityService.validate_webhook_token(token, settings.WEBHOOK_TOKEN):
@@ -97,38 +97,32 @@ async def whatsapp_webhook(
         return {"status": "error", "message": "Invalid JSON"}
 
     event = str(payload.get("event", "")).lower()
-    print(f"--> [WEBHOOK] Evento recebido: '{event}' | Sender: {payload.get('sender')}", flush=True)
 
     # Guard clause: processa unicamente messages.upsert
     if event not in ["messages.upsert", "messages_upsert"]:
-        print(f"--> [WEBHOOK] Ignorando evento não-upsert: '{event}'", flush=True)
         return {"status": "ignored", "reason": "not_messages_upsert"}
 
     data = payload.get("data")
     if not isinstance(data, dict):
-        print("--> [WEBHOOK] Data inválido (não é dict)", flush=True)
         return {"status": "ignored", "reason": "invalid_data_format"}
 
     key = data.get("key")
     if not isinstance(key, dict):
-        print("--> [WEBHOOK] Key inválido (não é dict)", flush=True)
         return {"status": "ignored", "reason": "invalid_key_format"}
 
     remote_jid = key.get("remoteJid", "")
-    message_id = key.get("id")
-    print(f"--> [WEBHOOK] Mensagem de remoteJid: {remote_jid} | id: {message_id}", flush=True)
+    masked_jid = SecurityService.mask_phone(remote_jid)
 
     # Guard clause: ignora grupos e canais
     if "@g.us" in remote_jid or "@newsletter" in remote_jid:
-        print(f"--> [WEBHOOK] Ignorando grupo/newsletter: {remote_jid}", flush=True)
         return {"status": "ignored", "reason": "group_or_newsletter"}
 
     # Guard clause: isolamento inviolável para o número pessoal permitido
     if not is_allowed_user(remote_jid, settings.ALLOWED_PHONE_NUMBER):
-        print(f"--> [WEBHOOK] Bloqueado! Número não autorizado: {remote_jid} (Esperado: {settings.ALLOWED_PHONE_NUMBER})", flush=True)
+        logger.warning(f"--> [WEBHOOK] Bloqueado! Número não autorizado: {masked_jid}")
         return {"status": "ignored", "reason": "unauthorized_user"}
 
-    print(f"--> [WEBHOOK] APROVADO! Processando mensagem de {remote_jid}", flush=True)
+    logger.info(f"--> [WEBHOOK] Mensagem autorizada recebida de {masked_jid}")
 
     message = data.get("message")
     if not isinstance(message, dict):

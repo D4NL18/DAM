@@ -1,131 +1,67 @@
-# Roadmap do Projeto: Assistente DAM (Inteligência Artificial)
+# Roadmap Funcional do Projeto: Assistente DAM (Inteligência Artificial)
 
 ## Visão Geral
-Assistente pessoal via WhatsApp focado em ser uma central de vida automatizada baseada em IA, utilizando Microsserviços (FastAPI, Spring Boot, Angular) hospedados no GCP e Firebase.
+O DAM (Digital Autonomous Manager) é um assistente pessoal inteligente operando no WhatsApp e integrado a um Dashboard Web (Angular 17), concebido para ser a central de automação, finanças, saúde, entretenimento e rotina do usuário.
 
-## Fase 1: Fundação do Motor de IA e Mensageria
-- **[x] US-1.1:** Setup inicial do Firebase Firestore e criação da base do projeto FastAPI.
-- **[x] US-1.2:** Integração com a API do LLM (Gemini/OpenAI) e arquitetura de *Function Calling* base.
-- **[x] US-1.3:** Setup e Integração com o WhatsApp via Evolution API (ou similar) recebendo/enviando mensagens de texto e áudio.
-- **[x] US-1.4:** Deploy inicial do FastAPI no Google Cloud Run (Configuração CI/CD).
+Todas as entregas e capacidades do sistema estão organizadas por **Domínios Funcionais**:
 
-## Fase 2: Dashboard Web (Angular + Spring Boot)
-- **[x] US-2.1:** Setup da Core API em Spring Boot 3 (Java 17+) com documentação OpenAPI/Swagger.
-- **[x] US-2.2:** Setup do projeto Angular (Standalone Components, SCSS) e padronização do Design System.
-- **[x] US-2.3:** Integração da Core API com Firebase Admin SDK para acesso ao Firestore (Dados de Saúde e Finanças).
-- **[x] US-2.4:** Criação dos Endpoints RESTful no Spring Boot para leitura e agregação dos dados no Dashboard.
-- **[x] US-2.5:** Desenvolvimento dos componentes de UI (Gráficos/Tabelas) no Angular consumindo a Core API.
-- **[x] US-2.6:** Configuração de CI/CD para deploy da Core API no Cloud Run e do Frontend no Firebase Hosting.
+---
 
-## Fase 3: Pilares Base de Dados (Saúde e Financeiro)
-- **[x] US-3.1 [PARALLEL]:** (Pilar 1) Criar endpoint `/api/health-webhook` no FastAPI, formatar dados do Health Auto Export e salvar no Firestore.
-- **[x] US-3.2 [PARALLEL]:** (Pilar 1) Desenvolver a *tool* LLM para consultar dados de saúde via chat.
-- **[x] US-3.3 [PARALLEL]:** (Pilar 4) Desenvolver o agente/tool de Gestão Financeira, para processar comprovantes/textos e gravar na coleção `finances`.
-- **[x] US-3.4 [PARALLEL]:** (Pilar 5) Integração Google Calendar API (Agent de agendamentos).
-- **[x] US-3.5:** Fix de Notificações do WhatsApp & Isolamento Estrito do Chat "Comigo Mesmo" (garantir que o bot não intercepte, marque como lido ou suprima notificações de outros chats/grupos no celular).
-- **[x] US-3.6:** Suporte a Mensagens Multimodais (Processamento de Imagens e Áudios do WhatsApp via Gemini).
-- **[x] US-3.7:** Enriquecimento do Google Calendar Tool (Suporte a Descrição e Localização na criação de eventos).
-- **[x] US-3.8:** Integração do Dashboard Web com o Banco de Dados (Conexão ponta a ponta do Frontend Angular com dados reais do Firestore).
+## 1. Domínio: Gestão Pessoal & Rotina
 
-## Fase 4: Integrações Externas Avançadas
-- **[x] US-4.1:** (Pilar 2) Integração Uconnect API para o veículo (Fiat Fastback) e ferramentas de controle (autonomia, travas).
-- **[x] US-4.2:** (Pilar 3) Integração HLTV API/Scraper e tools de placar de CS2.
+- **[x] GP-01 (Google Calendar):** Integração com Google Calendar API para agendamento de eventos, consultas com descrição, localização e suporte a fusos horários.
+- **[x] GP-02 (Notas e Lembretes Rápidos):** Modelagem Firestore da coleção `notes_reminders`, criação e busca semântica de notas e lembretes com controle de pendências via WhatsApp.
+- **[x] GP-03 (Memória Espacial / Onde Guardei Isso?):** Registro de localizações de objetos físicos e documentos na coleção `item_locations`, mantendo histórico de movimentações.
+- **[x] GP-04 (Morning Briefing Proativo das 08:00):** Consolidação matinal automatizada às 08h trazendo Agenda, Tarefas pendentes de hoje, Partidas da FURIA (com regras temporais) e Lançamentos de Animes do dia com idempotência no Firestore (`briefing_logs`).
 
-## Fase 5: Automação Residencial e Alertas
-- **[x] US-5.1:** (Pilar 6) Configurar GCP Billing Budgets + Pub/Sub e webhook para alertas de custo.
-- **[x] US-5.2:** (Pilar 7) Integração Webhooks para acionamento de rotinas Alexa.
+---
 
-## Fase 6: Segurança, Auditoria e Refinamento
-- **[x] US-6.1:** Auditoria de segurança em todos os endpoints, sanitização de logs (CPF, tokens, senhas), proteção timing-safe e Firebase Rules.
-- **[x] US-6.2:** Refinamento de prompts, Auto-Healer e testes E2E do sistema integrado (176 testes passando).
+## 2. Domínio: Finanças & Gastos
 
-## Fase 7: Refatoração UI/UX (Design System Stitch -> SCSS)
-- **[x] US-7.1 [PARALLEL]:** Configurar Tokens de Design (Cores, Fontes Inter, Material Symbols) em SCSS Puro.
-- **[x] US-7.2 [PARALLEL]:** Implementar o novo Layout Geral (SideNavBar e Header).
-- **[x] US-7.3:** Implementar as páginas Bento Grid (Dashboard Financeiro, Saúde, Agenda).
+- **[x] FG-01 (Gestão Multicartão & Classificação):** Suporte estrito aos métodos de pagamento (Cartão de Crédito Pessoal, Secundário e Débito/Pix), confirmação obrigatória de método e gravação na coleção `finances`.
+- **[x] FG-02 (Divisão Inteligente de Contas de Restaurante):** Rateio proporcional de itens consumidos com taxa de serviço calculada centavo a centavo, organizado estritamente por nomes de pessoas e chave Pix para pagamento.
+- **[x] FG-03 (Splitwise de Viagens e Grupos):** Criação de grupos e despesas compartilhadas nas coleções `trip_groups` e `trip_expenses`, com algoritmo de minimização de dívidas (*Debt Minimization*).
+- **[x] FG-04 (GCP Billing & Monitoramento FinOps):** Endpoint de webhook para alertas de orçamentos e monitoramento de custos de nuvem.
 
-## Fase 8: Mobilidade Urbana e Trânsito (Google Maps Directions API)
-- **[x] US-8.1:** Configuração da Google Maps Platform (Directions API) e credenciais de API Key no GCP/FastAPI.
-- **[x] US-8.2:** Desenvolvimento da Tool LLM de Rotas e Trânsito (`maps_tool.py`) para consultar tempo estimado, distância, rotas alternativas e condições de trânsito em tempo real.
-- **[x] US-8.3:** Integração no Agente WhatsApp para consultas em linguagem natural de trajetos, tempo de deslocamento e melhor rota.
-- **[x] US-8.4:** Cruzamento inteligente entre Google Calendar (eventos com localização) e Google Maps para avisos de horário de saída.
+---
 
-## Fase 9: Gestão de Conhecimento e Lembretes (Anotações e Alertas Estruturados)
-- **[x] US-9.1:** Modelagem no Firestore da coleção `notes_reminders` contendo título, data/hora, descrição, status e tags.
-- **[x] US-9.2:** Desenvolvimento da Tool LLM de Anotações e Lembretes (`notes_tool.py`) para criação, consulta, busca semântica e exclusão via linguagem natural.
-- **[x] US-9.3:** Mecanismo de disparo de lembretes ativos no WhatsApp no momento agendado (agendamento assíncrono / Cloud Tasks ou rotina periódica no FastAPI).
+## 3. Domínio: Saúde & Bem-Estar
 
-## Fase 10: Curador de Presentes e Datas Especiais (Memória Afetiva & Alertas Proativos)
-- **[x] US-10.1:** Modelagem no Firestore da coleção `gift_ideas` (pessoa, relação, ideia/desejo, data especial de referência, tags e anotação original).
-- **[x] US-10.2:** Desenvolvimento da Tool LLM `gift_curator_tool.py` para capturar e categorizar comentários casuais e desejos ao longo do ano ("Minha namorada comentou que gostou de um perfume da loja X").
-- **[x] US-10.3:** Sistema de alerta proativo com antecedência configurável (ex.: 2 a 4 semanas antes de aniversários, Dia dos Namorados, etc.), resgatando a anotação exata e sugerindo ações de compra via WhatsApp.
+- **[x] SB-01 (Métricas de Sono e Qualidade):** Registro de horas de sono, qualidade subjetiva e consolidação de médias semanais.
+- **[x] SB-02 (Acompanhamento de Treinos e Atividades):** Registro de modalidades esportivas, intensidade e contagem semanal de treinos.
+- **[x] SB-03 (Webhook Apple Health / Health Auto Export):** Endpoint `/api/health-webhook` para recepção contínua de passos, energia ativa e frequência cardíaca.
 
-## Fase 11: Divisor Inteligente de Contas de Restaurante (Receipt OCR & Smart Split)
-- **[x] US-11.1:** Pipeline de OCR e extração estruturada de nota fiscal/comanda de restaurante via Gemini Vision (itens, preços unitários, quantidades, subtotal e taxa de serviço/10%).
-- **[x] US-11.2:** Desenvolvimento do motor de interpretação de rateio em linguagem natural ("Eu comi o hambúrguer, o João bebeu as cervejas e a Maria dividiu a pizza comigo").
-- **[x] US-11.3:** Algoritmo de cálculo de rateio matemático proporcional, incorporando os 10% da taxa de serviço de forma justa para cada participante.
-- **[x] US-11.4:** Formatação e envio do demonstrativo de fechamento no WhatsApp com valores individuais discriminados e inclusão automática da chave Pix do usuário para recebimento.
+---
 
-## Fase 12: Memória Espacial e Localizador de Objetos ("Onde Guardei Isso?")
-- **[x] US-12.1:** Modelagem no Firestore da coleção `item_locations` (item, categoria, local_armazenado, detalhes/referência e timestamp).
-- **[x] US-12.2:** Desenvolvimento da Tool LLM `item_finder_tool.py` para registrar localização de objetos a partir de mensagens cotidianas de texto ou áudio ("Guardei o passaporte na gaveta de cima do armário").
-- **[x] US-12.3:** Mecanismo de busca semântica e recuperação contextual para responder com precisão a perguntas como "Onde está meu passaporte?" ou "Cadê a chave reserva do carro?".
-- **[x] US-12.4:** Histórico de movimentações (atualizar o local atual do item mantendo o histórico de locais anteriores caso o usuário mude de lugar).
+## 4. Domínio: Entretenimento & Lazer
 
-## Fase 13: Cofre Seguro de Senhas e Credenciais (Criptografia AES-256 & SecOps)
-- **[x] US-13.1:** Arquitetura de segurança do cofre com criptografia simétrica AES-256-GCM / PBKDF2HMAC, gerenciamento seguro de chave mestra e sanitização estrita de logs.
-- **[x] US-13.2:** Modelagem no Firestore da coleção segura `vault_credentials` com payload criptografado (ciphertext, iv, tag, service_name, username/login).
-- **[x] US-13.3:** Desenvolvimento da Tool LLM `password_vault_tool.py` para cadastrar, consultar e atualizar senhas com autenticação/confirmação prévia no chat.
-- **[x] US-13.4:** Políticas de SecOps: gerador de senhas fortes embutido via `secrets`, máscara de exibição (`Abc****z9`) e proteção contra visualização não autorizada.
+- **[x] EL-01 (Anime Tracker & AniList Bi-direcional):** Integração completa com GraphQL do AniList (`Tonho123`), permitindo adicionar animes, incrementar episódios vistos (+1), listar o que está assistindo e concluir séries com nota.
+- **[x] EL-02 (Calendário de Animes & Novas Temporadas):** Consulta a próximas temporadas, estreias sazonais e cálculo de contagem regressiva para episódios futuros em horário de Brasília.
+- **[x] EL-03 (Guia de Streaming TMDB - Onde Assistir?):** Catálogo de onde assistir filmes e séries no Brasil (Netflix, Max, Prime Video, Disney+, etc.), distinguindo assinatura, aluguel e compra.
+- **[x] EL-04 (CS2 Esports & FURIA):** Consulta de placares ao vivo, próximos confrontos e resultados de jogos da FURIA Esports.
+- **[x] EL-05 (Calculadora de Churrasco & Eventos):** Cálculo determinístico per capita de carnes, cervejas, bebidas não alcoólicas, gelo, carvão e acompanhamentos.
+- **[x] EL-06 (Curador de Ideias de Presentes):** Captura contextual de desejos de presentes vinculados a pessoas e datas comemorativas (`gift_ideas`).
 
-## Fase 14: Guia de Streaming Direto ("Onde Assistir?")
-- **[x] US-14.1:** Integração com APIs de catálogo audiovisual e provedores de streaming (TMDB API v3 / Watch Providers alimentado por JustWatch).
-- **[x] US-14.2:** Desenvolvimento da Tool LLM `streaming_tool.py` para busca de filmes/séries e identificação de plataformas disponíveis no Brasil (Netflix, Max, Prime Video, Disney+, Apple TV+, Globoplay, etc.), diferenciando assinatura, compra e aluguel.
-- **[x] US-14.3:** Registro no Function Calling do Gemini para perguntas naturais ("Onde passa o filme Interestelar?", "Em qual streaming tem a série Succession?").
-- **[x] US-14.4:** Mecanismo de cache leve no Firestore para títulos consultados recentemente, otimizando tempo de resposta e consumo de requisições.
+---
 
-## Fase 15: Calculadora Inteligente de Churrasco e Eventos
-- **[x] US-15.1:** Engenharia de regras de cálculo e consumo per capita para eventos (adultos que bebem, adultos que não bebem, crianças, duração do evento em horas).
-- **[x] US-15.2:** Desenvolvimento da Tool LLM `bbq_planner_tool.py` para cálculo volumétrico detalhado: carnes por tipo (bovina, suína, linguiça, frango em kg), carvão (kg), fardos/latas de cerveja, refrigerante, água e gelo (sacos).
-- **[x] US-15.3:** Geração de checklist de compras estruturado e pronto para cópia no WhatsApp a partir de comandos em linguagem natural ("Vou fazer um churrasco para 12 adultos, 8 bebem cerveja, e 4 crianças, das 14h às 20h").
+## 5. Domínio: Utilitários & Segurança
 
-## Fase 16: Tradutor e Guia Gastronômico de Cardápios ao Vivo (Vision OCR & Contexto Cultural)
-- **[x] US-16.1:** Pipeline de visão computacional com Gemini Vision para fotos de cardápios internacionais (inglês, espanhol, francês, italiano, alemão, japonês, etc.).
-- **[x] US-16.2:** Desenvolvimento do serviço de tradução contextual e explicação culinária (além da tradução literal, detalhar ingredientes, modo de preparo e analogias com a gastronomia brasileira).
-- **[x] US-16.3:** Tool LLM `menu_translator_tool.py` e formatação amigável no WhatsApp, incluindo alertas opcionais de alérgenos ou restrições alimentares configuradas pelo usuário.
+- **[x] US-01 (Cofre Criptografado de Senhas AES-256):** Criptografia simétrica com chave mestre em `vault_credentials`, senhas mascaradas por padrão e gerador criptograficamente seguro de senhas fortes.
+- **[x] US-02 (Tradutor e Guia Gastronômico de Cardápios):** Tradução e explicação culinária de pratos internacionais com alertas de alergias e analogias gastronômicas.
+- **[x] US-03 (Conversor Universal Instantâneo):** Conversor determinístico com precisão matemática para distância, temperatura, peso, volume culinário e interpretação em linguagem natural.
+- **[x] US-04 (Calculadora de Banco de Horas Semanal):** Leitura de jornadas flexíveis e batidas de ponto com cálculo de saldos líquidos diários e fechamento semanal.
+- **[x] US-05 (Mobilidade Urbana & Google Maps):** Consulta de tempo estimado com trânsito em tempo real, rotas e cálculo de horário ideal de saída.
+- **[x] US-06 (Automação Residencial Alexa):** Acionamento de rotinas e cenas residenciais via Voice Monkey API.
+- **[x] US-07 (Gestão Veicular):** Registro de abastecimentos, manutenções e controle de consumo por km (`vehicle_expenses`).
 
-## Fase 17: Conversor Universal Instantâneo (Medidas, Pesos e Temperaturas)
-- **[x] US-17.1:** Motor de cálculo determinístico e conversão matemática de alta precisão (livre de alucinações de LLM) para unidades imperiais e métricas.
-- **[x] US-17.2:** Suporte completo aos pares de conversão:
-  - Distância/Comprimento: Milhas (mi) <-> Quilômetros (km), Pés (ft) <-> Centímetros/Metros (cm/m), Polegadas (in) <-> Centímetros (cm).
-  - Temperatura: Fahrenheit (°F) <-> Celsius (°C) para clima e regulagem de fornos/fogões.
-  - Massa/Peso: Libras (lb) <-> Quilogramas (kg), Onças (oz) <-> Gramas (g).
-- **[x] US-17.3:** Desenvolvimento da Tool LLM `unit_converter_tool.py` para respostas instantâneas no chat a perguntas cotidianas ("Quantos KM dá 35 milhas?", "180 Fahrenheit é quanto no forno daqui?", "150 libras em kg").
+---
 
-## Fase 18: "Splitwise" de Bolso para Viagens e Grupos (Group Ledger & Debt Minimizer)
-- **[x] US-18.1:** Modelagem no Firestore das coleções `trip_groups` (grupos de viagem, participantes, status ativo/encerrado) e `trip_expenses` (despesas lançadas, pagador, valor, participantes da divisão, comprovante).
-- **[x] US-18.2:** Tool LLM `trip_ledger_tool.py` para gerenciamento de viagens e lançamento de despesas incrementais por texto, áudio ou foto de cupom fiscal ("Almoço R$ 200, eu paguei, divide por 4", "Pedro pagou R$ 120 de gasolina, divide por todos").
-- **[x] US-18.3:** Algoritmo de minimização e compensação de dívidas (calcula o saldo líquido de cada pessoa e reduz ao menor número de transferências Pix necessárias).
-- **[x] US-18.4:** Geração de fechamento consolidado da viagem no WhatsApp com extrato detalhado e lista de liquidação direta ("Fulano faz Pix de R$ X para Ciclano").
+## 6. Domínio: Plataforma, Segurança & Core
 
-## Fase 19: Calculadora Inteligente de Banco de Horas Semanal (Time Tracker & Work Hours Balance)
-- **[x] US-19.1:** Motor Determinístico de Parser e Cálculo de Horas (Interpretação e normalização de horários flexíveis como "9h", "7h30", "10h", "8.5h", conversão precisa em minutos e cálculo de saldo positivo/negativo com base na jornada alvo padrão de 8h/dia ou 40h/semana sem alucinação matemática).
-- **[x] US-19.2:** Tool LLM `work_hours_tool.py` e Resumo no WhatsApp (Cálculo pontual e instantâneo via mensagem única enviada pelo usuário no chat, discriminando horas diárias, total acumulado da semana e balanço final: horas a receber ou saldo devedor).
-- **[x] US-19.3:** Lançamentos Incrementais Diários e Histórico no Firestore (Permitir registrar horas dia a dia ao longo da semana na coleção `work_hours`, possibilitando fechamentos consolidados periódicos ex.: "Quanto fechei essa semana?" ou "Como está meu banco de horas este mês?").
-- **[x] US-19.4:** Configuração Customizada de Jornada de Trabalho (Permitir ao usuário personalizar suas metas de jornada contratual, ex.: 40h ou 44h semanais, 6h diárias ou jornadas flexíveis).
-
-## Fase 20: Central de Animes e Rastreamento AniList (Anime Tracker)
-- **[x] US-20.1:** Conexão direta com GraphQL API pública do AniList e importação do perfil do usuário (`Watching` e `Planning`) para a coleção Firestore `anime_watchlist`.
-- **[x] US-20.2:** Rastreamento em tempo real de data, hora em horário de Brasília e contagem regressiva de episódios novos semanais via `consultar_proximo_episodio`.
-- **[x] US-20.3:** Mapeamento de relações (`relations`) no AniList para identificar e alertar sobre novas temporadas, sequências e filmes confirmados via `consultar_novas_temporadas`.
-- **[x] US-20.4:** Grade semanal de lançamentos de episódios dos animes da lista e explorador de estreias sazonais (Winter, Spring, Summer, Fall) via `explorar_temporada_animes`.
-
-## Fase 21: Morning Briefing Proativo Agendado (Resumo Matinal Diário às 8h no WhatsApp)
-- **[x] US-21.1:** Motor de Agendamento e Gatilho Matinal (Rotina periódica diária às 08:00 no fuso de Brasília e endpoint seguro `POST /api/briefing/morning` para acionamento via Cloud Scheduler).
-- **[x] US-21.2:** Agregador Consolidado de Dados Matinais:
-  - 📅 Compromissos e reuniões do dia no Google Calendar (com horários).
-  - 📝 Lembretes e tarefas pendentes para a data.
-  - 🎮 Jogos da FURIA (CS2) no dia: se ocorreu entre 00:00 e 08:00, informa o resultado/placar final; se ocorrerá após as 08:00, informa o horário previsto e o adversário.
-  - 🎌 Animes da lista do usuário que têm lançamento de novo episódio no dia de hoje.
-- **[x] US-21.3:** Formatação Executiva e Envio Proativo no WhatsApp via Evolution API para o número pessoal `ALLOWED_PHONE_NUMBER`.
-- **[x] US-21.4:** Idempotência e Histórico de Disparos no Firestore (`briefing_logs`) para evitar envios duplicados no mesmo dia em caso de retentativas.
+- **[x] PC-01 (Motor de IA Multimodal):** Orquestração com Google Gemini 1.5/3.6 Flash, suporte a processamento de imagens e transcrição/resposta a áudios do WhatsApp.
+- **[x] PC-02 (Gateway WhatsApp & Isolamento):** Integração Evolution API com isolamento inviolável para o número pessoal do usuário (`ALLOWED_PHONE_NUMBER`).
+- **[x] PC-03 (Guardrails contra Prompt Injection):** `GuardrailsService` com interceptação de jailbreaks, delimitação semântica de mensagens (`<user_message>`) e sanitização de caracteres invisíveis.
+- **[x] PC-04 (Rate Limiter & Security Headers Middleware):** Middleware de Sliding Window por IP (100 req/min e 200 req/min para webhooks) e injeção de headers defensivos HTTP (`nosniff`, `DENY`, `HSTS`).
+- **[x] PC-05 (Sanitização de Logs & Zero Leaks):** Erradicação de fallbacks de segredos no código, mascaramento de telefones/JIDs e proteção timing-safe (`hmac.compare_digest`).
+- **[x] PC-06 (Modular Prompting):** Decomposição de instruções de sistema em `services/prompts/` estruturadas pelo `PromptComposer`.
+- **[x] PC-07 (Dashboard Web Angular Bento Grid):** Interface moderna e responsiva no Firebase Hosting consumindo APIs RESTful do Firestore.

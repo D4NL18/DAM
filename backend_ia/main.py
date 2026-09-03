@@ -43,19 +43,29 @@ async def lifespan(app: FastAPI):
     yield
     scheduler_task.cancel()
 
+from middleware.rate_limiter import RateLimiterMiddleware
+from middleware.security_headers import SecurityHeadersMiddleware
+
 app = FastAPI(title="DAM IA Assistant", lifespan=lifespan)
 
-# Configuração de CORS para permitir acesso do Dashboard Web (Firebase Hosting e local)
+# Middlewares de Defesa e Segurança
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimiterMiddleware,
+    max_requests_per_minute=100,
+    webhook_max_requests_per_minute=200
+)
+
+# Configuração de CORS Restritivo (apenas domínios autorizados do Dashboard)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://bot-dam-72ef2.web.app",
         "https://bot-dam-72ef2.firebaseapp.com",
-        "http://localhost:4200",
-        "*"
+        "http://localhost:4200"
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -67,6 +77,7 @@ app.include_router(dashboard.router)
 app.include_router(briefing.router)
 
 @app.get("/")
+@app.get("/health")
 def health_check():
     return {"status": "ok", "service": "DAM Motor IA"}
 

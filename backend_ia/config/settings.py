@@ -7,32 +7,32 @@ class Settings(BaseSettings):
     EVOLUTION_INSTANCE_NAME: str = "DAM_Instance"
     GEMINI_API_KEY: str = ""
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-adminsdk.json"
-    WEBHOOK_TOKEN: str = "DamBot2026SecureKey!"
+    WEBHOOK_TOKEN: str = ""
     CALENDAR_ID: str = ""
 
     # Número pessoal permitido para interagir (Security & Privacy)
     ALLOWED_PHONE_NUMBER: str = ""
 
-    # Voice Monkey API (Automação Residencial Alexa)
+    # Automação Residencial (Alexa / Voice Monkey)
     VOICE_MONKEY_API_TOKEN: str = ""
 
-    # TMDB API (Guia de Streaming Onde Assistir)
+    # Catálogo e Streaming de Filmes/Séries (TMDB API)
     TMDB_API_KEY: str = ""
     TMDB_ACCESS_TOKEN: str = ""
 
-    # Google Maps API & Endereços Favoritos (Fase 8)
+    # Mobilidade Urbana e Rotas (Google Maps)
     GOOGLE_MAPS_API_KEY: str = ""
-    USER_HOME_ADDRESS: str = "Avenida Paulista, 1000 - Bela Vista, São Paulo - SP"
-    USER_WORK_ADDRESS: str = "Avenida Brigadeiro Faria Lima, 3500 - Itaim Bibi, São Paulo - SP"
+    USER_HOME_ADDRESS: str = ""
+    USER_WORK_ADDRESS: str = ""
 
-    # Cofre Seguro de Senhas e Credenciais (Fase 13)
-    VAULT_SECRET_KEY: str = "DAM_VAULT_MASTER_SECRET_2026"
+    # Cofre Criptografado de Credenciais (AES-256)
+    VAULT_SECRET_KEY: str = ""
     VAULT_ENCRYPTION_KEY: str = ""
 
-    # Chave Pix do Usuário (Divisor de Contas / Splitwise - Fases 11 e 18)
+    # Pagamentos e Rateios (Chave Pix)
     USER_PIX_KEY: str = ""
 
-    # Perfil AniList (Anime Tracker)
+    # Rastreamento de Animes (AniList API)
     ANILIST_USERNAME: str = ""
     ANILIST_ACCESS_TOKEN: str = ""
 

@@ -106,12 +106,12 @@ def interpretar_horas(horas_input: Union[str, List[str], float, int]) -> float:
 
     raise ValueError(f"Não foi possível interpretar o formato de horas: '{texto}'")
 
-def calcular_saldo_jornada(horas_trabalhadas_texto: Union[str, List[str], float], meta_diaria_horas: float = 8.0) -> str:
+def calcular_saldo_jornada(horas_trabalhadas_texto: str, meta_diaria_horas: float = 8.0) -> str:
     """
     Calcula o saldo de jornada diária comparando as horas trabalhadas com a meta diária.
 
     Args:
-        horas_trabalhadas_texto: String ou lista com as horas trabalhadas (ex: '8h', '7h30', '9h15', '8.5h', ou batidas ['09:00', '18:00']).
+        horas_trabalhadas_texto (str): String com as horas trabalhadas (ex: '8h', '7h30', '9h15', '8.5h', ou '09:00, 18:00').
         meta_diaria_horas (float): Meta diária de horas a cumprir (padrão: 8.0).
     """
     try:
@@ -138,17 +138,23 @@ def calcular_saldo_jornada(horas_trabalhadas_texto: Union[str, List[str], float]
         f"• Balanço Líquido: **{saldo_str}** ({status})"
     )
 
-def calcular_fechamento_semanal(registros_dias: List[Dict[str, Any]], meta_semanal_horas: float = 40.0) -> str:
+def calcular_fechamento_semanal(registros_dias: Any, meta_semanal_horas: float = 40.0) -> str:
     """
     Calcula o fechamento semanal do banco de horas acumulando os registros diários.
 
     Args:
-        registros_dias (list[dict]): Lista de dicionários representando cada dia trabalhado.
-                                     Exemplo: [{'dia': 'Segunda', 'horas': '8h30'}, {'dia': 'Terça', 'horas': '8h'}]
+        registros_dias: Lista de dicionários ou JSON string representando cada dia trabalhado (ex: [{'dia': 'Segunda', 'horas': '8h30'}]).
         meta_semanal_horas (float): Meta total semanal contratual (padrão: 40.0).
     """
-    if not registros_dias:
-        return "Erro: Nenhum registro diário fornecido para o fechamento semanal."
+    if isinstance(registros_dias, str):
+        try:
+            import json
+            registros_dias = json.loads(registros_dias)
+        except Exception:
+            pass
+
+    if not registros_dias or not isinstance(registros_dias, list):
+        return "Erro: Nenhum registro diário válido fornecido para o fechamento semanal."
 
     total_trabalhado = 0.0
     linhas_dias = []
@@ -193,7 +199,7 @@ def calcular_fechamento_semanal(registros_dias: List[Dict[str, Any]], meta_seman
 
 def registrar_ponto_dia(
     data: str, 
-    horas_trabalhadas_texto: Union[str, List[str], float], 
+    horas_trabalhadas_texto: str, 
     meta_diaria_horas: float = 8.0, 
     descricao: Optional[str] = None
 ) -> str:
@@ -202,7 +208,7 @@ def registrar_ponto_dia(
 
     Args:
         data (str): Data do registro (ex: '2026-09-03', 'Hoje', '03/09/2026').
-        horas_trabalhadas_texto: Horas trabalhadas ('8h', '7h30', ['09:00', '18:00'], etc.).
+        horas_trabalhadas_texto (str): Horas trabalhadas ('8h', '7h30', '09:00, 18:00', etc.).
         meta_diaria_horas (float): Meta de horas para o dia (padrão: 8.0).
         descricao (str, opcional): Observações sobre o dia (ex: 'Plantão', 'Home office', 'Compensação').
     """

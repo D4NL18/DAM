@@ -97,9 +97,10 @@ def _obter_jogos_furia_hoje(data_hoje: Optional[datetime] = None) -> List[Dict[s
 
     return jogos
 
-def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Dict[str, Any]]:
+def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     """
-    Identifica animes cadastrados na watchlist do usuário que lançam episódio na data de hoje.
+    Identifica animes cadastrados na watchlist do usuário que lançam episódio hoje,
+    ou informa o próximo lançamento mais próximo caso não haja episódio no dia.
     """
     hoje = _obter_data_brasilia(data_hoje)
     hoje_data_str = hoje.strftime("%Y-%m-%d")
@@ -116,6 +117,8 @@ def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Di
             logger.error(f"Erro ao buscar animes para briefing: {e}")
 
     animes_hoje = []
+    proximos_lancamentos = []
+
     for a in animes_memoria:
         pep = a.get("proximo_episodio")
         if pep and isinstance(pep, dict):
@@ -128,29 +131,100 @@ def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Di
                         "episodio": pep.get("episodio", "?"),
                         "horario": dt_ep.strftime("%H:%M")
                     })
+                elif dt_ep > hoje:
+                    proximos_lancamentos.append((dt_ep, a.get("titulo_principal", "Anime"), pep.get("episodio", "?"), pep.get("data_formatada", "")))
 
+    if animes_hoje:
+        linhas_animes = []
+        for an in animes_hoje:
+            linhas_animes.append(f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)")
+        return "\n".join(linhas_animes)
+
+    if proximos_lancamentos:
+        proximos_lancamentos.sort(key=lambda x: x[0])
+        _, prox_tit, prox_ep, prox_fmt = proximos_lancamentos[0]
+        return (
+            "• ℹ️ Nenhum episódio novo dos seus animes hoje.\n"
+            f"  ↳ ⏰ *Próximo:* **{prox_tit}** (Ep. {prox_ep}) em {prox_fmt}"
+        )
+
+    return "• ℹ️ Nenhum episódio novo dos seus animes hoje."
+
+def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    """Mantido para compatibilidade com testes legados."""
+    hoje = _obter_data_brasilia(data_hoje)
+    hoje_data_str = hoje.strftime("%Y-%m-%d")
+    animes_memoria = list(_MEMORY_WATCHLIST.values())
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("anime_watchlist").stream()
+            db_animes = [d.to_dict() for d in docs]
+            if db_animes:
+                animes_memoria = db_animes
+        except Exception:
+            pass
+    animes_hoje = []
+    for a in animes_memoria:
+        pep = a.get("proximo_episodio")
+        if pep and isinstance(pep, dict) and pep.get("airing_at"):
+            dt_ep = datetime.fromtimestamp(pep["airing_at"], tz=timezone.utc).astimezone(TZ_BRASILIA)
+            if dt_ep.strftime("%Y-%m-%d") == hoje_data_str:
+                animes_hoje.append({
+                    "titulo": a.get("titulo_principal", "Anime"),
+                    "episodio": pep.get("episodio", "?"),
+                    "horario": dt_ep.strftime("%H:%M")
+                })
     return animes_hoje
 
 def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
     """
     Monta o texto completo do Morning Briefing com os 4 pilares:
-    1. Eventos do dia no Google Calendar
+    1. Eventos do dia no Google Calendar (estritamente o dia de hoje, sem dia seguinte)
     2. Tarefas e Lembretes do dia
     3. Jogos da FURIA no dia (resultado se 00h-08h, ou adversário e hora se após 08h)
     4. Animes acompanhados que lançam episódio hoje
     """
     hoje = _obter_data_brasilia(data_alvo)
+    hoje_str = hoje.strftime("%Y-%m-%d")
     data_formatada = hoje.strftime("%d/%m/%Y")
     dias_semana = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
     dia_nome = dias_semana[hoje.weekday()]
 
-    # 1. Google Calendar
+    # 1. Google Calendar (Filtra ESTRITAMENTE apenas eventos de hoje, descartando dias futuros)
     try:
         agenda_raw = consultar_agenda(dias=1)
-        if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or not agenda_raw.strip():
+        if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
             agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
         else:
-            agenda_txt = agenda_raw.strip()
+            import re
+            linhas_agenda = []
+            for linha in agenda_raw.splitlines():
+                linha_s = linha.strip()
+                if not linha_s or "Você tem os seguintes eventos" in linha_s:
+                    continue
+                # Se a linha contiver data explícita (YYYY-MM-DD) e NÃO for hoje, descarta (ex: amanhã)
+                match_date = re.search(r"\d{4}-\d{2}-\d{2}", linha_s)
+                if match_date and match_date.group(0) != hoje_str:
+                    continue
+
+                if linha_s.startswith("- "):
+                    partes = linha_s.lstrip("- ").split(": ", 1)
+                    if len(partes) == 2:
+                        dt_raw, desc = partes
+                        try:
+                            dt_evt = datetime.fromisoformat(dt_raw.replace("Z", "+00:00")).astimezone(TZ_BRASILIA)
+                            linhas_agenda.append(f"• 🕘 **{dt_evt.strftime('%H:%M')}** – {desc}")
+                        except Exception:
+                            linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
+                    else:
+                        linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
+                else:
+                    linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
+
+            if linhas_agenda:
+                agenda_txt = "\n".join(linhas_agenda)
+            else:
+                agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
     except Exception as e:
         logger.warning(f"Erro ao consultar agenda para briefing: {e}")
         agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
@@ -170,7 +244,7 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
     jogos_furia = _obter_jogos_furia_hoje(hoje)
     furia_txt = _formatar_jogos_furia_dia(jogos_furia)
 
-    # 4. Animes que lançam episódio hoje
+    # 4. Animes acompanhados
     animes_hoje = _obter_animes_lancando_hoje(hoje)
     if animes_hoje:
         linhas_animes = []
@@ -178,7 +252,7 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None) -> str:
             linhas_animes.append(f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)")
         animes_txt = "\n".join(linhas_animes)
     else:
-        animes_txt = "• ℹ️ Nenhum episódio novo dos seus animes hoje."
+        animes_txt = _obter_info_animes_briefing(hoje)
 
     # Montagem do template executivo
     template = (

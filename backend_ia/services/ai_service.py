@@ -8,7 +8,12 @@ from services.tools.calendar_tool import agendar_evento, consultar_agenda
 from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo
 from services.tools.esports_tool import consultar_jogos_cs2
 from services.tools.alexa_tool import acionar_rotina_alexa, falar_na_alexa
-from services.tools.maps_tool import consultar_rota, calcular_horario_saida
+from services.tools.maps_tool import (
+    consultar_rota,
+    calcular_horario_saida,
+    otimizar_rota_multiplos_pontos,
+    planejar_roteiro_viagem
+)
 from services.tools.notes_tool import (
     criar_anotacao,
     criar_lembrete,
@@ -82,6 +87,8 @@ AVAILABLE_TOOLS = [
     falar_na_alexa,
     consultar_rota,
     calcular_horario_saida,
+    otimizar_rota_multiplos_pontos,
+    planejar_roteiro_viagem,
     criar_anotacao,
     criar_lembrete,
     buscar_anotacoes,

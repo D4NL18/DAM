@@ -1,9 +1,10 @@
 import json
 import logging
+import math
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -214,3 +215,339 @@ def calcular_horario_saida(origem: str, destino: str, horario_chegada: str, ante
         f"• **Para:** {dados_rota['destino']}"
     )
     return resposta
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GERENCIADOR DE ROTAS AVANCADO
+# ═══════════════════════════════════════════════════════════════════════
+
+# Mapeamento de tipos de lugar (Google Places) para tempo de permanencia
+_TEMPO_POR_TIPO: Dict[str, int] = {
+    "museum": 120,            # Museus: 2h
+    "art_gallery": 90,        # Galerias: 1.5h
+    "park": 90,               # Parques: 1.5h
+    "natural_feature": 90,    # Natureza: 1.5h
+    "amusement_park": 180,    # Parques tematicos: 3h
+    "zoo": 150,               # Zoos: 2.5h
+    "aquarium": 90,           # Aquarios: 1.5h
+    "church": 30,             # Igrejas: 30min
+    "place_of_worship": 30,
+    "restaurant": 60,         # Restaurantes: 1h
+    "cafe": 45,               # Cafes: 45min
+    "bar": 60,
+    "shopping_mall": 120,     # Shopping: 2h
+    "store": 45,
+    "stadium": 120,
+    "beach": 120,             # Praias: 2h
+    "campground": 180,
+    "tourist_attraction": 90, # Atracoes genericas: 1.5h
+    "point_of_interest": 60,  # Default
+}
+
+
+def _fazer_requisicao_maps(url: str) -> dict:
+    """Helper HTTP centralizado para todas as chamadas a APIs do Google Maps."""
+    req = urllib.request.Request(url, headers={"User-Agent": "DAM-Assistant/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _obter_matrix_distancias(enderecos: List[str], modo: str = "driving") -> List[List[int]]:
+    """
+    P-001: Consulta a Distance Matrix API para todos os pares de enderecos.
+    Retorna matriz [i][j] com duracao em segundos de i para j.
+    Em caso de erro, retorna matriz com distancias euclidianas simuladas.
+    """
+    n = len(enderecos)
+    # Matriz de fallback (distancias baseadas em ordem de insercao)
+    fallback = [[abs(i - j) * 900 for j in range(n)] for i in range(n)]
+
+    if not settings.GOOGLE_MAPS_API_KEY:
+        return fallback
+
+    try:
+        enderecos_encoded = "|".join(urllib.parse.quote(e) for e in enderecos)
+        url = (
+            "https://maps.googleapis.com/maps/api/distancematrix/json?"
+            f"origins={enderecos_encoded}&"
+            f"destinations={enderecos_encoded}&"
+            f"mode={modo}&"
+            "departure_time=now&"
+            f"key={settings.GOOGLE_MAPS_API_KEY}"
+        )
+        data = _fazer_requisicao_maps(url)
+
+        if data.get("status") != "OK":
+            logger.warning(f"Distance Matrix API status: {data.get('status')}")
+            return fallback
+
+        matrix = []
+        for row in data.get("rows", []):
+            linha = []
+            for elem in row.get("elements", []):
+                if elem.get("status") == "OK":
+                    dur = elem.get("duration_in_traffic") or elem.get("duration", {})
+                    linha.append(dur.get("value", 900))
+                else:
+                    linha.append(99999)
+            matrix.append(linha)
+
+        return matrix if matrix else fallback
+
+    except Exception as e:
+        logger.error(f"Erro na Distance Matrix API: {e}")
+        return fallback
+
+
+def _nearest_neighbor_tsp(duracao_matrix: List[List[int]], start: int, end: Optional[int]) -> List[int]:
+    """
+    P-002: Algoritmo Nearest Neighbor (heuristica gulosa para TSP).
+    Retorna a ordem dos indices de visita (incluindo start e end se fornecido).
+    """
+    n = len(duracao_matrix)
+    visitados = {start}
+    rota = [start]
+    atual = start
+
+    nos_intermediarios = [i for i in range(n) if i != start and i != end]
+
+    while nos_intermediarios:
+        proximo = min(nos_intermediarios, key=lambda j: duracao_matrix[atual][j])
+        rota.append(proximo)
+        visitados.add(proximo)
+        nos_intermediarios.remove(proximo)
+        atual = proximo
+
+    if end is not None and end != start:
+        rota.append(end)
+
+    return rota
+
+
+def _estimar_tempo_no_local(nome_local: str) -> int:
+    """
+    P-004: Estima o tempo de permanencia em minutos usando a Places API.
+    Fallback por categoria caso a API nao esteja disponivel.
+    """
+    if not settings.GOOGLE_MAPS_API_KEY:
+        return 60  # default 1h
+
+    try:
+        url = (
+            "https://maps.googleapis.com/maps/api/place/textsearch/json?"
+            f"query={urllib.parse.quote(nome_local)}&"
+            f"key={settings.GOOGLE_MAPS_API_KEY}"
+        )
+        data = _fazer_requisicao_maps(url)
+
+        if data.get("status") == "OK" and data.get("results"):
+            tipos = data["results"][0].get("types", [])
+            for tipo in tipos:
+                if tipo in _TEMPO_POR_TIPO:
+                    return _TEMPO_POR_TIPO[tipo]
+    except Exception as e:
+        logger.warning(f"Erro ao estimar tempo no local '{nome_local}': {e}")
+
+    return 60  # default 1h
+
+
+def _formatar_duracao(minutos_total: int) -> str:
+    """Formata duracao em texto legivel (ex: 1h 30min ou 45min)."""
+    if minutos_total >= 60:
+        h = minutos_total // 60
+        m = minutos_total % 60
+        return f"{h}h {m:02d}min" if m > 0 else f"{h}h"
+    return f"{minutos_total}min"
+
+
+def otimizar_rota_multiplos_pontos(
+    origem: str,
+    paradas: str,
+    destino: str,
+    modo: str = "driving"
+) -> str:
+    """
+    Calcula a ordem otimizada para visitar multiplas paradas entre uma origem e um destino,
+    minimizando o tempo total de deslocamento. Usa a Google Maps Distance Matrix API.
+    Ideal para roteiros de compras, entregas, passeios com varias paradas no dia.
+
+    Args:
+        origem (str): Ponto de partida (ex: 'casa', 'Av. Paulista, 1000'). Suporta apelidos.
+        paradas (str): Paradas intermediarias separadas por '|' (ex: 'Mercado|Farmacia|Padaria').
+        destino (str): Ponto de chegada final (ex: 'casa', 'Shopping Ibirapuera').
+        modo (str): Modo de transporte: 'driving' (padrao), 'walking', 'transit', 'bicycling'.
+    """
+    if not settings.GOOGLE_MAPS_API_KEY:
+        return (
+            "⚠️ A Google Maps API Key nao esta configurada.\n"
+            "Para usar o otimizador de rotas, adicione GOOGLE_MAPS_API_KEY no .env."
+        )
+
+    # Resolve apelidos (P-008)
+    origem_r = resolver_apelido_endereco(origem)
+    destino_r = resolver_apelido_endereco(destino)
+    paradas_lista = [p.strip() for p in paradas.split("|") if p.strip()]
+
+    if not paradas_lista:
+        return "Informe ao menos uma parada para otimizar a rota."
+
+    # Monta lista completa: [origem, ...paradas, destino]
+    todos = [origem_r] + paradas_lista + ([destino_r] if destino_r != origem_r else [])
+    destino_idx = len(todos) - 1 if destino_r != origem_r else None
+
+    try:
+        matrix = _obter_matrix_distancias(todos, modo)
+
+        # Otimiza a ordem das paradas (P-002): indices 1..N-1 sao as paradas
+        rota_idx = _nearest_neighbor_tsp(matrix, start=0, end=destino_idx)
+
+        # Calcula tempo de cada trecho e acumula
+        linhas = [f"📍 *Rota Otimizada — {len(paradas_lista)} parada(s):*", ""]
+        tempo_total_seg = 0
+        passo = 1
+
+        for i in range(len(rota_idx) - 1):
+            de_idx = rota_idx[i]
+            para_idx = rota_idx[i + 1]
+            seg = matrix[de_idx][para_idx]
+            tempo_total_seg += seg
+            minutos = round(seg / 60)
+
+            de_nome = todos[de_idx]
+            para_nome = todos[para_idx]
+
+            if i == 0:
+                icone = "🚀"
+            elif i == len(rota_idx) - 2:
+                icone = "🏁"
+            else:
+                icone = f"{passo}️⃣"
+                passo += 1
+
+            linhas.append(
+                f"{icone} *{de_nome}* → *{para_nome}*\n"
+                f"   ↳ ⏱️ {_formatar_duracao(minutos)}"
+            )
+
+        tempo_total_min = round(tempo_total_seg / 60)
+        linhas.append("")
+        linhas.append(f"⏳ *Tempo total de deslocamento: {_formatar_duracao(tempo_total_min)}*")
+        linhas.append(f"🚗 Modo: {modo}")
+
+        return "\n".join(linhas)
+
+    except Exception as e:
+        logger.error(f"Erro ao otimizar rota: {e}")
+        return "Erro ao calcular a rota otimizada. Verifique os enderecos e tente novamente."
+
+
+def planejar_roteiro_viagem(
+    pontos: str,
+    dias: int,
+    horas_por_dia: int = 8,
+    cidade_base: str = ""
+) -> str:
+    """
+    Distribui pontos turisticos em dias de viagem de forma inteligente, agrupando
+    pontos proximos geograficamente e respeitando o budget de horas diarias.
+    Estima o tempo de permanencia em cada atracaoo usando a Google Places API.
+    Ideal para planejar roteiros com multiplos dias em uma cidade ou regiao.
+
+    Args:
+        pontos (str): Atracoes separadas por '|' (ex: 'Museu do Ipiranga|Parque Ibirapuera|Pinacoteca').
+        dias (int): Quantidade de dias disponiveis para o roteiro.
+        horas_por_dia (int): Budget de horas uteis por dia de turismo (padrao: 8h).
+        cidade_base (str): Cidade ou regiao para contexto de busca (ex: 'Sao Paulo'). Opcional.
+    """
+    if not settings.GOOGLE_MAPS_API_KEY:
+        return (
+            "⚠️ A Google Maps API Key nao esta configurada.\n"
+            "Para usar o planejador de roteiro, adicione GOOGLE_MAPS_API_KEY no .env."
+        )
+
+    pontos_lista = [p.strip() for p in pontos.split("|") if p.strip()]
+
+    if not pontos_lista:
+        return "Informe ao menos um ponto para planejar o roteiro."
+
+    if dias < 1:
+        return "O numero de dias deve ser ao menos 1."
+
+    budget_minutos = horas_por_dia * 60
+
+    # 1. Estima tempo de permanencia em cada ponto (P-004)
+    try:
+        contexto = f" {cidade_base}" if cidade_base else ""
+        tempos = {p: _estimar_tempo_no_local(p + contexto) for p in pontos_lista}
+    except Exception as e:
+        logger.error(f"Erro ao estimar tempos: {e}")
+        tempos = {p: 60 for p in pontos_lista}
+
+    # 2. Obtem matriz de distancias entre todos os pontos (P-006)
+    try:
+        matrix = _obter_matrix_distancias(pontos_lista)
+    except Exception as e:
+        logger.error(f"Erro na matrix de distancias para roteiro: {e}")
+        n = len(pontos_lista)
+        matrix = [[abs(i - j) * 900 for j in range(n)] for i in range(n)]
+
+    # 3. Ordena os pontos geograficamente via Nearest Neighbor (P-006)
+    ordem_idx = _nearest_neighbor_tsp(matrix, start=0, end=None)
+    pontos_ordenados = [pontos_lista[i] for i in ordem_idx]
+
+    # 4. Distribui os pontos pelos dias (P-005): greedy por budget
+    dias_roteiro: List[List[dict]] = [[] for _ in range(dias)]
+    dia_atual = 0
+    minutos_usados = 0
+
+    for ponto in pontos_ordenados:
+        tempo_ponto = tempos[ponto]
+        # Estima deslocamento ate o proximo ponto no mesmo dia
+        if dias_roteiro[dia_atual]:
+            ultimo_idx = pontos_lista.index(dias_roteiro[dia_atual][-1]["nome"])
+            ponto_idx = pontos_lista.index(ponto)
+            deslocamento = round(matrix[ultimo_idx][ponto_idx] / 60)
+        else:
+            deslocamento = 0
+
+        tempo_necessario = tempo_ponto + deslocamento
+
+        # Se nao couber no dia atual, avanca para o proximo
+        if minutos_usados + tempo_necessario > budget_minutos and dias_roteiro[dia_atual]:
+            dia_atual = min(dia_atual + 1, dias - 1)
+            minutos_usados = 0
+            deslocamento = 0  # Primeiro ponto do dia nao tem deslocamento
+
+        dias_roteiro[dia_atual].append({
+            "nome": ponto,
+            "tempo_local": tempo_ponto,
+            "deslocamento": deslocamento
+        })
+        minutos_usados += tempo_ponto + deslocamento
+
+    # 5. Monta o texto do roteiro
+    linhas = [
+        f"🗺️ *Roteiro de {dias} dia(s) — {len(pontos_lista)} atracoes*",
+        f"⏰ Budget diario: {horas_por_dia}h por dia",
+        ""
+    ]
+
+    for d_idx, pontos_do_dia in enumerate(dias_roteiro):
+        if not pontos_do_dia:
+            continue
+
+        total_dia = sum(p["tempo_local"] + p["deslocamento"] for p in pontos_do_dia)
+        linhas.append(f"📅 *Dia {d_idx + 1}* _(~{_formatar_duracao(total_dia)} no total)_")
+
+        for i, p in enumerate(pontos_do_dia):
+            icone = "📍" if i == 0 else "➡️"
+            deslocamento_txt = f" _(+{_formatar_duracao(p['deslocamento'])} de deslocamento)_" if p["deslocamento"] > 0 else ""
+            linhas.append(
+                f"  {icone} *{p['nome']}*{deslocamento_txt}\n"
+                f"     ↳ 🕐 Tempo estimado no local: {_formatar_duracao(p['tempo_local'])}"
+            )
+
+        linhas.append("")
+
+    linhas.append("💡 _Ordem otimizada por proximidade geografica._")
+    return "\n".join(linhas)

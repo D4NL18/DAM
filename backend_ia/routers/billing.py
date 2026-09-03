@@ -52,6 +52,22 @@ async def gcp_billing_alert(
 
     percentual = (cost_amount / budget_amount * 100) if budget_amount > 0 else 0
 
+    # Salva snapshot no Firestore para consulta da IA via chat
+    try:
+        from config import firebase
+        from datetime import timezone
+        if firebase.db is not None:
+            firebase.db.collection("gcp_billing_snapshots").document("latest").set({
+                "cost_amount": cost_amount,
+                "budget_amount": budget_amount,
+                "currency": currency,
+                "budget_name": budget_name,
+                "percentual": percentual,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+    except Exception as e:
+        logger.warning(f"Erro ao salvar snapshot de billing no Firestore: {e}")
+
     alerta_msg = (
         f"🚨 **Alerta de Orçamento GCP ({budget_name})!**\n"
         f"• Consumo atual: {currency} {cost_amount:.2f}\n"

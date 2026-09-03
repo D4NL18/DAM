@@ -1,4 +1,4 @@
-﻿"""
+"""
 Clash of Clans Tool — Modulo de Integracao com a API Supercell
 Domain: Entretenimento & Lazer
 Regras de Negocio: P-001 ao P-010
@@ -166,20 +166,87 @@ def consultar_clash_of_clans(tipo: str) -> str:
                 f"O próximo Raid Weekend começa na sexta-feira."
             )
 
-        elif tipo_norm in ("guerra", "war"):
-            endpoint = f"clans/{clan_tag_encoded}/currentwar"
-            data = _fetch_coc_data(endpoint)
-            alerta = _verificar_clan_war(data, player_tag)
+        elif tipo_norm in ("guerra", "war", "cwl"):
+            # 1. Tenta verificar Guerra de Clãs regular
+            try:
+                endpoint = f"clans/{clan_tag_encoded}/currentwar"
+                data = _fetch_coc_data(endpoint)
+                alerta = _verificar_clan_war(data, player_tag)
 
-            if alerta:
-                return alerta
+                if alerta:
+                    return alerta
 
-            estado = data.get("state", "desconhecido")
-            if estado == "inWar":
-                return "✅ *Guerra de Clãs ativa.* Você já utilizou todos os seus ataques! Bom trabalho! ⚔️"
-            if estado == "preparation":
-                return "⏳ *Guerra de Clãs em preparação.* Os ataques ainda não estão disponíveis."
-            return "ℹ️ *Seu clã não está em guerra no momento.*"
+                estado = data.get("state", "desconhecido")
+                if estado == "inWar":
+                    return "✅ *Guerra de Clãs ativa.* Você já utilizou todos os seus ataques! Bom trabalho! ⚔️"
+                if estado == "preparation":
+                    return "⏳ *Guerra de Clãs em preparação.* Os ataques ainda não estão disponíveis."
+            except httpx.HTTPStatusError as err:
+                if err.response.status_code == 403:
+                    # Verifica se o clã tem War Log Privado
+                    try:
+                        clan_data = _fetch_coc_data(f"clans/{clan_tag_encoded}")
+                        clan_nome = clan_data.get("name", "Seu Clã")
+                        is_public = clan_data.get("isWarLogPublic", False)
+                        if not is_public:
+                            return (
+                                f"🔒 *Guerra de Clãs — Registro Privado*\n\n"
+                                f"O registro de guerra do seu clã (**{clan_nome}** — `{settings.COC_CLAN_TAG}`) está definido como **Privado** no Clash of Clans.\n\n"
+                                f"Por segurança, a Supercell não permite que APIs externas consultem guerras em andamento de clãs privados.\n\n"
+                                f"💡 *Como liberar para o DAM acompanhar seus ataques:*\n"
+                                f"Peça para um Líder ou Co-líder abrir o Clash of Clans e acessar:\n"
+                                f"👉 **Meu Clã** > **Editar** > Ativar **'Tornar registro de guerra público'**.\n\n"
+                                f"Assim que ativado, o DAM conseguirá consultar a guerra e alertar ataques pendentes automaticamente!"
+                            )
+                    except Exception:
+                        return (
+                            f"🔒 *Guerra de Clãs — Registro Privado*\n\n"
+                            f"O registro de guerra do seu clã (`{settings.COC_CLAN_TAG}`) está definido como **Privado** no Clash of Clans.\n"
+                            f"Para que a API da Supercell consiga acompanhar as guerras, um Líder/Co-líder precisa ativar **'Tornar registro de guerra público'** nas opções do clã."
+                        )
+                elif err.response.status_code != 404:
+                    raise
+
+            # 2. Tenta verificar Liga de Guerras de Clãs (CWL)
+            try:
+                cwl_data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwarleaguegroup")
+                rounds = cwl_data.get("rounds", [])
+                for round_data in reversed(rounds):
+                    for war_tag in round_data.get("warTags", []):
+                        if war_tag == "#0":
+                            continue
+                        try:
+                            w_data = _fetch_coc_data(f"clanwarleagues/wars/{_encode_tag(war_tag)}")
+                            if w_data.get("state") == "inWar":
+                                meu_tag = settings.COC_CLAN_TAG.strip().upper()
+                                if w_data.get("clan", {}).get("tag", "").upper() == meu_tag:
+                                    side = w_data["clan"]
+                                    adv = w_data.get("opponent", {}).get("name", "Adversário")
+                                elif w_data.get("opponent", {}).get("tag", "").upper() == meu_tag:
+                                    side = w_data["opponent"]
+                                    adv = w_data.get("clan", {}).get("name", "Adversário")
+                                else:
+                                    continue
+
+                                p_norm = player_tag.strip().upper()
+                                membro = next((m for m in side.get("members", []) if m.get("tag", "").upper() == p_norm), None)
+                                if membro is not None:
+                                    feitos = len(membro.get("attacks", []))
+                                    restantes = 1 - feitos
+                                    if restantes > 0:
+                                        return (
+                                            f"⚔️ *Alerta da Liga de Guerras (CWL)!*\n\n"
+                                            f"Guerra contra: **{adv}**\n"
+                                            f"Você ainda tem *{restantes} ataque disponível* na rodada atual da Liga! 🏆\n"
+                                            f"Não deixe de atacar antes do fim do dia de guerra!"
+                                        )
+                                    return f"✅ *Liga de Guerras (CWL) ativa.* Você já realizou seu ataque contra **{adv}**! Bom trabalho! 🏆"
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+            return "ℹ️ *Seu clã não está em guerra no momento.* (Nenhuma Guerra Comum ou Liga CWL ativa)"
 
         else:
             return (

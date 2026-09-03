@@ -1,4 +1,4 @@
-﻿"""
+"""
 Testes Unitarios -- Clash of Clans Tool (TDD)
 Modulo: services/tools/clash_of_clans_tool.py
 Cobre: P-001 ao P-010 das Regras de Negocio
@@ -124,6 +124,31 @@ class TestConsultarClashOfClans:
         r = consultar_clash_of_clans("raid")
         assert isinstance(r, str)
         assert any(w in r.lower() for w in ["indisponível", "erro", "não foi possível", "falha"])
+
+    @patch("services.tools.clash_of_clans_tool._fetch_coc_data")
+    @patch("services.tools.clash_of_clans_tool.settings")
+    def test_guerra_403_war_log_privado_orienta_usuario(self, mock_settings, mock_fetch):
+        import httpx
+        from services.tools.clash_of_clans_tool import consultar_clash_of_clans
+        mock_settings.COC_API_TOKEN = "fake"
+        mock_settings.COC_CLAN_TAG = "#XYZ123"
+        mock_settings.COC_PLAYER_TAG = "#ABC987"
+
+        req = httpx.Request("GET", "https://api.clashofclans.com/v1/clans/%23XYZ123/currentwar")
+        resp = httpx.Response(403, request=req)
+
+        def mock_side_effect(endpoint):
+            if "currentwar" in endpoint:
+                raise httpx.HTTPStatusError("Forbidden", request=req, response=resp)
+            if endpoint == "clans/%23XYZ123":
+                return {"name": "Os Imortais", "isWarLogPublic": False}
+            return {}
+
+        mock_fetch.side_effect = mock_side_effect
+        r = consultar_clash_of_clans("guerra")
+        assert "Registro Privado" in r
+        assert "Tornar registro de guerra público" in r
+
 
 
 class TestAlertasBriefingCoC:

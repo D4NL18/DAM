@@ -2,7 +2,7 @@
   <div class="dashboard-header">
     <div class="title-area">
       <h2 class="page-title">Dashboard Financeiro</h2>
-      <p class="page-subtitle">Visão geral das suas finanças</p>
+      <p class="page-subtitle">Visão consolidada a partir dos lançamentos no Firestore</p>
     </div>
     <div class="period-selector">
       <button class="period-btn">Semana</button>
@@ -12,47 +12,53 @@
   </div>
 
   <div class="bento-grid">
-    <!-- Resumo de Saldo (Highlight Card) -->
+    <!-- Resumo de Gastos (Highlight Card Baseado no Banco) -->
     <div class="bento-card bento-saldo">
       <div class="card-header">
-        <h3 class="card-title">Saldo Disponível</h3>
-        <span class="material-symbols-outlined text-tertiary">account_balance</span>
+        <h3 class="card-title">Total de Gastos (Mês Atual)</h3>
+        <span class="material-symbols-outlined text-tertiary">account_balance_wallet</span>
       </div>
       <div class="card-body">
-        <div class="main-value">{{ 14520.00 | currency:summary.currency }}</div>
-        <div class="trend positive">
-          <span class="material-symbols-outlined">trending_up</span>
-          <span>+8.5% este mês</span>
+        <div class="main-value">{{ summary.totalSpent | currency:summary.currency }}</div>
+        <div class="trend" [ngClass]="summary.totalSpent > 0 ? 'alert' : 'positive'">
+          <span class="material-symbols-outlined">{{ summary.totalSpent > 0 ? 'shopping_bag' : 'check_circle' }}</span>
+          <span>{{ summary.recentTransactions.length }} lançamentos no banco</span>
         </div>
       </div>
       <div class="card-footer">
         <div class="footer-item">
-          <p class="label">Projeção Fim do Mês</p>
-          <p class="value">R$ 12.100,00</p>
+          <p class="label">Categorias Ativas</p>
+          <p class="value">{{ summary.expensesByCategory.length }}</p>
         </div>
         <div class="footer-item">
-          <p class="label">Gasto Estimado (Mês)</p>
-          <p class="value alert">{{ summary.totalSpent | currency:summary.currency }}</p>
+          <p class="label">Maior Categoria</p>
+          <p class="value alert">
+            {{ summary.expensesByCategory.length > 0 ? summary.expensesByCategory[0].category : 'Nenhuma' }}
+          </p>
         </div>
       </div>
     </div>
 
-    <!-- Insights Financeiros -->
+    <!-- Insights Financeiros Baseados em Dados Reais -->
     <div class="bento-card bento-insights bg-primary-container">
       <div class="card-header">
         <span class="material-symbols-outlined">lightbulb</span>
         <h3 class="card-title">Insights Financeiros</h3>
       </div>
-      <div class="insights-list">
-        <div class="insight-item">
-          <p class="insight-label">Economia</p>
-          <p class="insight-text">Você economizou <strong>R$ 200</strong> em lazer este mês comparado ao anterior.</p>
-        </div>
-        <div class="insight-item">
-          <p class="insight-label">Alerta</p>
-          <p class="insight-text">Seus gastos com <strong>transporte</strong> subiram 10% na última semana.</p>
+      <div class="insights-list" *ngIf="summary.expensesByCategory.length > 0; else noInsights">
+        <div class="insight-item" *ngFor="let cat of summary.expensesByCategory.slice(0, 2)">
+          <p class="insight-label">{{ cat.category }}</p>
+          <p class="insight-text">
+            Representa <strong>{{ (cat.amount / (summary.totalSpent || 1) * 100) | number:'1.0-0' }}%</strong> do seu total mensal ({{ cat.amount | currency:summary.currency }}).
+          </p>
         </div>
       </div>
+      <ng-template #noInsights>
+        <div class="empty-state-box">
+          <span class="material-symbols-outlined text-muted">query_stats</span>
+          <p class="text-muted">Ainda não há lançamentos suficientes no Firestore neste mês para gerar insights preditivos.</p>
+        </div>
+      </ng-template>
     </div>
 
     <!-- Despesas por Categoria (Chart) -->
@@ -65,25 +71,22 @@
       </div>
     </div>
 
-    <!-- Últimas Transações -->
+    <!-- Últimas Transações do Firestore -->
     <div class="bento-card bento-transacoes">
       <div class="card-header">
-        <h3 class="card-title">Últimas Transações</h3>
-        <button class="text-btn">Ver Todas</button>
-      </div>
-      <div class="filter-pills">
-        <button class="pill active">Todas</button>
-        <button class="pill">Entradas</button>
-        <button class="pill">Saídas</button>
+        <h3 class="card-title">Últimas Transações (Firestore)</h3>
+        <span class="badge-count" *ngIf="summary.recentTransactions.length > 0">
+          {{ summary.recentTransactions.length }} registradas
+        </span>
       </div>
       <div class="table-container">
         <table class="tx-table">
           <thead>
             <tr>
               <th>Data</th>
-              <th>Categoria</th>
+              <th>Descrição / Categoria</th>
               <th>Valor</th>
-              <th class="text-right">Status</th>
+              <th class="text-right">Origem</th>
             </tr>
           </thead>
           <tbody>
@@ -91,15 +94,29 @@
               <td>{{ tx.date | date:'shortDate' }}</td>
               <td class="category-cell">
                 <div class="cat-icon bg-primary-light text-primary">
-                  <span class="material-symbols-outlined">{{ tx.category === 'Alimentação' ? 'restaurant' : (tx.category === 'Transporte' ? 'directions_car' : 'shopping_cart') }}</span>
+                  <span class="material-symbols-outlined">
+                    {{ tx.category === 'Alimentação' ? 'restaurant' : (tx.category === 'Transporte' ? 'directions_car' : 'receipt') }}
+                  </span>
                 </div>
-                {{ tx.description }}
+                <div>
+                  <strong>{{ tx.description }}</strong>
+                  <span class="sub-cat">{{ tx.category }}</span>
+                </div>
               </td>
-              <td class="value-cell" [class.negative]="tx.amount > 0">
+              <td class="value-cell negative">
                 {{ tx.amount | currency:summary.currency }}
               </td>
               <td class="text-right">
-                <span class="status-badge" [ngClass]="{'paid': true}">Pago</span>
+                <span class="status-badge paid">Firestore</span>
+              </td>
+            </tr>
+            <tr *ngIf="summary.recentTransactions.length === 0">
+              <td colspan="4" class="empty-state-cell">
+                <div class="empty-state-content">
+                  <span class="material-symbols-outlined">receipt_long</span>
+                  <p>Nenhuma despesa registrada no banco de dados para o mês selecionado.</p>
+                  <small>Envie comprovantes ou mensagens no WhatsApp para alimentar sua planilha automaticamente.</small>
+                </div>
               </td>
             </tr>
           </tbody>

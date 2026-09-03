@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, HTTPException, Header
 from typing import Optional
 from config import firebase
 from config.settings import settings
+from services.security_service import SecurityService
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -11,12 +12,13 @@ router = APIRouter()
 @router.post("/api/health-webhook")
 async def health_webhook(
     request: Request,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
+    apikey: Optional[str] = Header(None)
 ):
-    # Validar token estático simples
-    expected_token = settings.WEBHOOK_TOKEN
-    if expected_token:
-        if authorization != f"Bearer {expected_token}" and authorization != expected_token:
+    # Validar token de webhook de forma segura (Fase 6)
+    if settings.WEBHOOK_TOKEN:
+        token = authorization or apikey
+        if not SecurityService.validate_webhook_token(token, settings.WEBHOOK_TOKEN):
             logger.warning("Tentativa de acesso não autorizado ao webhook de saúde.")
             raise HTTPException(status_code=401, detail="Unauthorized")
 

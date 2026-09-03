@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, HTTPException, Header
 from typing import Optional
 from services.ai_service import AIService
 from services.whatsapp_service import WhatsAppService
+from services.security_service import SecurityService
 from repositories.chat_repository import ChatRepository
 from config.settings import settings
 
@@ -63,9 +64,11 @@ def process_and_reply(
     media_base64: Optional[str] = None, 
     media_mimetype: Optional[str] = None
 ):
-    print(f"--> [BACKGROUND] Iniciando IA para {remote_jid}: '{text}'", flush=True)
+    safe_text = SecurityService.sanitize_log(text)
+    print(f"--> [BACKGROUND] Iniciando IA para {remote_jid}: '{safe_text}'", flush=True)
     try:
         ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
+        safe_resp = SecurityService.sanitize_log(ai_response)
         print(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars). Enviando WhatsApp...", flush=True)
         resp = WhatsAppService.send_text(remote_jid, ai_response)
         print(f"--> [BACKGROUND] Envio WhatsApp resultado: {resp}", flush=True)
@@ -80,10 +83,10 @@ async def whatsapp_webhook(
     authorization: Optional[str] = Header(None),
     apikey: Optional[str] = Header(None)
 ):
-    # Security Audit: Validação de Token de Webhook
+    # Security Audit: Validação de Token de Webhook (Fase 6)
     if settings.WEBHOOK_TOKEN:
         token = authorization or apikey
-        if not token or (token != settings.WEBHOOK_TOKEN and token.replace("Bearer ", "") != settings.WEBHOOK_TOKEN):
+        if not SecurityService.validate_webhook_token(token, settings.WEBHOOK_TOKEN):
             logger.warning("Tentativa de acesso ao webhook com token inválido ou ausente.")
             raise HTTPException(status_code=401, detail="Unauthorized")
 

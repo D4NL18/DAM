@@ -25,21 +25,12 @@ export class FinanceDashboardComponent implements OnInit {
     this.financeApi.getMonthlySummary(now.getFullYear(), now.getMonth() + 1)
       .pipe(
         catchError(err => {
-          console.error('Erro ao buscar dados financeiros', err);
+          console.error('Erro ao buscar dados financeiros do Firestore:', err);
           return of({
-            totalSpent: 3500.75,
+            totalSpent: 0.0,
             currency: 'BRL',
-            expensesByCategory: [
-              { category: 'Alimentação', amount: 1200.00 },
-              { category: 'Transporte', amount: 400.00 },
-              { category: 'Lazer', amount: 600.00 },
-              { category: 'Moradia', amount: 1300.75 }
-            ],
-            recentTransactions: [
-              { id: 'tx_1', date: '2024-03-05T14:30:00Z', description: 'Supermercado Extra', amount: 250.00, category: 'Alimentação' },
-              { id: 'tx_2', date: '2024-03-06T09:15:00Z', description: 'Uber', amount: 45.50, category: 'Transporte' },
-              { id: 'tx_3', date: '2024-03-08T20:00:00Z', description: 'Cinema', amount: 80.00, category: 'Lazer' }
-            ]
+            expensesByCategory: [],
+            recentTransactions: []
           });
         })
       )
@@ -51,6 +42,19 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   initChart(data: FinanceSummary) {
+    if (!data.expensesByCategory || data.expensesByCategory.length === 0) {
+      this.chartOption = {
+        title: {
+          text: 'Nenhuma despesa registrada',
+          subtext: 'Cadastre gastos pelo WhatsApp para visualizar o gráfico',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#94a3b8', fontSize: 14 }
+        }
+      };
+      return;
+    }
+
     const pieData = data.expensesByCategory.map(e => ({
       name: e.category,
       value: e.amount

@@ -1,0 +1,256 @@
+<div class="agenda-dashboard" *ngIf="!loading && summary">
+  <!-- Top Bar / Header -->
+  <div class="dashboard-header">
+    <div class="title-area">
+      <div class="header-badge">
+        <span class="pulse-dot"></span>
+        <span class="badge-text">Sincronizado com Google Calendar API</span>
+      </div>
+      <h2 class="page-title">Agenda & Compromissos</h2>
+      <p class="page-subtitle">{{ todayFormatted | titlecase }} • Gerenciado pelo DAM Bot</p>
+    </div>
+    
+    <div class="actions-area">
+      <div class="period-selector">
+        <button class="period-btn" [class.active]="selectedPeriod === 'hoje'" (click)="setPeriod('hoje')">Hoje</button>
+        <button class="period-btn" [class.active]="selectedPeriod === 'semana'" (click)="setPeriod('semana')">Semana</button>
+        <button class="period-btn" [class.active]="selectedPeriod === 'mes'" (click)="setPeriod('mes')">Mês</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bento Grid Container -->
+  <div class="bento-grid">
+    
+    <!-- 1. Hero / Spotlight: Próximo Compromisso (Span 7) -->
+    <div class="bento-card bento-hero">
+      <div class="card-header">
+        <div class="status-chip in-progress" *ngIf="summary.nextEvent">
+          <span class="status-indicator"></span>
+          <span>A seguir agora</span>
+        </div>
+        <span class="material-symbols-outlined header-icon">event_upcoming</span>
+      </div>
+
+      <div class="hero-body" *ngIf="summary.nextEvent; else noNextEvent">
+        <div class="event-time-tag">
+          <span class="material-symbols-outlined">schedule</span>
+          <span>{{ summary.nextEvent.startTime }} - {{ summary.nextEvent.endTime }}</span>
+        </div>
+        <h3 class="hero-title">{{ summary.nextEvent.title }}</h3>
+        <p class="hero-desc">{{ summary.nextEvent.description }}</p>
+
+        <div class="event-meta">
+          <div class="meta-item" *ngIf="summary.nextEvent.location">
+            <span class="material-symbols-outlined">location_on</span>
+            <span>{{ summary.nextEvent.location }}</span>
+          </div>
+          <div class="meta-item category-badge" [attr.data-category]="summary.nextEvent.category">
+            <span class="material-symbols-outlined">label</span>
+            <span>{{ summary.nextEvent.category | uppercase }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #noNextEvent>
+        <div class="hero-body empty-hero-state">
+          <div class="empty-icon-circle">
+            <span class="material-symbols-outlined text-primary">event_available</span>
+          </div>
+          <h3 class="hero-title">Agenda Livre para Hoje</h3>
+          <p class="hero-desc">Você não possui reuniões ou compromissos agendados no Google Calendar para o dia de hoje.</p>
+        </div>
+      </ng-template>
+
+      <div class="hero-footer" *ngIf="summary.nextEvent && summary.nextEvent.meetUrl">
+        <a [href]="summary.nextEvent.meetUrl" target="_blank" rel="noopener" class="primary-action-btn">
+          <span class="material-symbols-outlined">video_call</span>
+          <span>Entrar no Google Meet</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- 2. KPIs do Dia (Span 5) -->
+    <div class="bento-card bento-kpis">
+      <div class="card-header">
+        <h3 class="card-title">Resumo do Dia</h3>
+        <span class="material-symbols-outlined header-icon">query_stats</span>
+      </div>
+
+      <div class="kpi-list">
+        <div class="kpi-item">
+          <div class="kpi-icon-box bg-primary-soft">
+            <span class="material-symbols-outlined text-primary">calendar_month</span>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-val">{{ summary.todayTotalEvents }}</span>
+            <span class="kpi-lbl">Compromissos agendados</span>
+          </div>
+        </div>
+
+        <div class="kpi-item">
+          <div class="kpi-icon-box bg-secondary-soft">
+            <span class="material-symbols-outlined text-secondary">hourglass_top</span>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-val">{{ summary.totalMeetingHours }}h</span>
+            <span class="kpi-lbl">Tempo em reuniões</span>
+          </div>
+        </div>
+
+        <div class="kpi-item">
+          <div class="kpi-icon-box bg-tertiary-soft">
+            <span class="material-symbols-outlined text-tertiary">task_alt</span>
+          </div>
+          <div class="kpi-info">
+            <span class="kpi-val">{{ summary.reminders.length }}</span>
+            <span class="kpi-lbl">Lembretes no Firestore</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini Weekly Calendar Bar -->
+      <div class="week-strip">
+        <p class="strip-label">Dias da Semana</p>
+        <div class="days-container">
+          <button 
+            *ngFor="let day of daysOfWeek" 
+            class="day-box" 
+            [class.active]="day.active"
+            (click)="selectDay(day)">
+            <span class="day-name">{{ day.dayName }}</span>
+            <span class="day-number">{{ day.dayNumber }}</span>
+            <span class="event-dot" *ngIf="day.hasEvents"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Timeline de Compromissos (Span 7) -->
+    <div class="bento-card bento-timeline">
+      <div class="card-header">
+        <div class="header-with-filter">
+          <h3 class="card-title">Linha do Tempo (Google Calendar)</h3>
+          <div class="category-filters">
+            <button class="filter-pill" [class.active]="selectedFilter === 'todos'" (click)="setFilter('todos')">Todos</button>
+            <button class="filter-pill" [class.active]="selectedFilter === 'reuniao'" (click)="setFilter('reuniao')">Reunião</button>
+            <button class="filter-pill" [class.active]="selectedFilter === 'trabalho'" (click)="setFilter('trabalho')">Trabalho</button>
+            <button class="filter-pill" [class.active]="selectedFilter === 'saude'" (click)="setFilter('saude')">Saúde</button>
+            <button class="filter-pill" [class.active]="selectedFilter === 'pessoal'" (click)="setFilter('pessoal')">Pessoal</button>
+          </div>
+        </div>
+        <span class="material-symbols-outlined header-icon">view_timeline</span>
+      </div>
+
+      <div class="timeline-list" *ngIf="filteredEvents.length > 0; else noTimelineEvents">
+        <div *ngFor="let ev of filteredEvents" class="timeline-item" [class.current]="ev.status === 'in_progress'">
+          <div class="time-col">
+            <span class="start-time">{{ ev.startTime }}</span>
+            <span class="end-time">{{ ev.endTime }}</span>
+          </div>
+
+          <div class="timeline-marker">
+            <span class="marker-dot" [attr.data-category]="ev.category"></span>
+            <span class="marker-line"></span>
+          </div>
+
+          <div class="event-card">
+            <div class="event-top">
+              <span class="category-tag" [attr.data-category]="ev.category">{{ ev.category }}</span>
+              <span class="status-tag" *ngIf="ev.status === 'in_progress'">Em andamento</span>
+            </div>
+            <h4 class="event-title">{{ ev.title }}</h4>
+            <p class="event-desc" *ngIf="ev.description">{{ ev.description }}</p>
+            <div class="event-details">
+              <span class="detail-item" *ngIf="ev.location">
+                <span class="material-symbols-outlined">location_on</span>
+                {{ ev.location }}
+              </span>
+              <a *ngIf="ev.meetUrl" [href]="ev.meetUrl" target="_blank" rel="noopener" class="meet-link">
+                <span class="material-symbols-outlined">videocam</span> Google Meet
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noTimelineEvents>
+        <div class="empty-state-content" style="padding: 2.5rem; text-align: center;">
+          <span class="material-symbols-outlined" style="font-size: 3rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">event_available</span>
+          <p style="color: #64748b; font-weight: 500;">Nenhum evento registrado no Google Calendar para o filtro selecionado.</p>
+        </div>
+      </ng-template>
+    </div>
+
+    <!-- 4. Lembretes & Tarefas do Dia (Span 5) -->
+    <div class="bento-card bento-reminders">
+      <div class="card-header">
+        <h3 class="card-title">Lembretes (Firestore)</h3>
+        <span class="material-symbols-outlined header-icon">checklist</span>
+      </div>
+
+      <div class="reminders-list" *ngIf="summary.reminders.length > 0; else noReminders">
+        <div 
+          *ngFor="let rem of summary.reminders" 
+          class="reminder-item" 
+          [class.completed]="rem.completed"
+          (click)="toggleReminder(rem.id)">
+          <div class="checkbox-box">
+            <span class="material-symbols-outlined check-icon">
+              {{ rem.completed ? 'check_box' : 'check_box_outline_blank' }}
+            </span>
+          </div>
+          <div class="reminder-text-area">
+            <p class="reminder-text">{{ rem.text }}</p>
+            <span class="reminder-due">{{ rem.dueTime }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #noReminders>
+        <div class="empty-state-content" style="padding: 2rem; text-align: center;">
+          <span class="material-symbols-outlined" style="font-size: 2.5rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">task_alt</span>
+          <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete pendente na coleção 'notes_reminders'.</p>
+        </div>
+      </ng-template>
+
+      <div class="reminders-footer">
+        <p class="tip-text">
+          <span class="material-symbols-outlined">smart_toy</span>
+          Diga "Lembrar de..." no WhatsApp para salvar lembretes aqui automaticamente.
+        </p>
+      </div>
+    </div>
+
+    <!-- 5. DAM AI Smart Insights (Span 12) -->
+    <div class="bento-card bento-ai-insights">
+      <div class="card-header">
+        <div class="insights-title-group">
+          <span class="material-symbols-outlined ai-sparkle">auto_awesome</span>
+          <h3 class="card-title">Insights Proativos do Assistente DAM</h3>
+        </div>
+        <span class="ai-badge">Google Calendar & Firestore</span>
+      </div>
+
+      <div class="insights-grid" *ngIf="summary.insights.length > 0; else noAiInsights">
+        <div *ngFor="let insight of summary.insights" class="insight-card" [attr.data-type]="insight.type">
+          <div class="insight-icon-wrap">
+            <span class="material-symbols-outlined">{{ insight.icon }}</span>
+          </div>
+          <div class="insight-content">
+            <h5 class="insight-headline">{{ insight.title }}</h5>
+            <p class="insight-paragraph">{{ insight.text }}</p>
+          </div>
+        </div>
+      </div>
+      <ng-template #noAiInsights>
+        <div style="padding: 1.5rem; text-align: center; color: #94a3b8;">
+          <p style="margin: 0; font-size: 0.95rem;">Os insights preditivos de trânsito e foco serão calculados automaticamente assim que seus compromissos forem sincronizados.</p>
+        </div>
+      </ng-template>
+    </div>
+
+  </div>
+</div>
+
+<div class="loading-state" *ngIf="loading">
+  <div class="spinner"></div>
+  <p>Consultando banco de dados em tempo real...</p>
+</div>

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, HTTPException, Header
 from typing import Optional
 from config.settings import settings
 from services.whatsapp_service import WhatsAppService
+from services.security_service import SecurityService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,7 +22,7 @@ async def gcp_billing_alert(
     """
     if settings.WEBHOOK_TOKEN:
         token = authorization or apikey
-        if not token or (token != settings.WEBHOOK_TOKEN and token.replace("Bearer ", "") != settings.WEBHOOK_TOKEN):
+        if not SecurityService.validate_webhook_token(token, settings.WEBHOOK_TOKEN):
             logger.warning("Tentativa de acesso não autorizado a /api/billing-alert")
             raise HTTPException(status_code=401, detail="Unauthorized")
 

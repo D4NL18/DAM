@@ -17,7 +17,7 @@ export interface HealthSummary {
   providedIn: 'root'
 })
 export class HealthApiService {
-  private apiUrl = 'http://localhost:8080/api/v1/health';
+  private apiUrl = 'http://35.254.233.21:8000/api/v1/health';
 
   constructor(private http: HttpClient) {}
 

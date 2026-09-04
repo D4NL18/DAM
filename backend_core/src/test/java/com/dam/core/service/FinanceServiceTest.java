@@ -27,17 +27,33 @@ public class FinanceServiceTest {
     @Test
     public void testGetFinanceSummary() throws Exception {
         List<FinanceTransaction> mockTransactions = Arrays.asList(
-                FinanceTransaction.builder().amount(100.0).category("Food").build(),
-                FinanceTransaction.builder().amount(50.0).category("Food").build(),
-                FinanceTransaction.builder().amount(200.0).category("Transport").build()
+                FinanceTransaction.builder().amount(100.0).category("Food").userId("daniel").build(),
+                FinanceTransaction.builder().amount(50.0).category("Food").userId("daniel").build(),
+                FinanceTransaction.builder().amount(200.0).category("Transport").userId("daniel").build()
         );
         
-        when(repository.findAll()).thenReturn(mockTransactions);
+        when(repository.findAll("daniel")).thenReturn(mockTransactions);
 
-        FinanceSummaryDTO result = financeService.getFinanceSummary();
+        FinanceSummaryDTO result = financeService.getFinanceSummary("daniel");
 
         assertEquals(350.0, result.getTotalAmount());
         assertEquals(150.0, result.getExpensesByCategory().get("Food"));
         assertEquals(200.0, result.getExpensesByCategory().get("Transport"));
+    }
+
+    @Test
+    public void testGetFinanceSummaryLari() throws Exception {
+        List<FinanceTransaction> mockTransactions = Arrays.asList(
+                FinanceTransaction.builder().amount(80.0).category("Saúde").userId("lari").build(),
+                FinanceTransaction.builder().amount(120.0).category("Educação").userId("lari").build()
+        );
+        
+        when(repository.findAll("lari")).thenReturn(mockTransactions);
+
+        FinanceSummaryDTO result = financeService.getFinanceSummary("lari");
+
+        assertEquals(200.0, result.getTotalAmount());
+        assertEquals(80.0, result.getExpensesByCategory().get("Saúde"));
+        assertEquals(120.0, result.getExpensesByCategory().get("Educação"));
     }
 }

@@ -15,6 +15,7 @@ Fornece:
 import logging
 import httpx
 from config.settings import settings
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,11 @@ def consultar_clash_of_clans(tipo: str) -> str:
         tipo (str): Tipo de consulta — 'raid' para Capital do Cla, 'guerra' para Guerra de Clas.
     """
     tipo_norm = tipo.lower().strip()
+    user_id = UserContext.get_user_id()
+    user_name = UserContext.get_user_name()
+
+    if user_id != "daniel":
+        return f"ℹ️ {user_name}, você não possui uma conta do Clash of Clans vinculada ao assistente."
 
     try:
         player_tag = settings.COC_PLAYER_TAG
@@ -178,9 +184,11 @@ def consultar_clash_of_clans(tipo: str) -> str:
 
                 estado = data.get("state", "desconhecido")
                 if estado == "inWar":
-                    return "✅ *Guerra de Clãs ativa.* Você já utilizou todos os seus ataques! Bom trabalho! ⚔️"
+                    adv = data.get("opponent", {}).get("name", "Adversário")
+                    return f"✅ *Guerra de Clãs ativa contra {adv}.* Você já utilizou todos os seus ataques! Bom trabalho! ⚔️"
                 if estado == "preparation":
-                    return "⏳ *Guerra de Clãs em preparação.* Os ataques ainda não estão disponíveis."
+                    adv = data.get("opponent", {}).get("name", "Adversário")
+                    return f"⏳ *Guerra de Clãs em preparação contra {adv}.* Os ataques ainda não estão disponíveis."
             except httpx.HTTPStatusError as err:
                 if err.response.status_code == 403:
                     # Verifica se o clã tem War Log Privado
@@ -209,7 +217,7 @@ def consultar_clash_of_clans(tipo: str) -> str:
 
             # 2. Tenta verificar Liga de Guerras de Clãs (CWL)
             try:
-                cwl_data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwarleaguegroup")
+                cwl_data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwar/leaguegroup")
                 rounds = cwl_data.get("rounds", [])
                 for round_data in reversed(rounds):
                     for war_tag in round_data.get("warTags", []):
@@ -241,6 +249,8 @@ def consultar_clash_of_clans(tipo: str) -> str:
                                             f"Não deixe de atacar antes do fim do dia de guerra!"
                                         )
                                     return f"✅ *Liga de Guerras (CWL) ativa.* Você já realizou seu ataque contra **{adv}**! Bom trabalho! 🏆"
+                                else:
+                                    return f"ℹ️ *Liga de Guerras (CWL) ativa.* O clã está enfrentando **{adv}**, mas você não foi escalado para a rodada de hoje."
                         except Exception:
                             continue
             except Exception:

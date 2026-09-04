@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from config import firebase
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,19 @@ def registrar_localizacao_objeto(
         return "Por favor, informe onde o objeto foi guardado."
 
     objeto_limpo = objeto.strip()
+
     local_limpo = local.strip()
     categoria_limpa = categoria.strip() if categoria else "Geral"
     detalhes_limpos = detalhes.strip() if detalhes else None
     objeto_key = objeto_limpo.lower()
+    user_id = UserContext.get_user_id()
+    doc_key = objeto_key if user_id == "daniel" else f"{user_id}__{objeto_key}"
     agora_iso = datetime.now(timezone.utc).isoformat()
 
     # Tentativa de uso do Firestore
     if firebase.db is not None:
         try:
-            doc_ref = firebase.db.collection("item_locations").document(objeto_key)
+            doc_ref = firebase.db.collection("item_locations").document(doc_key)
             doc_snap = doc_ref.get()
 
             historico: List[Dict[str, Any]] = []
@@ -69,6 +73,8 @@ def registrar_localizacao_objeto(
                     })
 
             novo_registro = {
+                "userId": user_id,
+                "user_id": user_id,
                 "objeto": objeto_limpo,
                 "objeto_lower": objeto_key,
                 "local_atual": local_limpo,
@@ -78,7 +84,7 @@ def registrar_localizacao_objeto(
                 "historico": historico
             }
             doc_ref.set(novo_registro)
-            logger.info(f"Item '{objeto_limpo}' registrado no Firestore em '{local_limpo}'.")
+            logger.info(f"Item '{objeto_limpo}' de [{user_id}] registrado no Firestore em '{local_limpo}'.")
             
             resp = f"📍 Localização de **{objeto_limpo}** registrada com sucesso!\n• Local: {local_limpo}\n• Categoria: {categoria_limpa}"
             if detalhes_limpos:
@@ -90,8 +96,8 @@ def registrar_localizacao_objeto(
 
     # Fallback Gracioso em Memória
     historico_mem: List[Dict[str, Any]] = []
-    if objeto_key in _in_memory_items:
-        dados_antigos = _in_memory_items[objeto_key]
+    if doc_key in _in_memory_items:
+        dados_antigos = _in_memory_items[doc_key]
         historico_mem = list(dados_antigos.get("historico", []))
         if dados_antigos.get("local_atual"):
             historico_mem.append({
@@ -100,7 +106,9 @@ def registrar_localizacao_objeto(
                 "detalhes": dados_antigos.get("detalhes")
             })
 
-    _in_memory_items[objeto_key] = {
+    registro_mem = {
+        "userId": user_id,
+        "user_id": user_id,
         "objeto": objeto_limpo,
         "objeto_lower": objeto_key,
         "local_atual": local_limpo,
@@ -109,46 +117,59 @@ def registrar_localizacao_objeto(
         "atualizado_em": agora_iso,
         "historico": historico_mem
     }
-    logger.info(f"Item '{objeto_limpo}' salvo em memória em '{local_limpo}'.")
+    _in_memory_items[doc_key] = registro_mem
+    if user_id == "daniel":
+        _in_memory_items[f"daniel__{objeto_key}"] = registro_mem
+        _in_memory_items[objeto_key] = registro_mem
+
+    logger.info(f"Item '{objeto_limpo}' de [{user_id}] salvo em memória em '{local_limpo}'.")
 
     resp = f"📍 Localização de **{objeto_limpo}** registrada com sucesso (memória)!\n• Local: {local_limpo}\n• Categoria: {categoria_limpa}"
     if detalhes_limpos:
         resp += f"\n• Detalhes: {detalhes_limpos}"
     return resp
 
+
 def onde_guardei_objeto(objeto: str) -> str:
     """
-    Pesquisa na memória espacial onde um determinado objeto foi guardado.
-    Realiza busca exata e por palavras-chave/semântica no nome e detalhes.
-
-    Args:
-        objeto: Nome ou descrição do objeto a buscar (ex: 'passaporte', 'carteira', 'chave').
+    Pesquisa na memória espacial onde um determinado objeto foi guardado pelo usuário ativo.
     """
     if not objeto or not objeto.strip():
         return "Por favor, especifique o objeto que está procurando."
 
+    user_id = UserContext.get_user_id()
     termo = objeto.strip().lower()
+    doc_key = f"{user_id}__{termo}"
 
     # 1. Tenta Firestore
     if firebase.db is not None:
         try:
-            # Busca exata primeiro
-            doc_ref = firebase.db.collection("item_locations").document(termo)
+            # Busca exata particionada primeiro
+            doc_ref = firebase.db.collection("item_locations").document(doc_key)
             doc_snap = doc_ref.get()
             if doc_snap.exists:
                 dados = doc_snap.to_dict() or {}
                 return _formatar_resposta_localizacao(dados)
+            elif user_id == "daniel":
+                # Fallback legado para Daniel
+                doc_legacy = firebase.db.collection("item_locations").document(termo).get()
+                if doc_legacy.exists:
+                    return _formatar_resposta_localizacao(doc_legacy.to_dict() or {})
 
-            # Busca por varredura/palavras-chave na coleção
+            # Busca por varredura filtrando estritamente pelo usuário ativo
             docs = firebase.db.collection("item_locations").stream()
             encontrados = []
             for d in docs:
                 data = d.to_dict() or {}
+                d_user = data.get("userId") or data.get("user_id") or "daniel"
+                if d_user != user_id:
+                    continue
                 obj_name = data.get("objeto_lower", "")
                 detalhes = (data.get("detalhes") or "").lower()
                 categoria = (data.get("categoria") or "").lower()
                 if termo in obj_name or obj_name in termo or termo in detalhes or termo in categoria:
                     encontrados.append(data)
+
 
             if encontrados:
                 # Retorna o primeiro mais relevante ou lista todos se múltiplos
@@ -166,16 +187,22 @@ def onde_guardei_objeto(objeto: str) -> str:
             logger.warning(f"Erro ao buscar no Firestore, tentando fallback em memória: {e}")
 
     # 2. Fallback em Memória
-    if termo in _in_memory_items:
+    if doc_key in _in_memory_items:
+        return _formatar_resposta_localizacao(_in_memory_items[doc_key])
+    elif user_id == "daniel" and termo in _in_memory_items:
         return _formatar_resposta_localizacao(_in_memory_items[termo])
 
     encontrados_mem = []
     for k, item in _in_memory_items.items():
+        d_user = item.get("userId") or item.get("user_id") or "daniel"
+        if d_user != user_id:
+            continue
         obj_name = item.get("objeto_lower", "")
         detalhes = (item.get("detalhes") or "").lower()
         categoria = (item.get("categoria") or "").lower()
         if termo in obj_name or obj_name in termo or termo in detalhes or termo in categoria:
             encontrados_mem.append(item)
+
 
     if encontrados_mem:
         if len(encontrados_mem) == 1:
@@ -198,21 +225,29 @@ def listar_historico_movimentacoes(objeto: str) -> str:
     if not objeto or not objeto.strip():
         return "Por favor, especifique o objeto para consultar o histórico."
 
+    user_id = UserContext.get_user_id()
     termo = objeto.strip().lower()
+    doc_key = f"{user_id}__{termo}"
     item_dados = None
 
     # 1. Firestore
     if firebase.db is not None:
         try:
-            doc_ref = firebase.db.collection("item_locations").document(termo)
+            doc_ref = firebase.db.collection("item_locations").document(doc_key)
             doc_snap = doc_ref.get()
             if doc_snap.exists:
                 item_dados = doc_snap.to_dict()
-            else:
+            elif user_id == "daniel":
+                doc_legacy = firebase.db.collection("item_locations").document(termo).get()
+                if doc_legacy.exists:
+                    item_dados = doc_legacy.to_dict()
+
+            if not item_dados:
                 docs = firebase.db.collection("item_locations").stream()
                 for d in docs:
                     data = d.to_dict() or {}
-                    if termo in data.get("objeto_lower", ""):
+                    d_user = data.get("userId") or data.get("user_id") or "daniel"
+                    if d_user == user_id and termo in data.get("objeto_lower", ""):
                         item_dados = data
                         break
         except Exception as e:
@@ -220,13 +255,17 @@ def listar_historico_movimentacoes(objeto: str) -> str:
 
     # 2. Fallback em Memória
     if not item_dados:
-        if termo in _in_memory_items:
+        if doc_key in _in_memory_items:
+            item_dados = _in_memory_items[doc_key]
+        elif user_id == "daniel" and termo in _in_memory_items:
             item_dados = _in_memory_items[termo]
         else:
             for k, it in _in_memory_items.items():
-                if termo in it.get("objeto_lower", ""):
+                d_user = it.get("userId") or it.get("user_id") or "daniel"
+                if d_user == user_id and termo in it.get("objeto_lower", ""):
                     item_dados = it
                     break
+
 
     if not item_dados:
         return f"Não encontrei nenhum registro do objeto '{objeto}' para exibir histórico."

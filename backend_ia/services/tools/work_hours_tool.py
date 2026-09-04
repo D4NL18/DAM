@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Union
 from config import firebase
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +222,12 @@ def registrar_ponto_dia(
     
     registro_id = str(uuid.uuid4())
     data_limpa = data.strip()
+    user_id = UserContext.get_user_id()
     
     ponto_data = {
         "id": registro_id,
+        "userId": user_id,
+        "user_id": user_id,
         "data": data_limpa,
         "horas_texto": str(horas_trabalhadas_texto),
         "horas_trabalhadas": horas_trabalhadas,

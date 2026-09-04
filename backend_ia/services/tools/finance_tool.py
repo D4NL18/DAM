@@ -3,6 +3,7 @@ import uuid
 import logging
 from datetime import datetime, timezone, timedelta
 from config import firebase
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,11 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         return "Erro: O banco de dados não está disponível no momento."
     
     try:
+        user_id = UserContext.get_user_id()
         data_to_save = {
             "id": str(uuid.uuid4()),
+            "userId": user_id,
+            "user_id": user_id,
             "description": descricao,
             "amount": valor,
             "category": categoria,
@@ -70,7 +74,7 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         }
         
         firebase.db.collection("finances").add(data_to_save)
-        logger.info(f"Gasto registrado: {descricao} - R$ {valor:.2f} [{metodo_normalizado}]")
+        logger.info(f"Gasto registrado para [{user_id}]: {descricao} - R$ {valor:.2f} [{metodo_normalizado}]")
         return (
             f"Sucesso! Registrei o gasto de R$ {valor:.2f} com '{descricao}' "
             f"na categoria {categoria} no cartão **{metodo_normalizado}**."
@@ -95,6 +99,7 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
         return "Erro: O banco de dados não está disponível no momento."
 
     try:
+        user_id = UserContext.get_user_id()
         agora = datetime.now(timezone.utc)
         
         # 1. Definir intervalo de datas
@@ -123,8 +128,12 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
 
         docs = list(docs_query.stream())
 
+        # Filtra estritamente pelo usuário ativo (retrocompatibilidade: se sem user_id, pertence ao daniel)
+        docs = [d for d in docs if (d.to_dict().get("userId") or d.to_dict().get("user_id") or "daniel") == user_id]
+
         if not docs:
             return f"ℹ️ Não encontrei registros de gastos para {titulo_periodo}."
+
 
         total_geral = 0.0
         por_cartao = {}

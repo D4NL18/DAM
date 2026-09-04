@@ -15,7 +15,11 @@ public class HealthService {
     private final HealthMetricRepository repository;
 
     public HealthSummaryDTO getHealthSummary() throws Exception {
-        List<HealthMetric> metrics = repository.findAll();
+        return getHealthSummary("daniel");
+    }
+
+    public HealthSummaryDTO getHealthSummary(String userId) throws Exception {
+        List<HealthMetric> metrics = repository.findAll(userId);
         
         int totalSteps = 0;
         double totalCalories = 0.0;

@@ -1,4 +1,5 @@
 from datetime import datetime
+from config.timezone import get_brasilia_now_str
 from services.prompts.system_base import get_system_base_prompt
 from services.prompts.financial_rules import get_financial_prompt
 from services.prompts.mobility_rules import get_mobility_prompt
@@ -19,7 +20,7 @@ class PromptComposer:
         Monta a instrução de sistema consolidada estruturada por domínios funcionais.
         """
         if not data_hora_atual:
-            data_hora_atual = datetime.now().strftime("%Y-%m-%d %H:%M")
+            data_hora_atual = get_brasilia_now_str("%Y-%m-%d %H:%M")
 
         secoes = [
             get_system_base_prompt(data_hora_atual),

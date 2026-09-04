@@ -29,16 +29,24 @@ async def health_webhook(
         # Assumindo que o payload traga data do tipo:
         # { "date": "2024-03-01", "metrics": { "steps": 10000, "activeEnergy": 500, "heartRate": 72 } }
         
+        user_id = (
+            request.headers.get("x-user-id")
+            or request.query_params.get("user")
+            or request.query_params.get("userId")
+            or request.query_params.get("user_id")
+            or "daniel"
+        ).lower().strip()
         data_to_save = {
+            "userId": user_id,
+            "user_id": user_id,
             "timestamp": datetime.now(timezone.utc),
             "payload": payload,
-            # Se for um formato conhecido do Auto Export:
-            # "date": payload.get("data", {}).get("date")
         }
 
         if firebase.db:
             firebase.db.collection("health_metrics").add(data_to_save)
-            logger.info("Métricas de saúde salvas com sucesso.")
+            logger.info(f"Métricas de saúde para [{user_id}] salvas com sucesso.")
+
         else:
             logger.error("Firebase não inicializado.")
             raise HTTPException(status_code=500, detail="Database not configured")

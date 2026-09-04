@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from config import firebase
 from config.settings import settings
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -724,6 +725,11 @@ def listar_meus_animes(status: Optional[str] = None) -> str:
     Args:
         status (str, opcional): Filtrar por status ('assistindo', 'planejo_assistir', 'concluido'). Default: None (ou 'assistindo' se for a intenção).
     """
+    user_id = UserContext.get_user_id()
+    user_name = UserContext.get_user_name()
+    if user_id != "daniel":
+        return f"ℹ️ {user_name}, você ainda não possui uma lista de animes nem uma conta AniList vinculada ao assistente."
+
     animes = list(_MEMORY_WATCHLIST.values())
 
     if firebase.db is not None:

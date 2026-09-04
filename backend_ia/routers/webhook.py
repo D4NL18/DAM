@@ -5,7 +5,9 @@ from typing import Optional
 from services.ai_service import AIService
 from services.whatsapp_service import WhatsAppService
 from services.security_service import SecurityService
+from services.tts_service import TTSService
 from repositories.chat_repository import ChatRepository
+from services.user_context import UserContext
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -26,37 +28,48 @@ def extrair_ddd_e_numero(digits: str) -> tuple[str, str]:
         ddd = digits[-10:-8]
     return ddd, num8
 
-def is_allowed_user(remote_jid: str, allowed_phone: str) -> bool:
+def is_allowed_user(remote_jid: str, allowed_phone: str = "") -> bool:
     """
-    Valida estritamente se o JID remoto pertence ao usuário autorizado.
-    Fail-safe: se allowed_phone estiver vazio, rejeita sumariamente.
+    Valida estritamente se o JID remoto pertence a um dos usuários autorizados (Daniel ou Lari).
     Tolera a oscilação do 9º dígito no Brasil.
     """
-    if not allowed_phone or not remote_jid:
+    if not remote_jid:
         return False
     
     # Ignora grupos e canais
     if "@g.us" in remote_jid or "@newsletter" in remote_jid:
         return False
 
-    allowed_digits = normalize_digits(allowed_phone)
     jid_user = remote_jid.split("@")[0]
     jid_digits = normalize_digits(jid_user)
 
-    if not allowed_digits or not jid_digits:
+    if not jid_digits:
         return False
 
-    # Valida DDD e os 8 dígitos finais
-    ddd_allowed, num_allowed = extrair_ddd_e_numero(allowed_digits)
     ddd_jid, num_jid = extrair_ddd_e_numero(jid_digits)
 
-    if num_allowed != num_jid:
+    # Coleta todos os números autorizados
+    telefones_autorizados = []
+    if allowed_phone:
+        telefones_autorizados.append(allowed_phone)
+    if hasattr(settings, "ALLOWED_PHONE_NUMBERS") and settings.ALLOWED_PHONE_NUMBERS:
+        if isinstance(settings.ALLOWED_PHONE_NUMBERS, list):
+            telefones_autorizados.extend(settings.ALLOWED_PHONE_NUMBERS)
+        elif isinstance(settings.ALLOWED_PHONE_NUMBERS, str):
+            telefones_autorizados.extend([p.strip() for p in settings.ALLOWED_PHONE_NUMBERS.split(",") if p.strip()])
+
+    if not telefones_autorizados:
         return False
 
-    if ddd_allowed and ddd_jid and ddd_allowed != ddd_jid:
-        return False
+    for allowed in telefones_autorizados:
+        allowed_digits = normalize_digits(allowed)
+        if not allowed_digits:
+            continue
+        ddd_allowed, num_allowed = extrair_ddd_e_numero(allowed_digits)
+        if num_allowed == num_jid and (not ddd_allowed or not ddd_jid or ddd_allowed == ddd_jid):
+            return True
 
-    return True
+    return False
 
 async def process_and_reply(
     remote_jid: str, 
@@ -64,17 +77,50 @@ async def process_and_reply(
     media_base64: Optional[str] = None, 
     media_mimetype: Optional[str] = None
 ):
+    # Ativa o contexto do usuário da mensagem atual
+    user_info = UserContext.resolve_user_from_phone(remote_jid)
+    if user_info:
+        UserContext.set_user(user_info["id"], user_info["phone"])
+    else:
+        UserContext.set_user("daniel", remote_jid)
+
     masked_jid = SecurityService.mask_phone(remote_jid)
     safe_text = SecurityService.sanitize_log(text)
-    logger.info(f"--> [BACKGROUND] Processando mensagem para {masked_jid}: '{safe_text}'")
+    user_name = UserContext.get_user_name()
+    logger.info(f"--> [BACKGROUND] Processando mensagem de {user_name} ({masked_jid}): '{safe_text}'")
+
     try:
         ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
-        logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars). Enviando WhatsApp...")
-        resp = WhatsAppService.send_text(remote_jid, ai_response)
-        logger.info(f"--> [BACKGROUND] Mensagem entregue via WhatsApp para {masked_jid}")
+        logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars).")
+
+        # Verifica se deve responder em áudio
+        deve_enviar_audio = False
+        if media_mimetype and "audio" in media_mimetype:
+            deve_enviar_audio = True
+        elif TTSService.should_reply_with_audio(text):
+            deve_enviar_audio = True
+
+        enviado_com_sucesso = False
+        if deve_enviar_audio:
+            logger.info(f"--> [BACKGROUND] Sintetizando voz via TTSService para {masked_jid}...")
+            audio_bytes = TTSService.synthesize_speech(ai_response)
+            if audio_bytes:
+                resp = WhatsAppService.send_voice_note(remote_jid, audio_bytes)
+                if resp is not None:
+                    logger.info(f"--> [BACKGROUND] Áudio entregue via WhatsApp para {masked_jid}")
+                    enviado_com_sucesso = True
+            else:
+                logger.warning("--> [BACKGROUND] Falha na síntese de áudio. Acionando fallback para texto.")
+
+        # Fallback para envio de texto caso áudio não tenha sido acionado ou tenha falhado
+        if not enviado_com_sucesso:
+            resp = WhatsAppService.send_text(remote_jid, ai_response)
+            logger.info(f"--> [BACKGROUND] Mensagem de texto entregue via WhatsApp para {masked_jid}")
+
         ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=ai_response)
     except Exception as e:
         logger.error(f"--> [BACKGROUND ERROR] Falha no processamento da mensagem: {e}")
+
 
 @router.post("/api/whatsapp/webhook")
 async def whatsapp_webhook(
@@ -113,6 +159,10 @@ async def whatsapp_webhook(
     remote_jid = key.get("remoteJid", "")
     message_id = key.get("id")
     masked_jid = SecurityService.mask_phone(remote_jid)
+
+    # Guard clause: ignora mensagens enviadas pelo próprio bot (anti-loop)
+    if key.get("fromMe", False):
+        return {"status": "ignored", "reason": "from_me"}
 
     # Guard clause: ignora grupos e canais
     if "@g.us" in remote_jid or "@newsletter" in remote_jid:

@@ -6,9 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/finance")
@@ -19,10 +17,13 @@ public class FinanceController {
     private final FinanceService financeService;
 
     @GetMapping("/summary")
-    @Operation(summary = "Obtém um resumo agregado das finanças")
-    public ResponseEntity<FinanceSummaryDTO> getSummary() {
+    @Operation(summary = "Obtém um resumo agregado das finanças por usuário")
+    public ResponseEntity<FinanceSummaryDTO> getSummary(
+            @RequestParam(value = "userId", required = false) String userId,
+            @RequestHeader(value = "X-User-Id", required = false) String headerUserId) {
         try {
-            return ResponseEntity.ok(financeService.getFinanceSummary());
+            String effectiveUserId = (userId != null && !userId.isBlank()) ? userId : headerUserId;
+            return ResponseEntity.ok(financeService.getFinanceSummary(effectiveUserId));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }

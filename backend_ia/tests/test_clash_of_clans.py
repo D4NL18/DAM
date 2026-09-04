@@ -178,7 +178,7 @@ class TestAlertasBriefingCoC:
                 return {"items": [{"state": "ongoing", "members": [
                     {"tag": "#ABC987", "attacks": 2, "attackLimit": 6, "bonusAttackLimit": 0}
                 ]}]}
-            elif "currentwarleaguegroup" in endpoint:
+            elif "currentwar/leaguegroup" in endpoint:
                 raise Exception("not in league")
             else:
                 return {"state": "notInWar", "attacksPerMember": 2, "clan": {"members": []}}
@@ -198,7 +198,7 @@ class TestAlertasBriefingCoC:
         def side_effect(endpoint):
             if "capitalraidseasons" in endpoint:
                 return {"items": [{"state": "ended", "members": []}]}
-            elif "currentwarleaguegroup" in endpoint:
+            elif "currentwar/leaguegroup" in endpoint:
                 raise Exception("not in league")
             else:
                 return {"state": "notInWar", "attacksPerMember": 2, "clan": {"members": []}}
@@ -206,3 +206,75 @@ class TestAlertasBriefingCoC:
         mock_fetch.side_effect = side_effect
         resultado = _obter_alertas_coc()
         assert resultado == ""
+
+    @patch("services.briefing_service._fetch_coc_data")
+    @patch("services.briefing_service.settings")
+    def test_cwl_ativa_com_ataque_concluido_informa_no_briefing(self, mock_settings, mock_fetch):
+        from services.briefing_service import _obter_alertas_coc
+        mock_settings.COC_API_TOKEN = "fake"
+        mock_settings.COC_CLAN_TAG = "#XYZ123"
+        mock_settings.COC_PLAYER_TAG = "#ABC987"
+
+        def side_effect(endpoint):
+            if "capitalraidseasons" in endpoint:
+                return {"items": [{"state": "ended", "members": []}]}
+            elif "currentwar/leaguegroup" in endpoint:
+                return {"rounds": [{"warTags": ["#WAR1"]}]}
+            elif "clanwarleagues/wars/%23WAR1" in endpoint:
+                return {
+                    "state": "inWar",
+                    "attacksPerMember": 1,
+                    "clan": {
+                        "tag": "#XYZ123",
+                        "name": "Meu Clã",
+                        "members": [{"tag": "#ABC987", "attacks": [{"stars": 3}]}]
+                    },
+                    "opponent": {
+                        "tag": "#OPP1",
+                        "name": "Clã Rival"
+                    }
+                }
+            else:
+                return {"state": "notInWar", "attacksPerMember": 2, "clan": {"members": []}}
+
+        mock_fetch.side_effect = side_effect
+        resultado = _obter_alertas_coc()
+        assert "Liga de Guerras (CWL)" in resultado
+        assert "Clã Rival" in resultado
+        assert "Concluído" in resultado
+
+    @patch("services.tools.clash_of_clans_tool._fetch_coc_data")
+    @patch("services.tools.clash_of_clans_tool.settings")
+    def test_consulta_guerra_cwl_ativa_ataque_realizado(self, mock_settings, mock_fetch):
+        from services.tools.clash_of_clans_tool import consultar_clash_of_clans
+        mock_settings.COC_API_TOKEN = "fake"
+        mock_settings.COC_CLAN_TAG = "#XYZ123"
+        mock_settings.COC_PLAYER_TAG = "#ABC987"
+
+        def side_effect(endpoint):
+            if "currentwar" == endpoint or endpoint == "clans/%23XYZ123/currentwar":
+                return {"state": "notInWar"}
+            elif "currentwar/leaguegroup" in endpoint:
+                return {"rounds": [{"warTags": ["#WAR1"]}]}
+            elif "clanwarleagues/wars/%23WAR1" in endpoint:
+                return {
+                    "state": "inWar",
+                    "attacksPerMember": 1,
+                    "clan": {
+                        "tag": "#XYZ123",
+                        "name": "Meu Clã",
+                        "members": [{"tag": "#ABC987", "attacks": [{"stars": 3}]}]
+                    },
+                    "opponent": {
+                        "tag": "#OPP1",
+                        "name": "Clã Inimigo"
+                    }
+                }
+            return {}
+
+        mock_fetch.side_effect = side_effect
+        res = consultar_clash_of_clans("guerra")
+        assert "Liga de Guerras (CWL) ativa" in res
+        assert "Clã Inimigo" in res
+        assert "já realizou seu ataque" in res
+

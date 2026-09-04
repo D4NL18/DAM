@@ -1,9 +1,10 @@
-﻿import re
+import re
 import uuid
 import logging
 from typing import Optional, List
 from datetime import datetime, timezone, date, timedelta
 from config import firebase
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,12 @@ def salvar_ideia_presente(
         return "Por favor, descreva a ideia de presente a ser registrada."
 
     tags_limpas = [t.strip() for t in tags if t and t.strip()] if tags else []
+    user_id = UserContext.get_user_id()
 
     record = {
         "id": str(uuid.uuid4()),
+        "userId": user_id,
+        "user_id": user_id,
         "pessoa": pessoa.strip(),
         "relacao": relacao.strip() if relacao else "Outro",
         "ideia": ideia.strip(),
@@ -148,6 +152,10 @@ def consultar_ideias_presente(
     else:
         todos = list(_MOCK_GIFT_IDEAS)
 
+    user_id = UserContext.get_user_id()
+    # Retrocompatibilidade: sem userId assume daniel
+    todos = [i for i in todos if (i.get("userId") or i.get("user_id") or "daniel") == user_id]
+
     filtrados = []
     for item in todos:
         p_match = True
@@ -210,6 +218,9 @@ def alertar_datas_proximas(dias_antecedencia: int = 30) -> str:
             todos = list(_MOCK_GIFT_IDEAS)
     else:
         todos = list(_MOCK_GIFT_IDEAS)
+
+    user_id = UserContext.get_user_id()
+    todos = [i for i in todos if (i.get("userId") or i.get("user_id") or "daniel") == user_id]
 
     hoje = date.today()
     limite = hoje + timedelta(days=dias_limite)

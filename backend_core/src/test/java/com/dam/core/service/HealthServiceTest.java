@@ -27,15 +27,29 @@ public class HealthServiceTest {
     @Test
     public void testGetHealthSummary() throws Exception {
         List<HealthMetric> mockMetrics = Arrays.asList(
-                HealthMetric.builder().steps(5000).activeCalories(300.0).build(),
-                HealthMetric.builder().steps(3000).activeCalories(150.0).build()
+                HealthMetric.builder().steps(5000).activeCalories(300.0).userId("daniel").build(),
+                HealthMetric.builder().steps(3000).activeCalories(150.0).userId("daniel").build()
         );
         
-        when(repository.findAll()).thenReturn(mockMetrics);
+        when(repository.findAll("daniel")).thenReturn(mockMetrics);
 
-        HealthSummaryDTO result = healthService.getHealthSummary();
+        HealthSummaryDTO result = healthService.getHealthSummary("daniel");
 
         assertEquals(8000, result.getTotalSteps());
         assertEquals(450.0, result.getTotalActiveCalories());
+    }
+
+    @Test
+    public void testGetHealthSummaryLari() throws Exception {
+        List<HealthMetric> mockMetrics = Arrays.asList(
+                HealthMetric.builder().steps(7000).activeCalories(400.0).userId("lari").build()
+        );
+        
+        when(repository.findAll("lari")).thenReturn(mockMetrics);
+
+        HealthSummaryDTO result = healthService.getHealthSummary("lari");
+
+        assertEquals(7000, result.getTotalSteps());
+        assertEquals(400.0, result.getTotalActiveCalories());
     }
 }

@@ -11,6 +11,7 @@ COPY . .
 
 # Variável de ambiente PORT é injetada pelo Cloud Run
 ENV PORT=8080
+ENV TZ="America/Sao_Paulo"
 
 # Inicia o servidor na porta determinada pela variável de ambiente
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

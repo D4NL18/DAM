@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { AuthService } from './auth.service';
 
 export interface CalendarEvent {
   id: string;
@@ -40,7 +41,7 @@ export interface AgendaSummary {
 export class AgendaApiService {
   private apiUrl = 'https://dam-backend-557716987299.us-central1.run.app/api/v1/agenda';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private authService: AuthService) {}
 
   getAgendaSummary(period: 'hoje' | 'semana' | 'mes' = 'hoje'): Observable<AgendaSummary> {
     const emptyState: AgendaSummary = {
@@ -52,7 +53,10 @@ export class AgendaApiService {
       reminders: []
     };
 
-    return this.http.get<AgendaSummary>(`${this.apiUrl}/summary?period=${period}`).pipe(
+    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const headers = new HttpHeaders({ 'X-User-Id': userId });
+
+    return this.http.get<AgendaSummary>(`${this.apiUrl}/summary?period=${period}&userId=${userId}`, { headers }).pipe(
       catchError(err => {
         console.warn('Erro ao consultar API de agenda, retornando estado real zerado:', err);
         return of(emptyState);

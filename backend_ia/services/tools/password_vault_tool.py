@@ -12,8 +12,10 @@ from cryptography.hazmat.primitives import hashes
 
 from config import firebase
 from config.settings import settings
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
+
 
 # Salt fixo para derivação de chave simétrica quando gerada via PBKDF2/SHA-256
 VAULT_SALT = b"dam_vault_secure_salt_pbkdf2_2026"
@@ -113,6 +115,7 @@ def gerar_senha_forte(tamanho: int = 16, incluir_simbolos: bool = True) -> str:
     return "".join(caracteres)
 
 def salvar_credencial(
+
     servico: str, 
     usuario: str, 
     senha: str, 
@@ -134,11 +137,13 @@ def salvar_credencial(
     if not senha or not senha.strip():
         return "Por favor, informe a senha a ser armazenada."
 
+    user_id = UserContext.get_user_id()
     servico_limpo = servico.strip()
     usuario_limpo = usuario.strip()
     senha_limpa = senha.strip()
     notas_limpas = notas.strip() if notas else None
     servico_key = servico_limpo.lower()
+    doc_key = servico_key if user_id == "daniel" else f"{user_id}__{servico_key}"
     agora_iso = datetime.now(timezone.utc).isoformat()
 
     try:
@@ -149,6 +154,8 @@ def salvar_credencial(
         return "Erro ao criptografar a credencial. Ação cancelada por segurança."
 
     registro = {
+        "userId": user_id,
+        "user_id": user_id,
         "servico": servico_limpo,
         "servico_lower": servico_key,
         "usuario": usuario_limpo,
@@ -157,13 +164,15 @@ def salvar_credencial(
         "atualizado_em": agora_iso
     }
 
-    _in_memory_vault[servico_key] = registro
+    _in_memory_vault[doc_key] = registro
+    if user_id == "daniel":
+        _in_memory_vault[f"daniel__{servico_key}"] = registro
 
     # 1. Firestore
     if firebase.db is not None:
         try:
-            firebase.db.collection("vault_credentials").document(servico_key).set(registro)
-            logger.info(f"Credencial para '{servico_limpo}' salva com sucesso no Firestore.")
+            firebase.db.collection("vault_credentials").document(doc_key).set(registro)
+            logger.info(f"Credencial para '{servico_limpo}' de [{user_id}] salva no Firestore.")
             resp = f"🔒 Credencial para **{servico_limpo}** criptografada e salva com sucesso no cofre!"
             if notas_limpas:
                 resp += f"\n• Notas: {notas_limpas}"
@@ -171,9 +180,8 @@ def salvar_credencial(
         except Exception as e:
             logger.warning(f"Erro ao salvar no Firestore, usando fallback em memória: {e}")
 
+
     # 2. Fallback em memória
-    _in_memory_vault[servico_key] = registro
-    logger.info(f"Credencial para '{servico_limpo}' salva com sucesso em memória.")
     resp = f"🔒 Credencial para **{servico_limpo}** criptografada e salva no cofre (memória)!"
     if notas_limpas:
         resp += f"\n• Notas: {notas_limpas}"
@@ -181,31 +189,36 @@ def salvar_credencial(
 
 def consultar_credencial(servico: str, revelar_senha: bool = False) -> str:
     """
-    Recupera uma credencial do cofre. Se revelar_senha for False, oculta a maior parte da senha.
-    Se True, entrega a senha descriptografada.
-
-    Args:
-        servico: Nome do serviço para pesquisar (ex: 'GitHub', 'Google').
-        revelar_senha: Se True, entrega a senha descriptografada em texto plano.
+    Recupera uma credencial do cofre do usuário ativo.
     """
     if not servico or not servico.strip():
         return "Por favor, informe o nome do serviço que deseja consultar."
 
+    user_id = UserContext.get_user_id()
     termo = servico.strip().lower()
+    doc_key = f"{user_id}__{termo}"
     registro = None
 
     # 1. Firestore
     if firebase.db is not None:
         try:
-            doc_ref = firebase.db.collection("vault_credentials").document(termo)
+            # Busca direta pela chave particionada
+            doc_ref = firebase.db.collection("vault_credentials").document(doc_key)
             doc_snap = doc_ref.get()
             if doc_snap.exists:
                 registro = doc_snap.to_dict()
-            else:
+            elif user_id == "daniel":
+                # Retrocompatibilidade para Daniel
+                doc_legacy = firebase.db.collection("vault_credentials").document(termo).get()
+                if doc_legacy.exists:
+                    registro = doc_legacy.to_dict()
+
+            if not registro:
                 docs = firebase.db.collection("vault_credentials").stream()
                 for d in docs:
                     data = d.to_dict() or {}
-                    if termo in data.get("servico_lower", ""):
+                    d_user = data.get("userId") or data.get("user_id") or "daniel"
+                    if d_user == user_id and termo in data.get("servico_lower", ""):
                         registro = data
                         break
         except Exception as e:
@@ -213,16 +226,19 @@ def consultar_credencial(servico: str, revelar_senha: bool = False) -> str:
 
     # 2. Fallback em memória
     if not registro:
-        if termo in _in_memory_vault:
+        if doc_key in _in_memory_vault:
+            registro = _in_memory_vault[doc_key]
+        elif user_id == "daniel" and termo in _in_memory_vault:
             registro = _in_memory_vault[termo]
         else:
             for k, it in _in_memory_vault.items():
-                if termo in it.get("servico_lower", ""):
+                d_user = it.get("userId") or it.get("user_id") or "daniel"
+                if d_user == user_id and termo in it.get("servico_lower", ""):
                     registro = it
                     break
 
     if not registro:
-        return f"Nenhuma credencial encontrada para o serviço '{servico}' no cofre."
+        return f"Nenhuma credencial encontrada para o serviço '{servico}' no seu cofre."
 
     # Descriptografia
     try:
@@ -255,8 +271,9 @@ def consultar_credencial(servico: str, revelar_senha: bool = False) -> str:
 
 def listar_servicos_cofre() -> str:
     """
-    Lista todos os serviços cadastrados no cofre seguro sem exibir nenhuma senha.
+    Lista todos os serviços cadastrados no cofre seguro do usuário ativo.
     """
+    user_id = UserContext.get_user_id()
     servicos: List[Dict[str, Any]] = []
 
     # 1. Firestore
@@ -264,18 +281,24 @@ def listar_servicos_cofre() -> str:
         try:
             docs = firebase.db.collection("vault_credentials").stream()
             for d in docs:
-                servicos.append(d.to_dict() or {})
+                data = d.to_dict() or {}
+                d_user = data.get("userId") or data.get("user_id") or "daniel"
+                if d_user == user_id:
+                    servicos.append(data)
         except Exception as e:
             logger.warning(f"Erro ao listar do Firestore: {e}")
 
     # 2. Se vazio ou Firestore ausente, usa memória
     if not servicos and _in_memory_vault:
-        servicos = list(_in_memory_vault.values())
+        for k, it in _in_memory_vault.items():
+            d_user = it.get("userId") or it.get("user_id") or "daniel"
+            if d_user == user_id:
+                servicos.append(it)
 
     if not servicos:
-        return "O cofre de senhas está vazio. Nenhuma credencial cadastrada no momento."
+        return "Seu cofre de senhas está vazio. Nenhuma credencial cadastrada no momento."
 
-    linhas = ["🔐 **Serviços Cadastrados no Cofre Seguro:**"]
+    linhas = ["🔐 **Serviços Cadastrados no seu Cofre Seguro:**"]
     for idx, item in enumerate(servicos, 1):
         srv = item.get("servico", "Desconhecido")
         user = item.get("usuario", "N/A")
@@ -284,3 +307,4 @@ def listar_servicos_cofre() -> str:
 
     linhas.append("\n*(Para consultar detalhes de um serviço, use a busca de credenciais)*")
     return "\n".join(linhas)
+

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AuthService } from './auth.service';
 
 export interface HealthSummary {
   totalSteps: number;
@@ -19,9 +20,11 @@ export interface HealthSummary {
 export class HealthApiService {
   private apiUrl = 'https://dam-backend-557716987299.us-central1.run.app/api/v1/health';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private authService: AuthService) {}
 
   getSummary(startDate: string, endDate: string): Observable<HealthSummary> {
-    return this.http.get<HealthSummary>(`${this.apiUrl}/summary?startDate=${startDate}&endDate=${endDate}`);
+    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const headers = new HttpHeaders({ 'X-User-Id': userId });
+    return this.http.get<HealthSummary>(`${this.apiUrl}/summary?startDate=${startDate}&endDate=${endDate}&userId=${userId}`, { headers });
   }
 }

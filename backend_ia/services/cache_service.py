@@ -7,9 +7,19 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from config.timezone import TZ_BRASILIA
+
 from config import firebase
 
 logger = logging.getLogger(__name__)
+
+
+def _now_br() -> datetime:
+    """Retorna datetime no fuso de Brasília respeitando mocks de datetime."""
+    res = datetime.now(TZ_BRASILIA)
+    if hasattr(res, "replace"):
+        return res.replace(tzinfo=None)
+    return res
 
 
 class QueryVolatility(str, Enum):
@@ -43,7 +53,7 @@ class CacheEntry:
         self.ttl_seconds = ttl_seconds
 
     def is_expired(self, current_time: Optional[datetime] = None) -> bool:
-        now = current_time or datetime.now()
+        now = current_time or _now_br()
         return now >= self.expires_at
 
 
@@ -63,10 +73,22 @@ class ConversationCacheService:
         "tokens_saved_estimated": 0
     }
 
+    @classmethod
+    def clear_cache(cls, domain: Optional[QueryVolatility] = None):
+        """Limpa o cache L1 da memória."""
+        with cls._lock:
+            if domain:
+                keys_to_del = [k for k, v in cls._l1_cache.items() if v.domain == domain]
+                for k in keys_to_del:
+                    del cls._l1_cache[k]
+            else:
+                cls._l1_cache.clear()
+
     # Palavras-chave para forçar atualização em tempo real (RN-CACHE-004)
     FORCE_REFRESH_KEYWORDS = [
-        "atualizar", "atualiza", "atualize", "forcar", "forçar",
-        "tempo real", "ao vivo", "novamente", "de novo", "checar novamente"
+        "atualizar", "atualiza", "atualize", "atualizado", "atualizada", "atualizacao",
+        "forcar", "tempo real", "ao vivo", "novamente", "de novo", "checar novamente",
+        "mudou", "alterou", "horario novo", "novo horario", "recente", "ultimas", "placar"
     ]
 
     # Expressões regulares para roteamento semântico
@@ -182,12 +204,12 @@ class ConversationCacheService:
           TTL = 0 (não cachear / bypass), permitindo capturar mudanças de horário e placar.
         """
         if not game_time:
-            return 7200
+            return 0
 
-        now = current_time or datetime.now()
+        now = current_time or _now_br()
         diff_seconds = (game_time - now).total_seconds()
 
-        # Faltam 2 horas ou menos (ou jogo já começou)
+        # Faltam 2 horas ou menos (ou jogo já começou / ao vivo)
         if diff_seconds <= 7200:
             return 0
 
@@ -199,24 +221,30 @@ class ConversationCacheService:
     def extract_game_time_from_text(cls, text: str) -> Optional[datetime]:
         """
         Tenta extrair o datetime da próxima partida a partir da resposta de texto.
-        Suporta formatos como:
-        - "04/09/2026 às 14:30"
-        - "Hoje às 18:00"
+        Suporta formatos com ou sem formatação markdown (**, _, etc.), tais como:
+        - "04/09/2026 às 14:30" / "04/09 às 13:50"
+        - "Hoje às 18:00" / "Hoje (04/09) às 13:50"
         - "Amanhã às 11:00"
+        - "Horário: 13:50"
         """
-        now = datetime.now()
+        now = _now_br()
         
-        # Formato explícito: DD/MM/YYYY às HH:MM
-        match_full = re.search(r"(\d{2})/(\d{2})/(\d{4})\s+(?:às|as)\s+(\d{2}):(\d{2})", text, re.IGNORECASE)
+        # Remove caracteres de formatação markdown para não interferir nas expressões
+        clean = re.sub(r"[\*_`>#]", " ", text)
+        clean = " ".join(clean.split())
+
+        # 1. Formato explícito: DD/MM/YYYY ou DD/MM às HH:MM
+        match_full = re.search(r"(\d{2})/(\d{2})(?:/(\d{4}))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_full:
             d, m, y, h, mi = match_full.groups()
+            ano = int(y) if y else now.year
             try:
-                return datetime(int(y), int(m), int(d), int(h), int(mi))
+                return datetime(ano, int(m), int(d), int(h), int(mi))
             except Exception:
                 pass
 
-        # Formato relativo: Hoje às HH:MM
-        match_hoje = re.search(r"\bhoje\s+(?:às|as)\s+(\d{2}):(\d{2})", text, re.IGNORECASE)
+        # 2. Formato relativo: Hoje (opcionalmente com data entre parênteses) às HH:MM
+        match_hoje = re.search(r"\bhoje(?:\s*\([^)]*\))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_hoje:
             h, mi = match_hoje.groups()
             try:
@@ -224,8 +252,8 @@ class ConversationCacheService:
             except Exception:
                 pass
 
-        # Formato relativo: Amanhã às HH:MM
-        match_amanha = re.search(r"\bamanh[aã]\s+(?:às|as)\s+(\d{2}):(\d{2})", text, re.IGNORECASE)
+        # 3. Formato relativo: Amanhã às HH:MM
+        match_amanha = re.search(r"\bamanh[aã](?:\s*\([^)]*\))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_amanha:
             h, mi = match_amanha.groups()
             try:
@@ -233,6 +261,16 @@ class ConversationCacheService:
                 return datetime(amanha.year, amanha.month, amanha.day, int(h), int(mi))
             except Exception:
                 pass
+
+        # 4. Horário isolado com menção a hoje no texto
+        if "hoje" in clean.lower():
+            match_h = re.search(r"hor[aá]rio\s*:\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+            if match_h:
+                h, mi = match_h.groups()
+                try:
+                    return datetime(now.year, now.month, now.day, int(h), int(mi))
+                except Exception:
+                    pass
 
         return None
 
@@ -254,7 +292,7 @@ class ConversationCacheService:
             return None
 
         cache_key = cls.generate_cache_key(remote_jid, query)
-        now = datetime.now()
+        now = _now_br()
 
         # 1. Consulta L1 (Memória)
         with cls._lock:
@@ -323,7 +361,7 @@ class ConversationCacheService:
             return False
 
         # Determinação do TTL em segundos
-        now = datetime.now()
+        now = _now_br()
 
         if custom_ttl is not None:
             if custom_ttl <= 0:

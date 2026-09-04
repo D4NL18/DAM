@@ -6,16 +6,29 @@ import urllib.request
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from config.settings import settings
+from config.timezone import get_brasilia_now_naive
 
 logger = logging.getLogger(__name__)
 
-def resolver_apelido_endereco(endereco: str) -> str:
+def resolver_apelido_endereco(endereco: str, user_jid: str = "") -> str:
     """
-    Resolve apelidos comuns como 'casa' ou 'trabalho' para os endereços configurados.
+    Resolve apelidos comuns como 'casa', 'trabalho', 'academia', buscando primeiro no
+    repositório de endereços salvos do usuário (Firestore/Cache) e usando
+    os fallbacks do settings.py caso não haja registro persistido.
     """
     if not endereco:
         return ""
-    
+
+    # Tenta resolver via AddressRepository (Firestore / Cache L1)
+    try:
+        from repositories.address_repository import AddressRepository
+        jid = user_jid or settings.ALLOWED_PHONE_NUMBER or "default_user"
+        salvo = AddressRepository.get_address(jid, endereco)
+        if salvo and (salvo.get("formatted_address") or salvo.get("address")):
+            return salvo.get("formatted_address") or salvo.get("address")
+    except Exception as e:
+        logger.warning(f"[maps_tool] Erro ao consultar AddressRepository para '{endereco}': {e}")
+
     end_lower = endereco.strip().lower()
 
     # Apelidos para Casa
@@ -29,13 +42,14 @@ def resolver_apelido_endereco(endereco: str) -> str:
     return endereco.strip()
 
 
-def obter_dados_rota(origem: str, destino: str, modo: str = "driving") -> Dict[str, Any]:
+def obter_dados_rota(origem: str, destino: str, modo: str = "driving", user_jid: str = "") -> Dict[str, Any]:
     """
     Obtém informações detalhadas de rota, tempo e distância entre origem e destino.
     Usa a API do Google Maps caso a chave esteja disponível ou gera simulação realista/mock.
     """
-    origem_resolvida = resolver_apelido_endereco(origem)
-    destino_resolvido = resolver_apelido_endereco(destino)
+    origem_resolvida = resolver_apelido_endereco(origem, user_jid=user_jid)
+    destino_resolvido = resolver_apelido_endereco(destino, user_jid=user_jid)
+
 
     if settings.GOOGLE_MAPS_API_KEY:
         try:
@@ -176,8 +190,8 @@ def calcular_horario_saida(origem: str, destino: str, horario_chegada: str, ante
         try:
             parsed = datetime.strptime(horario_limpo, fmt)
             if not com_data:
-                # Usa a data de hoje como referência
-                hoje = datetime.now()
+                # Usa a data de hoje como referência (Brasília)
+                hoje = get_brasilia_now_naive()
                 chegada_dt = hoje.replace(hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0)
             else:
                 chegada_dt = parsed

@@ -179,3 +179,37 @@ class TestFase21MorningBriefing:
         assert res.status_code == 200
         assert res.json()["preview"] == "Preview Resumo"
 
+    @patch("services.briefing_service.obter_partidas_estruturadas_cs2")
+    def test_obter_jogos_furia_hoje_dados_reais(self, mock_obter):
+        from services.briefing_service import _obter_jogos_furia_hoje
+        data_fixa = datetime(2026, 9, 4, 8, 0, tzinfo=timezone(timedelta(hours=-3)))
+        mock_obter.return_value = [
+            {
+                "time_a": "FURIA",
+                "time_b": "Team Vitality",
+                "campeonato": "BLAST Open Fall 2026 - Playoffs (QF)",
+                "horario": "14:30",
+                "horario_completo": "04/09/2026 às 14:30",
+                "data_str": "04/09/2026",
+                "hora_int": 14,
+                "status": "AGENDADO"
+            },
+            {
+                "time_a": "FURIA",
+                "time_b": "GamerLegion",
+                "campeonato": "FISSURE Playground #3",
+                "horario": "02:30",
+                "horario_completo": "08/09/2026 às 02:30",
+                "data_str": "08/09/2026",
+                "hora_int": 2,
+                "status": "AGENDADO"
+            }
+        ]
+
+        jogos = _obter_jogos_furia_hoje(data_fixa)
+        assert len(jogos) == 1
+        assert jogos[0]["time_b"] == "Team Vitality"
+        assert jogos[0]["campeonato"] == "BLAST Open Fall 2026 - Playoffs (QF)"
+        assert jogos[0]["horario"] == "14:30"
+
+

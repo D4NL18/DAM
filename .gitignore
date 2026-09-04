@@ -1,6 +1,8 @@
 *.env*
 backend_ia/.env
 backend_ia/firebase-adminsdk.json
+backend_ia/dam-tts-key.json
+backend_ia/*key*.json
 backend_ia/config/*.json
 backend_ia/venv/
 backend_ia/__pycache__/
@@ -13,3 +15,5 @@ scratch/
 index.json
 .firebase/
 *.tar.gz
+
+backend_ia.tar.gz

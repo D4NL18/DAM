@@ -14,19 +14,30 @@ def _reset_mock_storage() -> None:
     global _mock_storage
     _mock_storage.clear()
 
+from services.user_context import UserContext
+
 def _obter_todos_itens() -> List[Dict[str, Any]]:
-    """Recupera todos os itens da coleção 'notes_reminders' ou do mock."""
+    """Recupera todos os itens da coleção 'notes_reminders' ou do mock filtrados pelo usuário ativo."""
+    user_id = UserContext.get_user_id()
+    todos = []
     if firebase.db is not None:
         try:
             docs = firebase.db.collection("notes_reminders").stream()
-            return [doc.to_dict() for doc in docs]
+            todos = [doc.to_dict() for doc in docs]
         except Exception as e:
             logger.error(f"Erro ao ler Firestore notes_reminders: {e}. Usando mock.")
-            return list(_mock_storage)
-    return list(_mock_storage)
+            todos = list(_mock_storage)
+    else:
+        todos = list(_mock_storage)
+
+    # Filtra estritamente pelo usuário ativo (retrocompatibilidade: se sem user_id, pertence ao daniel)
+    return [i for i in todos if (i.get("userId") or i.get("user_id") or "daniel") == user_id]
 
 def _salvar_item(item: Dict[str, Any]) -> None:
-    """Salva um item no Firestore ou no armazenamento em memória."""
+    """Salva um item no Firestore ou no armazenamento em memória vinculado ao usuário ativo."""
+    user_id = UserContext.get_user_id()
+    item["userId"] = user_id
+    item["user_id"] = user_id
     _mock_storage.append(item)
     if firebase.db is not None:
         try:
@@ -35,10 +46,11 @@ def _salvar_item(item: Dict[str, Any]) -> None:
             logger.error(f"Erro ao salvar no Firestore: {e}. Mantido em mock.")
 
 def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
-    """Atualiza um item no Firestore e no mock."""
+    """Atualiza um item no Firestore e no mock, garantindo que pertença ao usuário ativo."""
+    user_id = UserContext.get_user_id()
     atualizado = False
     for item in _mock_storage:
-        if item.get("id") == item_id:
+        if item.get("id") == item_id and (item.get("userId") or item.get("user_id") or "daniel") == user_id:
             item.update(updates)
             atualizado = True
             break
@@ -46,12 +58,19 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
     if firebase.db is not None:
         try:
             doc_ref = firebase.db.collection("notes_reminders").document(item_id)
-            doc_ref.update(updates)
-            atualizado = True
+            doc = doc_ref.get()
+            if doc.exists:
+                doc_data = doc.to_dict()
+                if (doc_data.get("userId") or doc_data.get("user_id") or "daniel") == user_id:
+                    doc_ref.update(updates)
+                    atualizado = True
+                else:
+                    logger.warning(f"Tentativa de atualização de item de outro usuário: {item_id}")
         except Exception as e:
             logger.error(f"Erro ao atualizar Firestore doc {item_id}: {e}")
 
     return atualizado
+
 
 
 def criar_anotacao(titulo: str, conteudo: str, tags: Optional[List[str]] = None) -> str:

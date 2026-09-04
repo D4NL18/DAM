@@ -4,8 +4,8 @@ from config.settings import settings
 from repositories.chat_repository import ChatRepository
 from services.tools.health_tool import consultar_saude
 from services.tools.finance_tool import registrar_gasto, consultar_resumo_gastos
-from services.tools.calendar_tool import agendar_evento, consultar_agenda
-from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo
+from services.tools.calendar_tool import agendar_evento, consultar_agenda, editar_evento, excluir_evento
+from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo, cadastrar_ou_atualizar_veiculo
 from services.tools.esports_tool import consultar_jogos_cs2
 from services.tools.alexa_tool import acionar_rotina_alexa, falar_na_alexa
 from services.tools.maps_tool import (
@@ -63,14 +63,25 @@ from services.tools.anime_tracker_tool import (
     consultar_novas_temporadas,
     explorar_temporada_animes
 )
-from services.briefing_service import consultar_briefing_matinal
+from services.briefing_service import (
+    consultar_briefing_matinal,
+    configurar_preferencias_briefing,
+    consultar_preferencias_briefing
+)
 from services.tools.clash_of_clans_tool import consultar_clash_of_clans
 from services.tools.gcp_billing_tool import consultar_gcp_billing
 from services.tools.nutrition_tool import (
     consultar_lista_substituicao,
     avaliar_substituicao_alimento
 )
+from services.tools.address_tool import (
+    salvar_endereco,
+    consultar_enderecos_salvos,
+    remover_endereco
+)
 from datetime import datetime
+from config.timezone import get_brasilia_now_str
+
 
 from services.guardrails_service import GuardrailsService
 from services.prompts.prompt_composer import PromptComposer
@@ -87,6 +98,8 @@ AVAILABLE_TOOLS = [
     consultar_resumo_gastos,
     agendar_evento,
     consultar_agenda,
+    editar_evento,
+    excluir_evento,
     consultar_status_veiculo,
     acionar_travas_veiculo,
     consultar_jogos_cs2,
@@ -133,11 +146,18 @@ AVAILABLE_TOOLS = [
     consultar_novas_temporadas,
     explorar_temporada_animes,
     consultar_briefing_matinal,
+    configurar_preferencias_briefing,
+    consultar_preferencias_briefing,
+    cadastrar_ou_atualizar_veiculo,
     consultar_clash_of_clans,
     consultar_gcp_billing,
     consultar_lista_substituicao,
-    avaliar_substituicao_alimento
+    avaliar_substituicao_alimento,
+    salvar_endereco,
+    consultar_enderecos_salvos,
+    remover_endereco
 ]
+
 
 class AIService:
     @staticmethod
@@ -180,7 +200,7 @@ class AIService:
             history.append({"role": role, "parts": [msg.get("text")]})
 
         try:
-            agora = datetime.now().strftime("%Y-%m-%d %H:%M")
+            agora = get_brasilia_now_str("%Y-%m-%d %H:%M")
             system_instruction = PromptComposer.compose_system_instruction(agora)
 
             model = genai.GenerativeModel(

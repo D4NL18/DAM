@@ -8,10 +8,25 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-adminsdk.json"
     WEBHOOK_TOKEN: str = ""
+    # Google Calendar IDs por usuário
     CALENDAR_ID: str = ""
+    CALENDAR_ID_DANIEL: str = "danielmarinho1705@gmail.com"
+    CALENDAR_ID_LARI: str = ""
 
-    # Número pessoal permitido para interagir (Security & Privacy)
-    ALLOWED_PHONE_NUMBER: str = ""
+    # Números permitidos para interagir (Security & Privacy)
+    ALLOWED_PHONE_NUMBER: str = "5571991269995"
+    ALLOWED_PHONE_NUMBERS: str = "5571991269995,5571983278254"
+
+    @property
+    def allowed_numbers_list(self) -> list[str]:
+        nums = [n.strip() for n in self.ALLOWED_PHONE_NUMBERS.split(",") if n.strip()]
+        if self.ALLOWED_PHONE_NUMBER and self.ALLOWED_PHONE_NUMBER not in nums:
+            nums.append(self.ALLOWED_PHONE_NUMBER)
+        return nums
+
+
+    # Número do WhatsApp Business do Bot (DAM)
+    BOT_PHONE_NUMBER: str = "5571981718497"
 
     # Automação Residencial (Alexa / Voice Monkey)
     VOICE_MONKEY_API_TOKEN: str = ""

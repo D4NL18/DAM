@@ -6,6 +6,7 @@ import gzip
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from config.timezone import TZ_BRASILIA
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +33,132 @@ LIQUIPEDIA_ALIASES = {
 
 # Fallback estático caso a rede esteja indisponível
 JOGOS_FALLBACK = [
-    {"evento": "BLAST Open Fall 2026 - Playoffs (QF)", "horario": "04/09/2026 às 14:30", "time_a": "FURIA", "time_b": "Team Vitality", "formato": "MD3", "status": "Agendado"},
+    {"evento": "BLAST Open Fall 2026 - Playoffs (QF)", "horario": "04/09/2026 às 13:50", "time_a": "FURIA", "time_b": "Team Vitality", "formato": "MD3", "status": "Ao Vivo / Em Andamento"},
     {"evento": "FISSURE Playground #3 - Group B", "horario": "08/09/2026 às 02:30", "time_a": "FURIA", "time_b": "GamerLegion", "formato": "MD3", "status": "Agendado"},
     {"evento": "ESL Pro League Season 21", "horario": "Hoje às 17:30", "time_a": "MIBR", "time_b": "Complexity", "formato": "MD3", "status": "Agendado"},
     {"evento": "BLAST Premier Spring Final", "horario": "Amanhã às 11:00", "time_a": "paiN", "time_b": "Vitality", "formato": "MD3", "status": "Agendado"}
 ]
+
+def obter_partidas_estruturadas_cs2(time: Optional[str] = "FURIA") -> list[dict]:
+    """
+    Retorna uma lista de partidas agendadas estruturadas para o time solicitado.
+    Utiliza a agenda oficial do Liquipedia com fallback para radar em cache.
+    """
+    partidas_estruturadas = []
+    time_query = time.strip() if time else "FURIA"
+    time_upper = time_query.upper()
+
+    # 1. Tentar via Liquipedia
+    try:
+        agenda = _buscar_agenda_liquipedia(time_query)
+        for p in agenda:
+            t1 = p.get("time1", "")
+            t2 = p.get("time2", "")
+            horario_completo = p.get("horario", "")
+            torneio = p.get("torneio", "Torneio de CS2")
+
+            hora_str = "12:00"
+            data_str = ""
+            hora_int = 12
+            match_hora = re.search(r'(\d{2}/\d{2}/\d{4})\s+às\s+(\d{2}:\d{2})', horario_completo)
+            if match_hora:
+                data_str = match_hora.group(1)
+                hora_str = match_hora.group(2)
+                try:
+                    hora_int = int(hora_str.split(":")[0])
+                except Exception:
+                    hora_int = 12
+
+            partidas_estruturadas.append({
+                "time_a": t1,
+                "time_b": t2,
+                "campeonato": torneio,
+                "horario": hora_str,
+                "horario_completo": horario_completo,
+                "data_str": data_str,
+                "hora_int": hora_int,
+                "status": "AGENDADO",
+                "placar": None,
+                "vencedor": None
+            })
+    except Exception as e:
+        logger.warning(f"Falha ao obter partidas estruturadas do Liquipedia: {e}")
+
+    if partidas_estruturadas:
+        return partidas_estruturadas
+
+    # 2. Fallback de cache estruturado
+    for j in JOGOS_FALLBACK:
+        t_a = j.get("time_a", "")
+        t_b = j.get("time_b", "")
+        if time_upper in t_a.upper() or time_upper in t_b.upper():
+            horario_raw = j.get("horario", "")
+            hora_str = "12:00"
+            data_str = ""
+            hora_int = 12
+
+            match_data_hora = re.search(r'(\d{2}/\d{2}/\d{4})\s+às\s+(\d{2}:\d{2})', horario_raw)
+            match_hoje = re.search(r'(Hoje|Amanhã)\s+às\s+(\d{2}:\d{2})', horario_raw, re.IGNORECASE)
+
+            if match_data_hora:
+                data_str = match_data_hora.group(1)
+                hora_str = match_data_hora.group(2)
+            elif match_hoje:
+                data_str = match_hoje.group(1)
+                hora_str = match_hoje.group(2)
+
+            try:
+                hora_int = int(hora_str.split(":")[0])
+            except Exception:
+                hora_int = 12
+
+            partidas_estruturadas.append({
+                "time_a": t_a,
+                "time_b": t_b,
+                "campeonato": j.get("evento", "CS2"),
+                "horario": hora_str,
+                "horario_completo": horario_raw,
+                "data_str": data_str,
+                "hora_int": hora_int,
+                "status": "AGENDADO",
+                "placar": None,
+                "vencedor": None
+            })
+
+    return partidas_estruturadas
+
+_LIQUIPEDIA_CACHE: dict = {}
 
 def _buscar_agenda_liquipedia(team_name: Optional[str] = None) -> list[dict]:
     """Consulta as próximas partidas agendadas através da API do Liquipedia CS2."""
     nome_limpo = team_name.lower().strip() if team_name else "furia"
     page_name = LIQUIPEDIA_ALIASES.get(nome_limpo, team_name.strip() if team_name else "FURIA")
     
+    # Cache em memória de 60s para cumprir limites da API do Liquipedia (1 req / 30s)
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if page_name in _LIQUIPEDIA_CACHE:
+        cached_ts, cached_data = _LIQUIPEDIA_CACHE[page_name]
+        if (now_ts - cached_ts) < 60:
+            return cached_data
+
     url = f"https://liquipedia.net/counterstrike/api.php?action=parse&page={urllib.parse.quote(page_name)}&format=json"
     headers = {
-        "User-Agent": "DAMBot/1.0 (danielmarinho@gmail.com)",
+        "User-Agent": "DAMBot/1.0 (https://github.com/D4NL18/DAM; danielmarinho@gmail.com)",
         "Accept-Encoding": "gzip"
     }
     
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=5) as r:
-        raw = gzip.decompress(r.read()).decode("utf-8")
-        data = json.loads(raw)
-        html = data.get("parse", {}).get("text", {}).get("*", "")
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = gzip.decompress(r.read()).decode("utf-8")
+            data = json.loads(raw)
+            html = data.get("parse", {}).get("text", {}).get("*", "")
+    except Exception as e:
+        logger.warning(f"Falha ao consultar agenda no Liquipedia ({page_name}): {e}")
+        return []
 
     partidas = []
     matches_raw = html.split('data-timestamp="')
-    now_ts = datetime.now().timestamp()
 
     for block in matches_raw[1:]:
         ts_str = block.split('"')[0]
@@ -68,7 +169,7 @@ def _buscar_agenda_liquipedia(team_name: Optional[str] = None) -> list[dict]:
         if ts < (now_ts - 10800):
             continue
 
-        dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=-3)))
+        dt = datetime.fromtimestamp(ts, tz=TZ_BRASILIA)
         horario_br = dt.strftime("%d/%m/%Y às %H:%M")
 
         # Torneio e Etapa
@@ -92,6 +193,7 @@ def _buscar_agenda_liquipedia(team_name: Optional[str] = None) -> list[dict]:
         if len(partidas) >= 4:
             break
 
+    _LIQUIPEDIA_CACHE[page_name] = (now_ts, partidas)
     return partidas
 
 def _buscar_partidas_api(time: Optional[str] = None) -> Optional[str]:
@@ -163,16 +265,33 @@ def consultar_jogos_cs2(time: Optional[str] = None) -> str:
     time_label = f"'{time}'" if time else "em Destaque"
     resp_blocos = []
 
-    # 1. Buscar Próximas Partidas Agendadas no Liquipedia
+    # 1. Buscar Próximas Partidas Agendadas (Liquipedia com fallback para radar estruturado)
+    partidas_futuras = []
     try:
         agenda = _buscar_agenda_liquipedia(time)
         if agenda:
-            bloco_agenda = f"📅 **Próximas Partidas Agendadas (Calendário Oficial):**\n"
-            for p in agenda:
-                bloco_agenda += f"• [{p['torneio']}] **{p['time1']}** vs **{p['time2']}** - ⏰ **{p['horario']}** (Horário de Brasília)\n"
-            resp_blocos.append(bloco_agenda)
+            partidas_futuras = agenda
     except Exception as e:
         logger.warning(f"Falha ao consultar agenda no Liquipedia: {e}")
+
+    if not partidas_futuras:
+        partidas_radar = obter_partidas_estruturadas_cs2(time)
+        if partidas_radar:
+            for p in partidas_radar:
+                partidas_futuras.append({
+                    "torneio": p.get("evento", "CS2"),
+                    "time1": p.get("time_a", "Time A"),
+                    "time2": p.get("time_b", "Time B"),
+                    "horario": p.get("horario", ""),
+                    "status": p.get("status", "Agendado")
+                })
+
+    if partidas_futuras:
+        bloco_agenda = f"📅 **Próximas Partidas Agendadas / Ao Vivo:**\n"
+        for p in partidas_futuras:
+            status_txt = f" [{p.get('status')}]" if p.get('status') else ""
+            bloco_agenda += f"• [{p['torneio']}] **{p['time1']}** vs **{p['time2']}** - ⏰ **{p['horario']}** (Horário de Brasília){status_txt}\n"
+        resp_blocos.append(bloco_agenda)
 
     # 2. Buscar Histórico Recente de Resultados
     try:
@@ -196,10 +315,10 @@ def consultar_jogos_cs2(time: Optional[str] = None) -> str:
         
         resp = f"🔫 **Partidas de Counter-Strike 2 para '{time}' (Radar Cache):**\n"
         for j in filtrados:
-            resp += f"• [{j['evento']}] {j['time_a']} vs {j['time_b']} ({j['formato']}) - {j['horario']} | {j['status']}\n"
+            resp += f"• [{j['evento']}] {j['time_a']} vs {j['time_b']} ({j['formato']}) - {j['horario']} (Horário de Brasília) | {j['status']}\n"
         return resp
 
     resp = "🔫 **Próximos Jogos em Destaque no Counter-Strike 2 (Radar Cache):**\n"
     for j in JOGOS_FALLBACK:
-        resp += f"• [{j['evento']}] {j['time_a']} vs {j['time_b']} ({j['formato']}) - {j['horario']} | {j['status']}\n"
+        resp += f"• [{j['evento']}] {j['time_a']} vs {j['time_b']} ({j['formato']}) - {j['horario']} (Horário de Brasília) | {j['status']}\n"
     return resp

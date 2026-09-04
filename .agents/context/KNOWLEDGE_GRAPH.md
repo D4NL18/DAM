@@ -102,6 +102,21 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - *Informativos Estáticos:* Cache de 12h para consultas pesadas (Dietbox, TMDB, conversões).
 - **Métricas:** Rastreamento acumulado de `hits`, `misses` e `tokens_saved_estimated`.
 
+## US-08: Gerenciador de Endereços & Locais Salvos
+- **Persistência Firestore (`user_addresses`):** Coleção dedicada com schema enriquecido (`alias`, `address`, `formatted_address`, `latitude`, `longitude`, `details`, `updated_at`) e chave $O(1)$ particionada por `user_jid`.
+- **Repositório (`address_repository.py`):** Normalização de apelidos com remoção de acentos (`unicodedata`), mapeamento fonético ("casa", "trabalho", "academia"), isolamento multi-tenant estrito e cache L1 thread-safe com `threading.RLock`.
+- **Ferramentas de IA (`address_tool.py`):** `salvar_endereco`, `consultar_enderecos_salvos` e `remover_endereco` com validação/geocodificação via Google Maps Geocoding API.
+- **Integração com Mobilidade (`maps_tool.py`):** `resolver_apelido_endereco` atualizado para priorizar locais salvos no banco sobre as variáveis estáticas do sistema, permitindo consultas transparentes de rotas como "tempo de casa pro trabalho" ou "rota até a academia".
 
+## PC-09: Text-to-Speech & Respostas em Áudio (WhatsApp PTT)
+- **Motor TTS (`tts_service.py`):** Síntese de voz com sanitização fonética rigorosa (remoção de marcadores markdown `*`, `_`, emojis, links e blocos de código) para dicção limpa e natural.
+- **Detecção Inteligente de Voz (`should_reply_with_audio`):** Acionamento automático de resposta por voz quando o usuário envia mensagem de áudio ou pede explicitamente resposta em áudio no texto ("em áudio", "me manda áudio", "responde por voz").
+- **Envio PTT Nativo (`whatsapp_service.py`):** Método `send_voice_note` via endpoint `/message/sendWhatsAppAudio/{instance}` da Evolution API, entregando o áudio como nota de voz gravada nativa com forma de onda no WhatsApp.
+- **FinOps & Resiliência:** Cache L1 de áudios idênticos com chave SHA-256 e fallback automático e transparente para mensagem de texto caso a síntese de voz falhe.
 
+## PC-10: Migração para WhatsApp Business Dedicado & Isolamento Inviolável
+- **Conta Dedicada de Bot (+55 71 98171-8497):** Desacoplamento entre a conta pessoal do usuário e a conta do assistente. A instância `dam_bot` da Evolution API agora conecta com o WhatsApp Business do bot via QR Code gerado pelo script `conectar_whatsapp.py`.
+- **Isolamento Inviolável (P-0601 / `ALLOWED_PHONE_NUMBER=5571991269995`):** O webhook FastAPI descarta sumariamente qualquer mensagem cujo remetente não coincida com os 8 dígitos e DDD do número pessoal do Daniel (`71 99126-9995`), blindando o bot contra mensagens acidentais, terceiros ou spams que entrem em contato com o WhatsApp Business.
+- **Anti-Loop Abrangente (`fromMe: true`):** Em uma conta dedicada, qualquer evento de mensagem gerado com `key.fromMe == True` representa um envio realizado pela própria instância do bot (seja texto com `\u200b`, áudio PTT ou imagem). A guard clause no webhook intercepta e ignora essas mensagens imediatamente, eliminando riscos de eco e loops recursivos infinitos.
+- **Automação de Conexão (`conectar_whatsapp.py`):** Script aprimorado com reset de chaves anteriores (`logout`), configuração automática do webhook (`/api/whatsapp/webhook`), aplicação de flags de privacidade (`groupsIgnore`, `readMessages=false`, `alwaysOnline=false`) e renderização de HTML com QR Code no navegador.
 

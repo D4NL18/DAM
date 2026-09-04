@@ -1,3 +1,4 @@
+from services.user_context import UserContext
 from config import firebase
 import logging
 from datetime import datetime, timedelta, timezone
@@ -25,14 +26,21 @@ def consultar_saude(dias_retroativos: int = 7) -> str:
                  .limit(10) \
                  .stream()
 
+        user_id = UserContext.get_user_id()
+
         records = []
         for doc in docs:
             data = doc.to_dict()
+            doc_user = data.get("userId") or data.get("user_id") or "daniel"
+            if doc_user != user_id:
+                continue
+
             # Estrutura baseada no que recebemos do webhook
             payload = data.get("payload", {})
             metrics = payload.get("metrics", {})
             data_registro = data.get("timestamp").strftime("%d/%m/%Y %H:%M")
             records.append(f"Em {data_registro}: Passos: {metrics.get('steps', 'N/A')}, Calorias: {metrics.get('activeEnergy', 'N/A')}, Batimentos médios: {metrics.get('heartRate', 'N/A')} bpm")
+
 
         if not records:
             return f"Não encontrei registros de saúde nos últimos {dias_retroativos} dias."

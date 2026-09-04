@@ -1,0 +1,211 @@
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at top, var(--color-surface-container) 0%, var(--color-background) 100%);
+  padding: 24px;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 420px;
+  background-color: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 16px;
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.login-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  .brand-badge {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background-color: var(--color-surface-container);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    border: 1px solid var(--color-outline-variant);
+
+    .icon {
+      font-size: 32px;
+      color: var(--color-primary);
+    }
+  }
+
+  .brand-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin: 0;
+  }
+
+  .brand-subtitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-on-surface-variant);
+    margin-top: 4px;
+  }
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+
+      .input-icon {
+        position: absolute;
+        left: 14px;
+        color: var(--color-outline);
+        font-size: 20px;
+        pointer-events: none;
+      }
+
+      .form-input {
+        width: 100%;
+        padding: 12px 14px 12px 44px;
+        border: 1px solid var(--color-outline-variant);
+        border-radius: 10px;
+        background-color: var(--color-surface);
+        color: var(--color-on-surface);
+        font-size: 14px;
+        transition: all 0.2s ease;
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-primary);
+          background-color: var(--color-surface-container-lowest);
+          box-shadow: 0 0 0 3px rgba(0, 97, 148, 0.15);
+        }
+
+        &::placeholder {
+          color: var(--color-outline);
+        }
+      }
+    }
+  }
+
+  .error-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--color-error-container);
+    color: var(--color-on-error-container);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    &:hover:not(:disabled) {
+      background-color: #004d77;
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .loading-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .spin {
+        animation: spin 1s linear infinite;
+        font-size: 20px;
+      }
+    }
+  }
+}
+
+.login-footer {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--color-surface-container-high);
+  padding-top: 20px;
+
+  .badge-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background-color: var(--color-secondary-container);
+    color: var(--color-on-secondary-container);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .footer-note {
+    font-size: 12px;
+    color: var(--color-on-surface-variant);
+    margin: 0;
+    line-height: 1.4;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

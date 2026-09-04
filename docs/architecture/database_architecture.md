@@ -186,8 +186,25 @@ Armazena os últimos diálogos trocados com o assistente no WhatsApp para alimen
 }
 ```
 
+### 2.13. `user_addresses` (Endereços & Locais Salvos - US-08)
+Armazena endereços frequentes e locais favoritos com coordenadas geocodificadas e apelidos amigáveis.
+```json
+{
+  "user_jid": "5511999999999@s.whatsapp.net",
+  "alias": "casa",
+  "address": "Rua das Flores, 123 - Apto 45",
+  "formatted_address": "R. das Flores, 123 - Bela Vista, São Paulo - SP, 01310-000, Brasil",
+  "latitude": -23.561684,
+  "longitude": -46.655981,
+  "details": "Portão preto ao lado da padaria",
+  "updated_at": "2026-09-04T08:55:00Z"
+}
+```
+* **Índices & Chaves:** Document ID determinístico `{user_jid}_{normalized_alias}` para consultas e atualizações atômicas $O(1)$.
+
 ---
 
 ## 3. Segurança e Políticas de Acesso
 - Acesso exclusivo pelo SDK de Admin (`firebase-admin`) autenticado via chave de serviço ou identidade gerenciada do Cloud Run (Workload Identity).
 - Regras de segurança padrão bloqueiam qualquer acesso direto client-side não autenticado.
+

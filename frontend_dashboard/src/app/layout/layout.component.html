@@ -26,6 +26,22 @@
         </a>
       </li>
     </ul>
+
+    <!-- User Profile & Logout in Sidebar -->
+    <div class="sidebar-user-footer">
+      <div class="user-card">
+        <div class="user-avatar-circle">
+          <span>{{ currentUser?.name ? currentUser!.name.charAt(0).toUpperCase() : 'U' }}</span>
+        </div>
+        <div class="user-info">
+          <span class="user-name">{{ currentUser?.name || 'Usuário' }}</span>
+          <span class="user-role">{{ currentUser?.role === 'admin' ? 'Administrador' : 'Usuário' }}</span>
+        </div>
+        <button class="logout-btn" (click)="logout()" title="Sair da conta">
+          <span class="material-symbols-outlined">logout</span>
+        </button>
+      </div>
+    </div>
   </nav>
 
   <!-- Main Content Area -->
@@ -36,6 +52,16 @@
       </div>
       
       <div class="header-search">
+        <span class="active-user-pill">
+          <span class="status-dot"></span>
+          Conectado como: <strong>{{ currentUser?.name || 'Usuário' }}</strong>
+        </span>
+      </div>
+
+      <div class="header-actions">
+        <button class="action-btn mobile-logout" (click)="logout()" title="Sair">
+          <span class="material-symbols-outlined">logout</span>
+        </button>
       </div>
     </header>
     

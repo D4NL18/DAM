@@ -6,9 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/health")
@@ -19,10 +17,13 @@ public class HealthController {
     private final HealthService healthService;
 
     @GetMapping("/summary")
-    @Operation(summary = "Obtém um resumo agregado das métricas de saúde")
-    public ResponseEntity<HealthSummaryDTO> getSummary() {
+    @Operation(summary = "Obtém um resumo agregado das métricas de saúde por usuário")
+    public ResponseEntity<HealthSummaryDTO> getSummary(
+            @RequestParam(value = "userId", required = false) String userId,
+            @RequestHeader(value = "X-User-Id", required = false) String headerUserId) {
         try {
-            return ResponseEntity.ok(healthService.getHealthSummary());
+            String effectiveUserId = (userId != null && !userId.isBlank()) ? userId : headerUserId;
+            return ResponseEntity.ok(healthService.getHealthSummary(effectiveUserId));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }

@@ -85,6 +85,7 @@ from services.tools.saved_videos_tool import (
     marcar_video_assistido,
     remover_video_salvo
 )
+from services.tools.file_converter_tool import gerenciar_arquivos
 from datetime import datetime
 from config.timezone import get_brasilia_now_str
 
@@ -165,7 +166,8 @@ AVAILABLE_TOOLS = [
     salvar_video,
     consultar_videos_salvos,
     marcar_video_assistido,
-    remover_video_salvo
+    remover_video_salvo,
+    gerenciar_arquivos
 ]
 
 

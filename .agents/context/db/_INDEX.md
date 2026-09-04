@@ -70,6 +70,7 @@ Nao existem migrations SQL tradicionais — o schema e flexivel e evolui com o c
 ### Utilitarios & Seguranca
 - `vault_credentials` — Cofre de senhas
 - `user_addresses` — Enderecos favoritos
+- `file_conversions` — Historico e auditoria de conversao de arquivos (US-09)
 
 ### Plataforma Core
 - `conversation_cache` — Cache semantico do LLM

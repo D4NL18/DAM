@@ -68,6 +68,12 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 1 (Modelagem Firestore & Repositório):** Coleção `user_addresses` com isolamento por usuário e chave $O(1)$, normalização de apelidos com remoção de acentos e cache L1 thread-safe.
   - **[x] Story 2 (Tools de Endereços no Assistente):** Ferramentas `salvar_endereco`, `consultar_enderecos_salvos` e `remover_endereco` registradas na IA com validação/geocoding via Google Maps API.
   - **[x] Story 3 (Resolução Dinâmica em Mobilidade & Rotas):** Integração do `resolver_apelido_endereco` no `maps_tool.py` consultando o Firestore com fallback transparente para `settings.py`.
+- **[x] US-09 (Conversor e Manipulador Universal de Arquivos e Documentos):** Motor de alta fidelidade e determinístico para conversões de formatos essenciais (PDF para DOCX, DOCX para PDF, Imagens para PDF, Merge/Split de PDFs, extração de texto e conversão entre formatos gráficos), acessível via WhatsApp e API REST.
+  - **[x] Story 1 (Conversão de Imagens e Formatos Gráficos):** `images_to_pdf` unindo imagens (JPG/PNG/WEBP) em PDF e `convert_image` para transcodificação de formatos de imagem com controle de compressão.
+  - **[x] Story 2 (Manipulação e Fusão de PDFs):** `merge_pdfs` (fusão de múltiplos arquivos PDF em ordem preservando orientação) e `split_pdf` (fatiamento por intervalos de páginas), além de `pdf_to_text`.
+  - **[x] Story 3 (Conversão Bidirecional de Documentos):** `pdf_to_docx` com preservação estrutural de tabelas/texto e `docx_to_pdf` gerando PDF com formatação limpa e `pdf_to_images` (renderização de páginas em alta resolução).
+  - **[x] Story 4 (Integração WhatsApp, Tool do Assistente & API REST):** Tool `FileConverterTool` para o assistente guiar e executar conversões, endpoint `/api/files/convert`, recebimento de documentos via webhook e envio de arquivos de volta via WhatsApp.
+
 
 
 ---

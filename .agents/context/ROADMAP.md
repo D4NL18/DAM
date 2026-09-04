@@ -22,6 +22,7 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] FG-02 (Divisão Inteligente de Contas de Restaurante):** Rateio proporcional de itens consumidos com taxa de serviço calculada centavo a centavo, organizado estritamente por nomes de pessoas e chave Pix para pagamento.
 - **[x] FG-03 (Splitwise de Viagens e Grupos):** Criação de grupos e despesas compartilhadas nas coleções `trip_groups` e `trip_expenses`, com algoritmo de minimização de dívidas (*Debt Minimization*).
 - **[x] FG-04 (GCP Billing & Monitoramento FinOps):** Endpoint de webhook para alertas de orçamentos e monitoramento de custos de nuvem.
+- **[x] FG-05 (Resumo Consolidado de Gastos por Cartão e Categoria):** Ferramenta `consultar_resumo_gastos` com agregação mensal/temporal de despesas no Firestore, agrupadas por cartões (Crédito Pessoal, Crédito Secundário, Débito/Pix) e categorias com subtotais, percentuais e destaques sintéticos no WhatsApp.
 
 ---
 

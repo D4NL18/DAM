@@ -88,4 +88,9 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - `avaliar_substituicao_alimento`: Avaliação de substituição alimentar. Se o alimento desejado NÃO constar na lista oficial, aciona alerta mandatório em destaque (`⚠️ ALERTA: O alimento NÃO CONSTA na sua Lista de Substituição oficial do Dietbox!`), realiza busca de composição nutricional comparando com o item ou grupo prescrito e elenca pontos de atenção críticos (densidade calórica, sódio, índice glicêmico, gorduras saturadas).
 - **Diretrizes de Prompt (`nutrition_rules.py`, `prompt_composer.py`):** Regras estritas garantindo que o assistente alerte de forma ostensiva sobre alimentos fora do plano e recomende validação com o nutricionista.
 
+## FG-05: Resumo Consolidado de Gastos por Cartão e Categoria
+- **Ferramenta `consultar_resumo_gastos` (`finance_tool.py`):** Consulta e agregação na coleção `finances` do Firestore com filtro temporal (mês/ano padrão corrente ou dias retroativos). Apresenta Total Geral, Subtotais por Cartão (Crédito Pessoal, Crédito Secundário, Débito/Pix) com valores e percentuais, Subtotais por Categoria em ordem decrescente, e destaque das Top 3 maiores compras sem poluir o chat.
+- **Diretrizes de Prompt (`financial_rules.py`):** IA instruída a invocar obrigatoriamente a ferramenta ao receber dúvidas sobre gastos acumulados do mês ("como tão meus gastos?", "resumo financeiro"), sem alegar ausência de função de extrato.
+
+
 

@@ -4,8 +4,8 @@
 - **Arquitetura:** Microsserviços e Serverless (FastAPI + Evolution API + Angular 17 + Firestore)
 - **Estruturação:** **100% Organizado por Domínios Funcionais** (sem divisão por fases)
 - **Segurança & Defesa:** Guardrails contra Prompt Injection ativos, Rate Limiter Sliding Window, Headers HTTP defensivos, Mascaramento de dados sensíveis (LGPD) e autenticação Timing-Safe.
-- **Suíte de Testes:** 260 testes unitários e de integração aprovados com 100% de taxa de sucesso.
-- **Última Pipeline Concluída:** Fase SB-04 (Guia Nutricional & Lista de Substituição Inteligente - Dietbox) [100% CONCLUÍDO]
+- **Suíte de Testes:** 265 testes unitários e de integração aprovados com 100% de taxa de sucesso.
+- **Última Pipeline Concluída:** Fase FG-05 (Resumo Consolidado de Gastos por Cartão e Categoria) [100% CONCLUÍDO]
   - [x] 1. Product Owner (PO)
   - [x] 2. Analista (Specification)
   - [x] 3. Arquiteto (Design & Contratos)

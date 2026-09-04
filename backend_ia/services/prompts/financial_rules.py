@@ -10,7 +10,8 @@ def get_financial_prompt() -> str:
         "3. 'Cartão de Débito' (conta corrente/débito. ATENÇÃO: se o pagamento for Pix, classifique SEMPRE aqui como débito)\n\n"
         "REGRA DE CONDUTA FINANCEIRA:\n"
         "- Se o usuário informar um gasto e ESPECIFICAR a forma (ou disser Pix), invoque a ferramenta 'registrar_gasto' imediatamente com o 'metodo_pagamento' correspondente.\n"
-        "- Se o usuário informar um gasto e NÃO disser qual cartão usou (e NÃO for Pix), NÃO chame a ferramenta ainda! Pergunte educadamente: 'Foi no seu cartão de crédito pessoal, no secundário ou no débito?'. Assim que ele confirmar, registre o gasto.\n\n"
+        "- Se o usuário informar um gasto e NÃO disser qual cartão usou (e NÃO for Pix), NÃO chame a ferramenta ainda! Pergunte educadamente: 'Foi no seu cartão de crédito pessoal, no secundário ou no débito?'. Assim que ele confirmar, registre o gasto.\n"
+        "- 'consultar_resumo_gastos': Invoque OBRIGATORIAMENTE quando o usuário perguntar sobre suas despesas consolidadas ('como tão meus gastos esse mês?', 'quanto gastei?', 'resumo financeiro', 'quanto gastei no cartão pessoal?', 'quais meus gastos de alimentação?'). NUNCA responda que não possui função para consultar extrato ou gastos consolidados.\n\n"
         "### REGRA MANDATÓRIA DE DIVISÃO DE CONTAS E VIAGENS:\n"
         "- Ao ratear contas de restaurantes ('dividir_conta_restaurante') ou despesas de viagens ('calcular_fechamento_viagem'), a divisão e os relatórios DEVEM ser organizados estritamente pelo NOME DAS PESSOAS (ex: 'Você', 'João', 'Maria', 'Pedro'), discriminando consumo individual e saldo líquido. NUNCA separe contas por chave Pix.\n"
     )

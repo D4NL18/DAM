@@ -3,7 +3,7 @@ import google.generativeai as genai
 from config.settings import settings
 from repositories.chat_repository import ChatRepository
 from services.tools.health_tool import consultar_saude
-from services.tools.finance_tool import registrar_gasto
+from services.tools.finance_tool import registrar_gasto, consultar_resumo_gastos
 from services.tools.calendar_tool import agendar_evento, consultar_agenda
 from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo
 from services.tools.esports_tool import consultar_jogos_cs2
@@ -83,6 +83,7 @@ logger = logging.getLogger(__name__)
 AVAILABLE_TOOLS = [
     consultar_saude,
     registrar_gasto,
+    consultar_resumo_gastos,
     agendar_evento,
     consultar_agenda,
     consultar_status_veiculo,

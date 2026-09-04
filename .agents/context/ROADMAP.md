@@ -67,3 +67,5 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] PC-05 (Sanitização de Logs & Zero Leaks):** Erradicação de fallbacks de segredos no código, mascaramento de telefones/JIDs e proteção timing-safe (`hmac.compare_digest`).
 - **[x] PC-06 (Modular Prompting):** Decomposição de instruções de sistema em `services/prompts/` estruturadas pelo `PromptComposer`.
 - **[x] PC-07 (Dashboard Web Angular Bento Grid):** Interface moderna e responsiva no Firebase Hosting consumindo APIs RESTful do Firestore.
+- **[x] PC-08 (Otimização de Tokens & Cache Inteligente de Conversas):** Motor de cache semântico de respostas de prompts com roteamento por volatilidade (reuso de guerra no Clash of Clans, expiração dinâmica de CS2 até 2h antes da partida, bypass compulsório de trânsito em tempo real e ações de escrita).
+

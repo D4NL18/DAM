@@ -74,6 +74,7 @@ from datetime import datetime
 
 from services.guardrails_service import GuardrailsService
 from services.prompts.prompt_composer import PromptComposer
+from services.cache_service import ConversationCacheService
 import base64
 from typing import Optional
 
@@ -162,7 +163,14 @@ class AIService:
         # 2. Sanitização e Delimitação Semântica da Mensagem
         safe_prompt = GuardrailsService.wrap_user_message(user_text)
 
-        # 3. Busca o histórico do usuário
+        # 3. Otimização de Tokens: Cache Semântico de Conversa (PC-08)
+        if not media_base64 and not media_mimetype:
+            cached_response = ConversationCacheService.get_cached_response(remote_jid, user_text)
+            if cached_response:
+                logger.info(f"[CACHE HIT] Resposta servida diretamente do cache para {remote_jid}")
+                return cached_response
+
+        # 4. Busca o histórico do usuário
         history_docs = ChatRepository.get_recent_history(remote_jid, limit=10)
         
         # Constrói o histórico no formato para start_chat
@@ -196,7 +204,13 @@ class AIService:
             else:
                 response = chat.send_message(safe_prompt)
 
-            return response.text
+            final_text = response.text
+
+            # 5. Salva no cache se elegível (PC-08)
+            if not media_base64 and not media_mimetype and final_text:
+                ConversationCacheService.save_response(remote_jid, user_text, final_text)
+
+            return final_text
         except Exception as e:
             logger.error(f"Erro no Gemini: {e}")
             return "Desculpe, meus servidores estão indisponíveis no momento. Tente novamente mais tarde."

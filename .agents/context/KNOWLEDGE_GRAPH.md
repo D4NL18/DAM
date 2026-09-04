@@ -92,5 +92,16 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 - **Ferramenta `consultar_resumo_gastos` (`finance_tool.py`):** Consulta e agregação na coleção `finances` do Firestore com filtro temporal (mês/ano padrão corrente ou dias retroativos). Apresenta Total Geral, Subtotais por Cartão (Crédito Pessoal, Crédito Secundário, Débito/Pix) com valores e percentuais, Subtotais por Categoria em ordem decrescente, e destaque das Top 3 maiores compras sem poluir o chat.
 - **Diretrizes de Prompt (`financial_rules.py`):** IA instruída a invocar obrigatoriamente a ferramenta ao receber dúvidas sobre gastos acumulados do mês ("como tão meus gastos?", "resumo financeiro"), sem alegar ausência de função de extrato.
 
+## PC-08: Otimização de Tokens & Cache Inteligente de Conversas
+- **Serviço de Cache (`cache_service.py`):** Motor semântico de cache L1 (Memória thread-safe com `threading.RLock`) e L2 (Firestore `conversation_cache`) integrado ao ciclo de vida de `AIService.process_message`.
+- **Roteamento de Volatilidade:**
+  - *Clash of Clans:* Reuso de respostas de guerra/raid (TTL 1h) eliminando chamadas repetidas à LLM no mesmo dia.
+  - *CS2 Esports:* Expiração dinâmica calculada para até 2h antes da partida ($T_{jogo} - 2\text{h}$); bypass quando a menos de 2h ou ao vivo.
+  - *Trânsito & Mobilidade:* Bypass compulsório (TTL 0) garantindo checagem sempre fresh em tempo real.
+  - *Ações & Mutações:* Bypass compulsório para garantir execução determinística de escritas no banco.
+  - *Informativos Estáticos:* Cache de 12h para consultas pesadas (Dietbox, TMDB, conversões).
+- **Métricas:** Rastreamento acumulado de `hits`, `misses` e `tokens_saved_estimated`.
+
+
 
 

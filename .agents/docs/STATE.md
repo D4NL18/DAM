@@ -4,20 +4,21 @@
 - **Arquitetura:** Microsserviços e Serverless (FastAPI + Evolution API + Angular 17 + Firestore)
 - **Estruturação:** **100% Organizado por Domínios Funcionais** (sem divisão por fases)
 - **Segurança & Defesa:** Guardrails contra Prompt Injection ativos, Rate Limiter Sliding Window, Headers HTTP defensivos, Mascaramento de dados sensíveis (LGPD) e autenticação Timing-Safe.
-- **Suíte de Testes:** 265 testes unitários e de integração aprovados com 100% de taxa de sucesso.
-- **Última Pipeline Concluída:** Fase FG-05 (Resumo Consolidado de Gastos por Cartão e Categoria) [100% CONCLUÍDO]
-  - [x] 1. Product Owner (PO)
-  - [x] 2. Analista (Specification)
-  - [x] 3. Arquiteto (Design & Contratos)
-  - [x] 4. DBA (Modelagem de Dados Segura)
-  - [x] 5. Arquiteto (Task Planning)
-  - [x] 6. Tester (TDD)
-  - [x] 7. Desenvolvedor (Execution)
-  - [x] 8. Reviewer (Code Review)
-  - [x] 9. UX Reviewer (WhatsApp Formatting & Experience)
-  - [x] 10. Tester (Auto-Healer & Test Run)
-  - [x] 11. SecOps (Auditoria de Segurança)
-  - [x] 12. DevOps (Git & Release)
+- **Suíte de Testes:** 277 testes unitários e de integração aprovados com 100% de taxa de sucesso.
+- **Última Pipeline Concluída:** Fase PC-08 (Otimização de Tokens & Cache Inteligente de Conversas) [100% CONCLUÍDO]
+  - [x] 1. Product Owner (PO) - Quebra de escopo no ROADMAP.md
+  - [x] 2. Analista (Specification) - Regras de negócio RN-CACHE
+  - [x] 3. Arquiteto (Design & Contratos) - ADR 008
+  - [x] 4. DBA (Modelagem de Dados Segura) - Firestore collection `conversation_cache`
+  - [x] 5. Arquiteto (Task Planning) - Checklist da tarefa em docs/tasks/
+  - [x] 6. Tester (TDD) - 12 novos testes em test_token_prompt_cache.py
+  - [x] 7. Desenvolvedor (Execution) - ConversationCacheService integrado ao AIService
+  - [x] 8. Reviewer (Code Review) - Aprovado (Clean Code, PEP 8, RLock anti-deadlock)
+  - [x] 9. UX Reviewer (WhatsApp Experience) - Preservação de layout, emojis e formatação
+  - [x] 10. Tester (Auto-Healer & Test Run) - 277/277 testes passando em 35s
+  - [x] 11. SecOps (Auditoria de Segurança) - Zero leaks, isolamento multi-tenant por JID
+  - [x] 12. DevOps (Git & Release) - Documentação técnica e baseline atualizados
+- **Pipeline Anterior Concluída:** Fase FG-05 (Resumo Consolidado de Gastos por Cartão e Categoria) [100% CONCLUÍDO]
 
 ---
 

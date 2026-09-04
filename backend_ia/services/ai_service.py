@@ -79,6 +79,13 @@ from services.tools.address_tool import (
     consultar_enderecos_salvos,
     remover_endereco
 )
+from services.tools.saved_videos_tool import (
+    salvar_video,
+    consultar_videos_salvos,
+    marcar_video_assistido,
+    remover_video_salvo
+)
+from services.tools.file_converter_tool import gerenciar_arquivos
 from datetime import datetime
 from config.timezone import get_brasilia_now_str
 
@@ -155,7 +162,12 @@ AVAILABLE_TOOLS = [
     avaliar_substituicao_alimento,
     salvar_endereco,
     consultar_enderecos_salvos,
-    remover_endereco
+    remover_endereco,
+    salvar_video,
+    consultar_videos_salvos,
+    marcar_video_assistido,
+    remover_video_salvo,
+    gerenciar_arquivos
 ]
 
 

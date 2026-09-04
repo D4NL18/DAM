@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from datetime import datetime, timezone, timedelta
-from routers import webhook, health, billing, dashboard, briefing
+from routers import webhook, health, billing, dashboard, briefing, files
 from config.firebase import init_firebase
 from services.ai_service import AIService
 from services.briefing_service import enviar_briefing_matinal
@@ -108,6 +108,7 @@ app.include_router(health.router)
 app.include_router(billing.router)
 app.include_router(dashboard.router)
 app.include_router(briefing.router)
+app.include_router(files.router)
 
 @app.get("/")
 @app.get("/health")

@@ -1,4 +1,4 @@
-﻿# Dicionario de Dados: Firebase Firestore (DAM)
+# Dicionario de Dados: Firebase Firestore (DAM)
 
 ## Visao Geral
 
@@ -34,6 +34,7 @@ Nao existem migrations SQL tradicionais — o schema e flexivel e evolui com o c
 | [`briefing_logs`](./briefing_logs.md) | Plataforma Core | Registro de idempotencia do Morning Briefing |
 | [`conversation_cache`](./conversation_cache.md) | Plataforma Core | Cache L2 de respostas do LLM com TTL por dominio |
 | [`gcp_billing_snapshots`](./gcp_billing_snapshots.md) | Financas/FinOps | Snapshot do ultimo alerta de billing do GCP |
+| [`saved_videos`](./saved_videos.md) | Entretenimento | Repositório de vídeos salvos (TikTok, Instagram, YouTube) para assistir mais tarde |
 
 ---
 

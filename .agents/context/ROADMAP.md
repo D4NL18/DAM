@@ -47,6 +47,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] EL-04 (CS2 Esports & FURIA):** Consulta de placares ao vivo, próximos confrontos e resultados de jogos da FURIA Esports.
 - **[x] EL-05 (Calculadora de Churrasco & Eventos):** Cálculo determinístico per capita de carnes, cervejas, bebidas não alcoólicas, gelo, carvão e acompanhamentos.
 - **[x] EL-06 (Curador de Ideias de Presentes):** Captura contextual de desejos de presentes vinculados a pessoas e datas comemorativas (`gift_ideas`).
+- **[x] EL-07 (Repositório de Vídeos Salvos - TikTok, Instagram, YouTube):** Armazenamento estruturado de vídeos das redes sociais para assistir mais tarde ou catalogar referências, com busca semântica por assunto, título, criador ou plataforma, e isolamento por usuário no Firestore (`saved_videos`).
+  - **[x] Story 1 (Detecção de Plataforma e Salvamento Estruturado):** `salvar_video` com extração e detecção automática de plataforma (TikTok, Instagram, YouTube), validação e sanitização de URLs, captura de título, descrição/assunto contextual, categoria e tags.
+  - **[x] Story 2 (Consulta Inteligente e Busca Semântica Flexível):** `consultar_videos_salvos` permitindo encontrar vídeos salvos buscando por palavras-chave sobre o que era o vídeo, título, plataforma ou categoria, com filtros e formatação limpa no WhatsApp.
+  - **[x] Story 3 (Ciclo de Vida: Marcação de Assistido e Remoção Segura):** `marcar_video_assistido` para atualizar status e `remover_video_salvo` com suporte a desambiguação segura e confirmação.
+  - **[x] Story 4 (Persistência Resiliente e Isolamento Multi-Usuário):** Camada de repositório `SavedVideosRepository` com isolamento estrito por `userId` (Daniel e Lari) no Firestore, fallback em memória thread-safe e integração com o orquestrador do DAM.
 
 ---
 

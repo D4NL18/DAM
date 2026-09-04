@@ -130,3 +130,20 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - `remover_video_salvo`: Exclusão segura com proteção contra remoção acidental.
 - **Integração no Motor do DAM (`ai_service.py` & `system_base.py`):** Registro de ferramentas em `AVAILABLE_TOOLS` e instruções no prompt mestre para identificação de links enviados e recuperação contextual sob demanda.
 
+## US-09: Conversor e Manipulador Universal de Arquivos e Documentos [P-0901 a P-0906]
+- **Motor Central Determinístico (`file_converter_service.py`):**
+  - *PDF para Word (.docx):* Conversão estrutural de texto e tabelas via `pdf2docx` em diretório temporário isolado.
+  - *Word (.docx) para PDF:* Renderização determinística de estilos, parágrafos e tabelas via `python-docx` + `reportlab`.
+  - *Imagens para PDF:* Combinação de uma ou múltiplas fotos (JPG/PNG/WEBP/BMP) em documento PDF unificado via `Pillow`.
+  - *Fusão de PDFs (`merge_pdfs`):* União sequencial de múltiplos PDFs mantendo ordenação e metadados via `pypdf`.
+  - *Fatiamento de PDF (`split_pdf`):* Extração por intervalos (ex: `1-3, 5`) com validação de limites via `pypdf`.
+  - *PDF para Imagens (`pdf_to_images`):* Renderização de páginas em alta resolução (150 DPI) via `PyMuPDF` (`fitz`).
+  - *Transcodificação de Imagens (`convert_image`):* Conversão entre PNG, JPEG e WEBP com controle de compressão via `Pillow`.
+  - *Extração de Texto (`pdf_to_text`):* Extração direta de texto para leitura rápida no chat via `pypdf`.
+- **Segurança & Defesa (P-0901 a P-0903):** Limite máximo de 25 MB por arquivo (50 MB total no merge), sanitização anti-traversal e ciclo de vida efêmero garantido via `tempfile.TemporaryDirectory` (zero vazamento em disco). PDFs protegidos por senha são interceptados com mensagem explicativa amigável (P-0906).
+- **Persistência Firestore (`file_conversions`):** Auditoria de operações (`user_id`, `conversion_type`, tamanhos em bytes, status, duração em ms) com isolamento estrito por usuário e fallback em memória thread-safe (`file_conversion_repository.py`).
+- **Interfaces & Integração:**
+  - *RESTful API:* Router `/api/files` (`/convert`, `/supported-formats`, `/conversions/history`) com download imediato via stream.
+  - *WhatsApp & IA:* Tool `gerenciar_arquivos` integrada em `AVAILABLE_TOOLS` do Gemini, suporte a `documentMessage` no webhook e envio de arquivos de volta via `WhatsAppService.send_document`.
+
+

@@ -66,6 +66,10 @@ from services.tools.anime_tracker_tool import (
 from services.briefing_service import consultar_briefing_matinal
 from services.tools.clash_of_clans_tool import consultar_clash_of_clans
 from services.tools.gcp_billing_tool import consultar_gcp_billing
+from services.tools.nutrition_tool import (
+    consultar_lista_substituicao,
+    avaliar_substituicao_alimento
+)
 from datetime import datetime
 
 from services.guardrails_service import GuardrailsService
@@ -128,7 +132,9 @@ AVAILABLE_TOOLS = [
     explorar_temporada_animes,
     consultar_briefing_matinal,
     consultar_clash_of_clans,
-    consultar_gcp_billing
+    consultar_gcp_billing,
+    consultar_lista_substituicao,
+    avaliar_substituicao_alimento
 ]
 
 class AIService:

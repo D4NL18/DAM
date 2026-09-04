@@ -30,6 +30,7 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] SB-01 (Métricas de Sono e Qualidade):** Registro de horas de sono, qualidade subjetiva e consolidação de médias semanais.
 - **[x] SB-02 (Acompanhamento de Treinos e Atividades):** Registro de modalidades esportivas, intensidade e contagem semanal de treinos.
 - **[x] SB-03 (Webhook Apple Health / Health Auto Export):** Endpoint `/api/health-webhook` para recepção contínua de passos, energia ativa e frequência cardíaca.
+- **[x] SB-04 (Guia Nutricional & Lista de Substituição Inteligente):** Motor de consulta nutricional estrito baseado na Lista de Substituição oficial do Dietbox (135 alimentos em 7 grupos calóricos). Alerta compulsório com busca de dados nutricionais, comparação de macronutrientes e pontos de atenção quando o usuário solicitar alimentos fora da lista.
 
 ---
 

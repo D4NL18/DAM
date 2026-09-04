@@ -5,6 +5,7 @@ from services.prompts.mobility_rules import get_mobility_prompt
 from services.prompts.anime_rules import get_anime_prompt
 from services.prompts.briefing_rules import get_briefing_prompt
 from services.prompts.billing_rules import get_billing_prompt
+from services.prompts.nutrition_rules import get_nutrition_prompt
 
 class PromptComposer:
     """
@@ -26,7 +27,8 @@ class PromptComposer:
             get_mobility_prompt(),
             get_anime_prompt(),
             get_briefing_prompt(),
-            get_billing_prompt()
+            get_billing_prompt(),
+            get_nutrition_prompt()
         ]
 
         return "\n".join(secoes)

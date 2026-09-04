@@ -12,5 +12,4 @@ qrcode.*
 scratch/
 index.json
 .firebase/
-
-
+*.tar.gz

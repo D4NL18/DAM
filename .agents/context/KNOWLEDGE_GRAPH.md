@@ -81,3 +81,11 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 ## Fase 21: Morning Briefing Proativo Agendado
 - **Morning Briefing (`briefing_service.py`, `routers/briefing.py`):** Disparo proativo diário às 08:00 no WhatsApp via Evolution API para `ALLOWED_PHONE_NUMBER`. Agrega 4 pilares: Google Calendar (eventos do dia), Lembretes/Tarefas do dia, Jogos da FURIA (resultado e placar para partidas da madrugada entre 00h e 08h; horário e adversário para partidas posteriores) e Animes da lista pessoal que lançam episódio no dia. Garantia de idempotência com a coleção Firestore `briefing_logs`.
 
+## SB-04: Guia Nutricional & Lista de Substituição Inteligente (Dietbox)
+- **Prescrição Estruturada (`nutrition_dietbox_data.py`):** Catálogo dos 135 alimentos do PDF oficial do Dietbox (Samuel Meller Silva - 05/10/2023) nos 7 grupos calóricos: Carboidratos (150 Kcal), Carnes e Ovos (190 Kcal), Frutas (70 Kcal), Laticínios (120 Kcal), Legumes e Verduras (15 Kcal), Leguminosas (55 Kcal) e Óleos e Gorduras (73 Kcal).
+- **Ferramentas Nutricionais (`nutrition_tool.py`):**
+  - `consultar_lista_substituicao`: Consulta por categoria ou alimento individual com listagem de porções caseiras, gramaturas e alternativas equivalentes no mesmo grupo.
+  - `avaliar_substituicao_alimento`: Avaliação de substituição alimentar. Se o alimento desejado NÃO constar na lista oficial, aciona alerta mandatório em destaque (`⚠️ ALERTA: O alimento NÃO CONSTA na sua Lista de Substituição oficial do Dietbox!`), realiza busca de composição nutricional comparando com o item ou grupo prescrito e elenca pontos de atenção críticos (densidade calórica, sódio, índice glicêmico, gorduras saturadas).
+- **Diretrizes de Prompt (`nutrition_rules.py`, `prompt_composer.py`):** Regras estritas garantindo que o assistente alerte de forma ostensiva sobre alimentos fora do plano e recomende validação com o nutricionista.
+
+

@@ -47,6 +47,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] EL-04 (CS2 Esports & FURIA):** Consulta de placares ao vivo, próximos confrontos e resultados de jogos da FURIA Esports.
 - **[x] EL-05 (Calculadora de Churrasco & Eventos):** Cálculo determinístico per capita de carnes, cervejas, bebidas não alcoólicas, gelo, carvão e acompanhamentos.
 - **[x] EL-06 (Curador de Ideias de Presentes):** Captura contextual de desejos de presentes vinculados a pessoas e datas comemorativas (`gift_ideas`).
+- **[x] EL-07 (Repositório de Vídeos Salvos - TikTok, Instagram, YouTube):** Armazenamento estruturado de vídeos das redes sociais para assistir mais tarde ou catalogar referências, com busca semântica por assunto, título, criador ou plataforma, e isolamento por usuário no Firestore (`saved_videos`).
+  - **[x] Story 1 (Detecção de Plataforma e Salvamento Estruturado):** `salvar_video` com extração e detecção automática de plataforma (TikTok, Instagram, YouTube), validação e sanitização de URLs, captura de título, descrição/assunto contextual, categoria e tags.
+  - **[x] Story 2 (Consulta Inteligente e Busca Semântica Flexível):** `consultar_videos_salvos` permitindo encontrar vídeos salvos buscando por palavras-chave sobre o que era o vídeo, título, plataforma ou categoria, com filtros e formatação limpa no WhatsApp.
+  - **[x] Story 3 (Ciclo de Vida: Marcação de Assistido e Remoção Segura):** `marcar_video_assistido` para atualizar status e `remover_video_salvo` com suporte a desambiguação segura e confirmação.
+  - **[x] Story 4 (Persistência Resiliente e Isolamento Multi-Usuário):** Camada de repositório `SavedVideosRepository` com isolamento estrito por `userId` (Daniel e Lari) no Firestore, fallback em memória thread-safe e integração com o orquestrador do DAM.
 
 ---
 
@@ -63,6 +68,12 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 1 (Modelagem Firestore & Repositório):** Coleção `user_addresses` com isolamento por usuário e chave $O(1)$, normalização de apelidos com remoção de acentos e cache L1 thread-safe.
   - **[x] Story 2 (Tools de Endereços no Assistente):** Ferramentas `salvar_endereco`, `consultar_enderecos_salvos` e `remover_endereco` registradas na IA com validação/geocoding via Google Maps API.
   - **[x] Story 3 (Resolução Dinâmica em Mobilidade & Rotas):** Integração do `resolver_apelido_endereco` no `maps_tool.py` consultando o Firestore com fallback transparente para `settings.py`.
+- **[x] US-09 (Conversor e Manipulador Universal de Arquivos e Documentos):** Motor de alta fidelidade e determinístico para conversões de formatos essenciais (PDF para DOCX, DOCX para PDF, Imagens para PDF, Merge/Split de PDFs, extração de texto e conversão entre formatos gráficos), acessível via WhatsApp e API REST.
+  - **[x] Story 1 (Conversão de Imagens e Formatos Gráficos):** `images_to_pdf` unindo imagens (JPG/PNG/WEBP) em PDF e `convert_image` para transcodificação de formatos de imagem com controle de compressão.
+  - **[x] Story 2 (Manipulação e Fusão de PDFs):** `merge_pdfs` (fusão de múltiplos arquivos PDF em ordem preservando orientação) e `split_pdf` (fatiamento por intervalos de páginas), além de `pdf_to_text`.
+  - **[x] Story 3 (Conversão Bidirecional de Documentos):** `pdf_to_docx` com preservação estrutural de tabelas/texto e `docx_to_pdf` gerando PDF com formatação limpa e `pdf_to_images` (renderização de páginas em alta resolução).
+  - **[x] Story 4 (Integração WhatsApp, Tool do Assistente & API REST):** Tool `FileConverterTool` para o assistente guiar e executar conversões, endpoint `/api/files/convert`, recebimento de documentos via webhook e envio de arquivos de volta via WhatsApp.
+
 
 
 ---

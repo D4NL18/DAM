@@ -208,6 +208,18 @@ async def whatsapp_webhook(
             media_base64 = b64
             media_mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
 
+    # Suporte a Documentos e Arquivos (US-09)
+    elif "documentMessage" in message or message_type == "documentMessage":
+        doc_info = message.get("documentMessage", {})
+        doc_filename = doc_info.get("fileName", "documento") if isinstance(doc_info, dict) else "documento"
+        caption = doc_info.get("caption") if isinstance(doc_info, dict) else None
+        text = caption or text or f"Recebi o documento '{doc_filename}'. Analise ou processe a conversão solicitada."
+        b64 = message.get("base64") or data.get("base64")
+        if b64:
+            media_base64 = b64
+            media_mimetype = doc_info.get("mimetype", "application/pdf") if isinstance(doc_info, dict) else "application/pdf"
+
+
     if not text:
         return {"status": "ignored", "reason": "empty_text"}
 

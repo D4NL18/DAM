@@ -7,6 +7,9 @@ from config import firebase
 
 logger = logging.getLogger(__name__)
 
+# Padrão regex reutilizado para higienização e extração de tags (evita literais duplicados - python:S1192)
+TAG_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_\-]+")
+
 # Armazenamento em memória para fallback/mock (quando Firebase não inicializado ou em testes)
 _mock_storage: List[Dict[str, Any]] = []
 
@@ -195,28 +198,38 @@ def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> 
     return "\n\n".join(linhas)
 
 
+def _extrair_tokens_tags(dado: Any) -> List[str]:
+    """Extrai recursivamente tokens válidos de tags de strings ou listas aninhadas."""
+    if isinstance(dado, str):
+        return [t.lower() for t in TAG_TOKEN_PATTERN.findall(dado)]
+    if isinstance(dado, (list, tuple, set)):
+        tokens: List[str] = []
+        for item in dado:
+            tokens.extend(_extrair_tokens_tags(item))
+        return tokens
+    return []
+
+
 def _formatar_tags_exibicao(tags_raw: Any) -> str:
     """Higieniza e formata tags para exibição limpa sem aninhamentos de arrays ou strings."""
     if not tags_raw:
         return ""
-    tags_lista = []
-    if isinstance(tags_raw, str):
-        itens = re.findall(r"[a-zA-Z0-9_\-]+", tags_raw)
-        tags_lista.extend([i.lower() for i in itens])
-    elif isinstance(tags_raw, list):
-        for t in tags_raw:
-            if isinstance(t, list):
-                for sub in t:
-                    tags_lista.extend([s.lower() for s in re.findall(r"[a-zA-Z0-9_\-]+", str(sub))])
-            else:
-                tags_lista.extend([s.lower() for s in re.findall(r"[a-zA-Z0-9_\-]+", str(t))])
-    
-    tags_unicas = []
-    for t in tags_lista:
-        if t not in tags_unicas:
-            tags_unicas.append(t)
-
+    tokens = _extrair_tokens_tags(tags_raw)
+    tags_unicas = list(dict.fromkeys(tokens))
     return f" [#{' #'.join(tags_unicas)}]" if tags_unicas else ""
+
+
+def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
+    """Retorna a string YYYY-MM-DD da data de referência informada ou de hoje em Brasília."""
+    if data_referencia:
+        return str(data_referencia)[:10]
+    tz_br = timezone(timedelta(hours=-3))
+    return datetime.now(tz_br).strftime("%Y-%m-%d")
+
+
+def _filtrar_lembretes_por_data(lembretes: List[Dict[str, Any]], data_alvo: str) -> List[Dict[str, Any]]:
+    """Filtra lembretes cuja data/hora contenha o prefixo de data alvo."""
+    return [item for item in lembretes if data_alvo in str(item.get("data_hora_lembrete", ""))]
 
 
 def listar_lembretes_pendentes(apenas_hoje: bool = False, data_referencia: Optional[str] = None) -> str:
@@ -230,22 +243,13 @@ def listar_lembretes_pendentes(apenas_hoje: bool = False, data_referencia: Optio
         if item.get("tipo") == "lembrete" and item.get("status") == "pendente"
     ]
 
-    if apenas_hoje or data_referencia:
-        if data_referencia:
-            data_alvo_str = str(data_referencia)[:10]
-        else:
-            tz_br = timezone(timedelta(hours=-3))
-            data_alvo_str = datetime.now(tz_br).strftime("%Y-%m-%d")
-
-        lembretes_filtrados = []
-        for item in lembretes:
-            dt_str = str(item.get("data_hora_lembrete", ""))
-            if data_alvo_str in dt_str:
-                lembretes_filtrados.append(item)
-        lembretes = lembretes_filtrados
+    filtrar_data = apenas_hoje or bool(data_referencia)
+    if filtrar_data:
+        data_alvo_str = _obter_data_filtro_lembrete(data_referencia)
+        lembretes = _filtrar_lembretes_por_data(lembretes, data_alvo_str)
 
     if not lembretes:
-        msg_sufixo = " para hoje" if (apenas_hoje or data_referencia) else " no momento"
+        msg_sufixo = " para hoje" if filtrar_data else " no momento"
         return f"🎉 Nenhum lembrete pendente{msg_sufixo}! Você está em dia."
 
     # Ordena por data_hora_lembrete

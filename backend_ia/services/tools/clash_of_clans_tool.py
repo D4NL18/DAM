@@ -70,9 +70,9 @@ def _verificar_raid_season(data: dict, player_tag: str) -> str | None:
         # P-0415: Na API Supercell, 'members' de capitalraidseasons só inclui quem já atacou.
         # Se o jogador ainda não atacou, ele tem 5 ataques disponíveis na temporada ativa.
         return (
-            f"⚔️ *Alerta de Capital do Clã — Raid Weekend!*\n\n"
-            f"Você ainda tem *5 ataques disponíveis* no Raid Weekend atual.\n"
-            f"Já realizados: 0. Não perca os recursos da Capital! 💰"
+            "⚔️ *Alerta de Capital do Clã — Raid Weekend!*\n\n"
+            "Você ainda tem *5 ataques disponíveis* no Raid Weekend atual.\n"
+            "Já realizados: 0. Não perca os recursos da Capital! 💰"
         )
 
     feitos = membro.get("attacks", 0)

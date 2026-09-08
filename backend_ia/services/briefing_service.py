@@ -580,6 +580,38 @@ def _obter_telefone_usuario(user_id: str) -> str:
 
     return settings.ALLOWED_PHONE_NUMBER
 
+def _obter_todos_usuarios_briefing() -> List[str]:
+    """Retorna lista consolidada de usuários cadastrados para o briefing."""
+    usuarios = ["daniel", "lari"]
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("briefing_preferences").stream()
+            for doc in docs:
+                uid = doc.id.lower().strip()
+                if uid not in usuarios:
+                    usuarios.append(uid)
+        except Exception:
+            logger.exception("Erro ao buscar preferências de briefing no Firestore")
+    return usuarios
+
+
+def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool) -> bool:
+    """Verifica preferências e dispara o briefing caso o horário coincida."""
+    try:
+        prefs = obter_preferencias_briefing(uid)
+        if not prefs.get("ativo", True):
+            return False
+
+        horario_user = str(prefs.get("horario", "08:00")).strip()
+        if horario_user == hora_minuto:
+            logger.info("Disparando briefing matinal para %s no horário configurado (%s).", uid, horario_user)
+            enviar_briefing_matinal(force=force, user_id=uid)
+            return True
+    except Exception:
+        logger.exception("Erro ao disparar briefing agendado para %s", uid)
+    return False
+
+
 def verificar_e_disparar_briefings_agendados(hora_minuto: Optional[str] = None, force: bool = False) -> List[str]:
     """
     P-0417: Avalia usuários cadastrados e dispara o briefing para aqueles cujo horário
@@ -590,33 +622,13 @@ def verificar_e_disparar_briefings_agendados(hora_minuto: Optional[str] = None, 
         hoje = _obter_data_brasilia()
         hora_minuto = hoje.strftime("%H:%M")
 
-    hora_minuto = hora_minuto.strip()
-    usuarios_alvo = ["daniel", "lari"]
-
-    if firebase.db is not None:
-        try:
-            docs = firebase.db.collection("briefing_preferences").stream()
-            for d in docs:
-                uid = d.id.lower().strip()
-                if uid not in usuarios_alvo:
-                    usuarios_alvo.append(uid)
-        except Exception as e:
-            logger.warning(f"Erro ao buscar preferências de briefing no Firestore: {e}")
+    hora_alvo = hora_minuto.strip()
+    usuarios_alvo = _obter_todos_usuarios_briefing()
 
     disparados = []
     for uid in usuarios_alvo:
-        try:
-            prefs = obter_preferencias_briefing(uid)
-            if not prefs.get("ativo", True):
-                continue
-
-            horario_user = str(prefs.get("horario", "08:00")).strip()
-            if horario_user == hora_minuto:
-                logger.info(f"Disparando briefing matinal para {uid} no horário configurado ({horario_user}).")
-                enviar_briefing_matinal(force=force, user_id=uid)
-                disparados.append(uid)
-        except Exception as e:
-            logger.error(f"Erro ao disparar briefing agendado para {uid}: {e}")
+        if _disparar_briefing_se_horario_correto(uid, hora_alvo, force):
+            disparados.append(uid)
 
     return disparados
 

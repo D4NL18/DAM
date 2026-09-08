@@ -65,9 +65,11 @@ class TestRaidSeasonAlert:
         from services.tools.clash_of_clans_tool import _verificar_raid_season
         assert _verificar_raid_season(RAID_ENDED, "#ABC987") is None
 
-    def test_membro_ausente_retorna_none(self):
+    def test_membro_ausente_retorna_alerta_5_ataques(self):
         from services.tools.clash_of_clans_tool import _verificar_raid_season
-        assert _verificar_raid_season(RAID_SEM_MEMBRO, "#ABC987") is None
+        r = _verificar_raid_season(RAID_SEM_MEMBRO, "#ABC987")
+        assert r is not None
+        assert "5" in r or "Raid Weekend" in r
 
 
 class TestClanWarAlert:

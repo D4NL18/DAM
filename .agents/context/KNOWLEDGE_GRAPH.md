@@ -146,4 +146,21 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - *RESTful API:* Router `/api/files` (`/convert`, `/supported-formats`, `/conversions/history`) com download imediato via stream.
   - *WhatsApp & IA:* Tool `gerenciar_arquivos` integrada em `AVAILABLE_TOOLS` do Gemini, suporte a `documentMessage` no webhook e envio de arquivos de volta via `WhatsAppService.send_document`.
 
+## GP-04.1: Correções e Aprimoramentos do Morning Briefing [P-0410 a P-0418]
+- **Lembretes Diários & Formatação (P-0410, P-0411):**
+  - O resumo matinal exibe estritamente lembretes com status `pendente` agendados para a data corrente (fuso Brasília UTC-3), eliminando lembretes futuros distantes do briefing diário.
+  - Sanitização de tags via `_formatar_tags_exibicao` com regex `[a-zA-Z0-9_\-]`, eliminando bugs de representação de listas brutas aninhadas (`#[['financas', 'claro']]`) e convertendo para formato limpo `[#financas #claro]`.
+- **Filtros Estritos de Animes (P-0412 a P-0414):**
+  - *Lançamento de episódios (hoje e grade semanal):* Considera ESTRITAMENTE animes com status `assistindo` (watching).
+  - *Lançamento de temporadas / continuações / sequências:* Considera ESTRITAMENTE animes em `assistindo` ou `concluido` (completed). Veto absoluto a menções de animes `dropado` (dropped) ou `pausado` (paused/on hold).
+  - *Animes para assistir:* A busca por animes na lista de planejamento (`planejo_assistir`/`plan_to_watch`) retorna animes em planning OU em watching onde o usuário ainda viu 0 episódios.
+  - Mapeamento robusto na sincronização com AniList: `PAUSED` -> `pausado`, `DROPPED` -> `dropado`.
+- **Clash of Clans & Capital do Clã (P-0415, P-0416):**
+  - Trata o comportamento da API Supercell onde o array `members` de `capitalraidseasons` omite jogadores que ainda não atacaram. Quando `membro is None` em temporada `ongoing`, gera alerta com 5 ataques disponíveis.
+  - Alertas de Guerra Regular/CWL e Raid Weekend coexistem no briefing matinal quando ambos estiverem ativos e com ataques pendentes.
+- **Disparo Multi-Usuário & Isolamento de Contexto (P-0417, P-0418):**
+  - Scheduler roda minuto a minuto avaliando as preferências de cada usuário ativo (`daniel`, `lari`, etc.) via `verificar_e_disparar_briefings_agendados`, disparando os briefings no horário exato configurado por cada um.
+  - `montar_resumo_matinal` e `enviar_briefing_matinal` chaveiam o `UserContext.set_user(target_user_id)` com bloco seguro `try/finally`, assegurando que agenda, lembretes e dados de saúde de Daniel e Lari permaneçam 100% isolados sem vazamentos cruzados.
+
+
 

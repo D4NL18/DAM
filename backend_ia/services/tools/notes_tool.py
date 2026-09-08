@@ -1,10 +1,14 @@
 import logging
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from config import firebase
 
 logger = logging.getLogger(__name__)
+
+# Padrão regex reutilizado para higienização e extração de tags (evita literais duplicados - python:S1192)
+TAG_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_\-]+")
 
 # Armazenamento em memória para fallback/mock (quando Firebase não inicializado ou em testes)
 _mock_storage: List[Dict[str, Any]] = []
@@ -194,9 +198,44 @@ def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> 
     return "\n\n".join(linhas)
 
 
-def listar_lembretes_pendentes() -> str:
+def _extrair_tokens_tags(dado: Any) -> List[str]:
+    """Extrai recursivamente tokens válidos de tags de strings ou listas aninhadas."""
+    if isinstance(dado, str):
+        return [t.lower() for t in TAG_TOKEN_PATTERN.findall(dado)]
+    if isinstance(dado, (list, tuple, set)):
+        tokens: List[str] = []
+        for item in dado:
+            tokens.extend(_extrair_tokens_tags(item))
+        return tokens
+    return []
+
+
+def _formatar_tags_exibicao(tags_raw: Any) -> str:
+    """Higieniza e formata tags para exibição limpa sem aninhamentos de arrays ou strings."""
+    if not tags_raw:
+        return ""
+    tokens = _extrair_tokens_tags(tags_raw)
+    tags_unicas = list(dict.fromkeys(tokens))
+    return f" [#{' #'.join(tags_unicas)}]" if tags_unicas else ""
+
+
+def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
+    """Retorna a string YYYY-MM-DD da data de referência informada ou de hoje em Brasília."""
+    if data_referencia:
+        return str(data_referencia)[:10]
+    tz_br = timezone(timedelta(hours=-3))
+    return datetime.now(tz_br).strftime("%Y-%m-%d")
+
+
+def _filtrar_lembretes_por_data(lembretes: List[Dict[str, Any]], data_alvo: str) -> List[Dict[str, Any]]:
+    """Filtra lembretes cuja data/hora contenha o prefixo de data alvo."""
+    return [item for item in lembretes if data_alvo in str(item.get("data_hora_lembrete", ""))]
+
+
+def listar_lembretes_pendentes(apenas_hoje: bool = False, data_referencia: Optional[str] = None) -> str:
     """
-    Lista todos os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
+    Lista os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
+    Pode filtrar opcionalmente apenas para o dia corrente ou data de referência informada.
     """
     todos = _obter_todos_itens()
     lembretes = [
@@ -204,21 +243,27 @@ def listar_lembretes_pendentes() -> str:
         if item.get("tipo") == "lembrete" and item.get("status") == "pendente"
     ]
 
+    filtrar_data = apenas_hoje or bool(data_referencia)
+    if filtrar_data:
+        data_alvo_str = _obter_data_filtro_lembrete(data_referencia)
+        lembretes = _filtrar_lembretes_por_data(lembretes, data_alvo_str)
+
     if not lembretes:
-        return "🎉 Nenhum lembrete pendente no momento! Você está em dia."
+        msg_sufixo = " para hoje" if filtrar_data else " no momento"
+        return f"🎉 Nenhum lembrete pendente{msg_sufixo}! Você está em dia."
 
     # Ordena por data_hora_lembrete
     lembretes_ordenados = sorted(lembretes, key=lambda x: str(x.get("data_hora_lembrete", "")))
 
     linhas = [f"⏰ **Lembretes Pendentes ({len(lembretes_ordenados)}):**"]
     for idx, lemb in enumerate(lembretes_ordenados, start=1):
-        tags_fmt = f" [#{' #'.join(lemb.get('tags', []))}]" if lemb.get("tags") else ""
+        tags_fmt = _formatar_tags_exibicao(lemb.get("tags"))
         linhas.append(
             f"{idx}. **{lemb['titulo']}**{tags_fmt}\n"
             f"   📅 Horário: {lemb.get('data_hora_lembrete')} | 🆔 `{lemb['id'][:8]}`"
         )
 
-    return "\n\n".join(linhas)
+    return "\n".join(linhas)
 
 
 def concluir_lembrete(lembrete_id_ou_titulo: str) -> str:

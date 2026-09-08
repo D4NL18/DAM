@@ -249,6 +249,10 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     proximos_lancamentos = []
 
     for a in animes_memoria:
+        # P-0412: apenas animes em andamento (assistindo)
+        if a.get("status_usuario", "").lower() != "assistindo":
+            continue
+
         pep = a.get("proximo_episodio")
         if pep and isinstance(pep, dict):
             airing_at = pep.get("airing_at")
@@ -294,6 +298,8 @@ def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Di
             pass
     animes_hoje = []
     for a in animes_memoria:
+        if a.get("status_usuario", "").lower() != "assistindo":
+            continue
         pep = a.get("proximo_episodio")
         if pep and isinstance(pep, dict) and pep.get("airing_at"):
             dt_ep = datetime.fromtimestamp(pep["airing_at"], tz=timezone.utc).astimezone(TZ_BRASILIA)
@@ -444,114 +450,120 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
     target_user_id = (user_id or UserContext.get_user_id() or "daniel").lower().strip()
     target_user_name = "Daniel" if target_user_id == "daniel" else ("Lari" if target_user_id == "lari" else target_user_id.capitalize())
 
-    prefs = obter_preferencias_briefing(target_user_id)
-    topicos = set(prefs.get("topicos", ["agenda", "lembretes"]))
-    horario_config = prefs.get("horario", "08:00")
+    antigo_user_id = UserContext.get_user_id()
+    antigo_user_phone = UserContext.get_user_phone()
+    UserContext.set_user(target_user_id)
+    try:
+        prefs = obter_preferencias_briefing(target_user_id)
+        topicos = set(prefs.get("topicos", ["agenda", "lembretes"]))
+        horario_config = prefs.get("horario", "08:00")
 
-    hoje = _obter_data_brasilia(data_alvo)
-    hoje_str = hoje.strftime("%Y-%m-%d")
-    data_formatada = hoje.strftime("%d/%m/%Y")
-    dias_semana = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
-    dia_nome = dias_semana[hoje.weekday()]
+        hoje = _obter_data_brasilia(data_alvo)
+        hoje_str = hoje.strftime("%Y-%m-%d")
+        data_formatada = hoje.strftime("%d/%m/%Y")
+        dias_semana = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+        dia_nome = dias_semana[hoje.weekday()]
 
-    blocos = []
+        blocos = []
 
-    # 1. Google Calendar
-    if "agenda" in topicos:
-        try:
-            agenda_raw = consultar_agenda(dias=1, usuario=target_user_id)
-            if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
-                agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
-            else:
-                linhas_agenda = []
-                for linha in agenda_raw.splitlines():
-                    linha_s = linha.strip()
-                    if not linha_s or "Você tem os seguintes eventos" in linha_s:
-                        continue
-                    match_date = re.search(r"\d{4}-\d{2}-\d{2}", linha_s)
-                    if match_date and match_date.group(0) != hoje_str:
-                        continue
+        # 1. Google Calendar
+        if "agenda" in topicos:
+            try:
+                agenda_raw = consultar_agenda(dias=1, usuario=target_user_id)
+                if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
+                    agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
+                else:
+                    linhas_agenda = []
+                    for linha in agenda_raw.splitlines():
+                        linha_s = linha.strip()
+                        if not linha_s or "Você tem os seguintes eventos" in linha_s:
+                            continue
+                        match_date = re.search(r"\d{4}-\d{2}-\d{2}", linha_s)
+                        if match_date and match_date.group(0) != hoje_str:
+                            continue
 
-                    if linha_s.startswith("- "):
-                        partes = linha_s.lstrip("- ").split(": ", 1)
-                        if len(partes) == 2:
-                            dt_raw, desc = partes
-                            try:
-                                dt_evt = datetime.fromisoformat(dt_raw.replace("Z", "+00:00")).astimezone(TZ_BRASILIA)
-                                linhas_agenda.append(f"• 🕘 **{dt_evt.strftime('%H:%M')}** – {desc}")
-                            except Exception:
+                        if linha_s.startswith("- "):
+                            partes = linha_s.lstrip("- ").split(": ", 1)
+                            if len(partes) == 2:
+                                dt_raw, desc = partes
+                                try:
+                                    dt_evt = datetime.fromisoformat(dt_raw.replace("Z", "+00:00")).astimezone(TZ_BRASILIA)
+                                    linhas_agenda.append(f"• 🕘 **{dt_evt.strftime('%H:%M')}** – {desc}")
+                                except Exception:
+                                    linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
+                            else:
                                 linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
                         else:
-                            linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
-                    else:
-                        linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
+                            linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
 
-                agenda_txt = "\n".join(linhas_agenda) if linhas_agenda else "• ℹ️ Nenhum compromisso agendado para hoje."
-        except Exception as e:
-            logger.warning(f"Erro ao consultar agenda para briefing: {e}")
-            agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
+                    agenda_txt = "\n".join(linhas_agenda) if linhas_agenda else "• ℹ️ Nenhum compromisso agendado para hoje."
+            except Exception as e:
+                logger.warning(f"Erro ao consultar agenda para briefing: {e}")
+                agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
 
-        blocos.append(f"📅 *Compromissos de Hoje:*\n{agenda_txt}")
+            blocos.append(f"📅 *Compromissos de Hoje:*\n{agenda_txt}")
 
-    # 2. Tarefas & Lembretes
-    if "lembretes" in topicos:
-        try:
-            lembretes_raw = listar_lembretes_pendentes()
-            if "Nenhum lembrete pendente" in lembretes_raw or not lembretes_raw.strip():
+        # 2. Tarefas & Lembretes (P-0410: Restrito exclusivamente ao dia de hoje)
+        if "lembretes" in topicos:
+            try:
+                lembretes_raw = listar_lembretes_pendentes(apenas_hoje=True, data_referencia=hoje_str)
+                if "Nenhum lembrete pendente" in lembretes_raw or not lembretes_raw.strip():
+                    tarefas_txt = "• ℹ️ Nenhuma tarefa pendente para hoje."
+                else:
+                    tarefas_txt = lembretes_raw.strip()
+            except Exception as e:
+                logger.warning(f"Erro ao consultar lembretes para briefing: {e}")
                 tarefas_txt = "• ℹ️ Nenhuma tarefa pendente para hoje."
+
+            blocos.append(f"📝 *Tarefas & Lembretes:*\n{tarefas_txt}")
+
+        # 3. Saúde (Métricas de sono/passos)
+        if "saude" in topicos:
+            saude_txt = _obter_resumo_saude_briefing(target_user_id)
+            blocos.append(f"🏃 *Saúde & Bem-Estar:*\n{saude_txt}")
+
+        # 4. Veículo
+        if "veiculo" in topicos:
+            veic_txt = _obter_resumo_veiculo_briefing(target_user_id)
+            if veic_txt:
+                blocos.append(f"🚗 *Status do Veículo:*\n{veic_txt}")
+
+        # 5. Jogos da FURIA (CS2)
+        if "furia" in topicos or "esports" in topicos:
+            jogos_furia = _obter_jogos_furia_hoje(hoje)
+            furia_txt = _formatar_jogos_furia_dia(jogos_furia)
+            blocos.append(f"🐾 *Jogos da FURIA (CS2):*\n{furia_txt}")
+
+        # 6. Animes (apenas se configurado e Daniel tiver animes)
+        if "animes" in topicos and target_user_id == "daniel":
+            animes_hoje = _obter_animes_lancando_hoje(hoje)
+            if animes_hoje:
+                linhas_animes = [f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)" for an in animes_hoje]
+                animes_txt = "\n".join(linhas_animes)
             else:
-                tarefas_txt = lembretes_raw.strip()
-        except Exception as e:
-            logger.warning(f"Erro ao consultar lembretes para briefing: {e}")
-            tarefas_txt = "• ℹ️ Nenhuma tarefa pendente para hoje."
+                animes_txt = _obter_info_animes_briefing(hoje)
+            blocos.append(f"🎌 *Animes de Hoje:*\n{animes_txt}")
 
-        blocos.append(f"📝 *Tarefas & Lembretes:*\n{tarefas_txt}")
+        # 7. Clash of Clans (apenas se configurado e Daniel)
+        if "clash" in topicos and target_user_id == "daniel":
+            coc_alertas = _obter_alertas_coc()
+            if coc_alertas:
+                blocos.append(f"⚔️ *Clash of Clans — Ataques Pendentes:*\n{coc_alertas}")
 
-    # 3. Saúde (Métricas de sono/passos)
-    if "saude" in topicos:
-        saude_txt = _obter_resumo_saude_briefing(target_user_id)
-        blocos.append(f"🏃 *Saúde & Bem-Estar:*\n{saude_txt}")
+        corpo = "\n\n".join(blocos)
 
-    # 4. Veículo
-    if "veiculo" in topicos:
-        veic_txt = _obter_resumo_veiculo_briefing(target_user_id)
-        if veic_txt:
-            blocos.append(f"🚗 *Status do Veículo:*\n{veic_txt}")
+        template = (
+            f"☀️ *Bom dia! Seu Resumo Matinal do DAM*\n"
+            f"🗓️ *{dia_nome}, {data_formatada}* ({horario_config})\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{corpo}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💡 _Tenha um excelente e produtivo dia!_"
+        )
 
-    # 5. Jogos da FURIA (CS2)
-    if "furia" in topicos or "esports" in topicos:
-        jogos_furia = _obter_jogos_furia_hoje(hoje)
-        furia_txt = _formatar_jogos_furia_dia(jogos_furia)
-        blocos.append(f"🐾 *Jogos da FURIA (CS2):*\n{furia_txt}")
-
-    # 6. Animes (apenas se configurado e Daniel tiver animes)
-    if "animes" in topicos and target_user_id == "daniel":
-        animes_hoje = _obter_animes_lancando_hoje(hoje)
-        if animes_hoje:
-            linhas_animes = [f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)" for an in animes_hoje]
-            animes_txt = "\n".join(linhas_animes)
-        else:
-            animes_txt = _obter_info_animes_briefing(hoje)
-        blocos.append(f"🎌 *Animes de Hoje:*\n{animes_txt}")
-
-    # 7. Clash of Clans (apenas se configurado e Daniel)
-    if "clash" in topicos and target_user_id == "daniel":
-        coc_alertas = _obter_alertas_coc()
-        if coc_alertas:
-            blocos.append(f"⚔️ *Clash of Clans — Ataques Pendentes:*\n{coc_alertas}")
-
-    corpo = "\n\n".join(blocos)
-
-    template = (
-        f"☀️ *Bom dia! Seu Resumo Matinal do DAM*\n"
-        f"🗓️ *{dia_nome}, {data_formatada}* ({horario_config})\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{corpo}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 _Tenha um excelente e produtivo dia!_"
-    )
-
-    return template.strip()
+        return template.strip()
+    finally:
+        UserContext.set_user(antigo_user_id, antigo_user_phone)
 
 def _obter_telefone_usuario(user_id: str) -> str:
     """Resolve o número de telefone do usuário para envio de WhatsApp."""
@@ -562,10 +574,63 @@ def _obter_telefone_usuario(user_id: str) -> str:
         return "5571983278254"
 
     for phone in settings.allowed_numbers_list:
-        if resolve_user_from_phone(phone)[0] == uid:
+        info = resolve_user_from_phone(phone)
+        if info and info.get("id") == uid:
             return phone
 
     return settings.ALLOWED_PHONE_NUMBER
+
+def _obter_todos_usuarios_briefing() -> List[str]:
+    """Retorna lista consolidada de usuários cadastrados para o briefing."""
+    usuarios = ["daniel", "lari"]
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("briefing_preferences").stream()
+            for doc in docs:
+                uid = doc.id.lower().strip()
+                if uid not in usuarios:
+                    usuarios.append(uid)
+        except Exception:
+            logger.exception("Erro ao buscar preferências de briefing no Firestore")
+    return usuarios
+
+
+def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool) -> bool:
+    """Verifica preferências e dispara o briefing caso o horário coincida."""
+    try:
+        prefs = obter_preferencias_briefing(uid)
+        if not prefs.get("ativo", True):
+            return False
+
+        horario_user = str(prefs.get("horario", "08:00")).strip()
+        if horario_user == hora_minuto:
+            logger.info("Disparando briefing matinal para %s no horário configurado (%s).", uid, horario_user)
+            enviar_briefing_matinal(force=force, user_id=uid)
+            return True
+    except Exception:
+        logger.exception("Erro ao disparar briefing agendado para %s", uid)
+    return False
+
+
+def verificar_e_disparar_briefings_agendados(hora_minuto: Optional[str] = None, force: bool = False) -> List[str]:
+    """
+    P-0417: Avalia usuários cadastrados e dispara o briefing para aqueles cujo horário
+    configurado coincidir com hora_minuto.
+    Retorna a lista de user_ids para os quais o disparo foi efetuado.
+    """
+    if not hora_minuto:
+        hoje = _obter_data_brasilia()
+        hora_minuto = hoje.strftime("%H:%M")
+
+    hora_alvo = hora_minuto.strip()
+    usuarios_alvo = _obter_todos_usuarios_briefing()
+
+    disparados = []
+    for uid in usuarios_alvo:
+        if _disparar_briefing_se_horario_correto(uid, hora_alvo, force):
+            disparados.append(uid)
+
+    return disparados
 
 def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) -> str:
     """

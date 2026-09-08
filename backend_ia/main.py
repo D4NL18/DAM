@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from routers import webhook, health, billing, dashboard, briefing, files
 from config.firebase import init_firebase
 from services.ai_service import AIService
-from services.briefing_service import enviar_briefing_matinal
+from services.briefing_service import enviar_briefing_matinal, verificar_e_disparar_briefings_agendados
 from services.tools.clash_of_clans_tool import alerta_raid_capital, alerta_clan_war
 from contextlib import asynccontextmanager
 
@@ -17,17 +17,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def _rotina_briefing_diario():
-    """Tarefa em background que verifica se são 08:00 (Brasília) para disparar o briefing matinal."""
+    """Tarefa em background que verifica minuto a minuto os horários de briefing dos usuários ativos."""
     tz_br = timezone(timedelta(hours=-3))
+    ultimo_minuto_disparado = None
     while True:
         try:
             agora = datetime.now(tz_br)
-            # Se for 08:00 da manhã
-            if agora.hour == 8 and agora.minute == 0:
-                logger.info("Horário de Morning Briefing atingido (08:00 Brasília). Disparando...")
-                enviar_briefing_matinal(force=False)
-                # Dorme 65 segundos para não disparar mais de uma vez dentro do mesmo minuto
-                await asyncio.sleep(65)
+            minuto_atual = agora.strftime("%Y-%m-%d %H:%M")
+            hora_minuto = agora.strftime("%H:%M")
+
+            if minuto_atual != ultimo_minuto_disparado:
+                disparados = await asyncio.to_thread(verificar_e_disparar_briefings_agendados, hora_minuto, False)
+                if disparados:
+                    logger.info(f"Morning Briefing disparado às {hora_minuto} para: {', '.join(disparados)}")
+                    ultimo_minuto_disparado = minuto_atual
         except Exception as e:
             logger.error(f"Erro no scheduler do briefing matinal: {e}")
         

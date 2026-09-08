@@ -194,8 +194,10 @@ def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
                 status_usuario = "planejo_assistir"
             elif status_entry in ["COMPLETED"]:
                 status_usuario = "concluido"
-            elif status_entry in ["PAUSED", "DROPPED"]:
+            elif status_entry in ["PAUSED"]:
                 status_usuario = "pausado"
+            elif status_entry in ["DROPPED"]:
+                status_usuario = "dropado"
 
             proximo_ep = None
             if media.get("nextAiringEpisode"):
@@ -745,12 +747,22 @@ def listar_meus_animes(status: Optional[str] = None) -> str:
         return "Sua lista de animes ainda está vazia. Diga: 'Sincronize meu perfil do AniList' ou 'Adicione Solo Leveling aos meus animes' para começar!"
 
     status_filtro = status.strip().lower() if status else None
-    if status_filtro:
+    if status_filtro in ["planejo_assistir", "planning", "assistir", "para_assistir", "quero_assistir", "plan_to_watch"]:
+        animes = [
+            a for a in animes 
+            if a.get("status_usuario", "").lower() in ["planejo_assistir", "planning"]
+            or (a.get("status_usuario", "").lower() == "assistindo" and int(a.get("ultimo_episodio_visto", 0)) == 0)
+        ]
+        if not animes:
+            return "Você não possui animes na lista de planejamento para assistir."
+        titulo_cabecalho = "📋 *Animes na sua Lista para Assistir (Plan to Watch)*"
+    elif status_filtro:
         animes = [a for a in animes if a.get("status_usuario", "").lower() == status_filtro]
         if not animes:
             return f"Você não possui animes com status '{status}' na sua lista."
-
-    titulo_cabecalho = "📺 *Animes que Você Está Assistindo no Momento*" if status_filtro == "assistindo" else "📋 *Sua Lista de Animes (DAM & AniList)*"
+        titulo_cabecalho = "📺 *Animes que Você Está Assistindo no Momento*" if status_filtro == "assistindo" else f"📋 *Animes ({status_filtro.capitalize()})*"
+    else:
+        titulo_cabecalho = "📋 *Sua Lista de Animes (DAM & AniList)*"
     linhas = [
         titulo_cabecalho,
         "━━━━━━━━━━━━━━━━━━━━━━"
@@ -973,7 +985,11 @@ def grade_semanal_animes() -> str:
         except Exception as e:
             logger.error(f"Erro ao consultar Firestore: {e}")
 
-    com_lancamento = [a for a in animes if a.get("proximo_episodio") and isinstance(a.get("proximo_episodio"), dict)]
+    com_lancamento = [
+        a for a in animes 
+        if a.get("status_usuario", "").lower() == "assistindo"
+        and a.get("proximo_episodio") and isinstance(a.get("proximo_episodio"), dict)
+    ]
 
     if not com_lancamento:
         return "Nenhum anime da sua lista possui episódios com data de lançamento agendada para os próximos dias."

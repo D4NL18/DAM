@@ -14,6 +14,36 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/briefing", tags=["Morning Briefing"])
 
+def _obter_usuarios_alvo() -> list[str]:
+    """Recupera a lista de IDs de usuários ativos no Firestore ou fallback."""
+    usuarios = ["daniel", "lari"]
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("briefing_preferences").stream()
+            for doc in docs:
+                uid = doc.id.lower().strip()
+                if uid not in usuarios:
+                    usuarios.append(uid)
+        except Exception:
+            logger.exception("Erro ao listar usuários em briefing_preferences no Firestore")
+    return usuarios
+
+
+def _executar_disparo_multi_usuario(usuarios: list[str], force: bool) -> list[dict]:
+    """Executa o envio do briefing matinal para uma lista de usuários."""
+    detalhes = []
+    for uid in usuarios:
+        try:
+            prefs = obter_preferencias_briefing(uid)
+            if prefs.get("ativo", True):
+                res = enviar_briefing_matinal(force=force, user_id=uid)
+                detalhes.append({"userId": uid, "resultado": res})
+        except Exception:
+            logger.exception("Erro ao enviar briefing matinal para usuário %s", uid)
+            detalhes.append({"userId": uid, "erro": "Falha no envio do briefing"})
+    return detalhes
+
+
 @router.post("/morning")
 def trigger_morning_briefing(
     authorization: Optional[str] = Header(None),
@@ -34,33 +64,17 @@ def trigger_morning_briefing(
             detail="Não autorizado. Forneça o token correto no header 'apikey' ou 'Authorization'."
         )
 
-    logger.info(f"Disparo do briefing matinal solicitado (force={force}, user_id={user_id}).")
+    # Prevenção contra Log Injection (pythonsecurity:S5145): não loga dados arbitrários do usuário
+    is_individual = bool(user_id)
+    logger.info("Disparo do briefing matinal solicitado (force=%s, individual=%s)", force, is_individual)
+
     if user_id:
-        resultado = enviar_briefing_matinal(force=force, user_id=user_id)
-        return {"status": "ok", "mensagem": resultado, "userId": user_id}
+        safe_uid = user_id.strip().lower()
+        resultado = enviar_briefing_matinal(force=force, user_id=safe_uid)
+        return {"status": "ok", "mensagem": resultado, "userId": safe_uid}
 
-    # Dispara para todos os usuários ativos
-    usuarios_alvo = ["daniel", "lari"]
-    if firebase.db is not None:
-        try:
-            docs = firebase.db.collection("briefing_preferences").stream()
-            for d in docs:
-                uid = d.id.lower().strip()
-                if uid not in usuarios_alvo:
-                    usuarios_alvo.append(uid)
-        except Exception as e:
-            logger.warning(f"Erro ao listar usuários em briefing_preferences: {e}")
-
-    detalhes = []
-    for uid in usuarios_alvo:
-        try:
-            prefs = obter_preferencias_briefing(uid)
-            if prefs.get("ativo", True):
-                res = enviar_briefing_matinal(force=force, user_id=uid)
-                detalhes.append({"userId": uid, "resultado": res})
-        except Exception as e:
-            logger.error(f"Erro ao enviar briefing para {uid}: {e}")
-            detalhes.append({"userId": uid, "erro": str(e)})
+    usuarios = _obter_usuarios_alvo()
+    detalhes = _executar_disparo_multi_usuario(usuarios, force)
 
     return {
         "status": "ok",
@@ -84,5 +98,6 @@ def preview_morning_briefing(
             detail="Não autorizado."
         )
 
-    texto = montar_resumo_matinal(user_id=user_id)
-    return {"status": "ok", "userId": user_id or "daniel", "preview": texto}
+    safe_uid = user_id.strip().lower() if user_id else None
+    texto = montar_resumo_matinal(user_id=safe_uid)
+    return {"status": "ok", "userId": safe_uid or "daniel", "preview": texto}

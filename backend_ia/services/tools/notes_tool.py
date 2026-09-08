@@ -1,6 +1,7 @@
 import logging
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from config import firebase
 
@@ -194,9 +195,34 @@ def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> 
     return "\n\n".join(linhas)
 
 
-def listar_lembretes_pendentes() -> str:
+def _formatar_tags_exibicao(tags_raw: Any) -> str:
+    """Higieniza e formata tags para exibição limpa sem aninhamentos de arrays ou strings."""
+    if not tags_raw:
+        return ""
+    tags_lista = []
+    if isinstance(tags_raw, str):
+        itens = re.findall(r"[a-zA-Z0-9_\-]+", tags_raw)
+        tags_lista.extend([i.lower() for i in itens])
+    elif isinstance(tags_raw, list):
+        for t in tags_raw:
+            if isinstance(t, list):
+                for sub in t:
+                    tags_lista.extend([s.lower() for s in re.findall(r"[a-zA-Z0-9_\-]+", str(sub))])
+            else:
+                tags_lista.extend([s.lower() for s in re.findall(r"[a-zA-Z0-9_\-]+", str(t))])
+    
+    tags_unicas = []
+    for t in tags_lista:
+        if t not in tags_unicas:
+            tags_unicas.append(t)
+
+    return f" [#{' #'.join(tags_unicas)}]" if tags_unicas else ""
+
+
+def listar_lembretes_pendentes(apenas_hoje: bool = False, data_referencia: Optional[str] = None) -> str:
     """
-    Lista todos os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
+    Lista os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
+    Pode filtrar opcionalmente apenas para o dia corrente ou data de referência informada.
     """
     todos = _obter_todos_itens()
     lembretes = [
@@ -204,21 +230,36 @@ def listar_lembretes_pendentes() -> str:
         if item.get("tipo") == "lembrete" and item.get("status") == "pendente"
     ]
 
+    if apenas_hoje or data_referencia:
+        if data_referencia:
+            data_alvo_str = str(data_referencia)[:10]
+        else:
+            tz_br = timezone(timedelta(hours=-3))
+            data_alvo_str = datetime.now(tz_br).strftime("%Y-%m-%d")
+
+        lembretes_filtrados = []
+        for item in lembretes:
+            dt_str = str(item.get("data_hora_lembrete", ""))
+            if data_alvo_str in dt_str:
+                lembretes_filtrados.append(item)
+        lembretes = lembretes_filtrados
+
     if not lembretes:
-        return "🎉 Nenhum lembrete pendente no momento! Você está em dia."
+        msg_sufixo = " para hoje" if (apenas_hoje or data_referencia) else " no momento"
+        return f"🎉 Nenhum lembrete pendente{msg_sufixo}! Você está em dia."
 
     # Ordena por data_hora_lembrete
     lembretes_ordenados = sorted(lembretes, key=lambda x: str(x.get("data_hora_lembrete", "")))
 
     linhas = [f"⏰ **Lembretes Pendentes ({len(lembretes_ordenados)}):**"]
     for idx, lemb in enumerate(lembretes_ordenados, start=1):
-        tags_fmt = f" [#{' #'.join(lemb.get('tags', []))}]" if lemb.get("tags") else ""
+        tags_fmt = _formatar_tags_exibicao(lemb.get("tags"))
         linhas.append(
             f"{idx}. **{lemb['titulo']}**{tags_fmt}\n"
             f"   📅 Horário: {lemb.get('data_hora_lembrete')} | 🆔 `{lemb['id'][:8]}`"
         )
 
-    return "\n\n".join(linhas)
+    return "\n".join(linhas)
 
 
 def concluir_lembrete(lembrete_id_ou_titulo: str) -> str:

@@ -17,6 +17,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] GP-02 (Notas e Lembretes Rápidos):** Modelagem Firestore da coleção `notes_reminders`, criação e busca semântica de notas e lembretes com controle de pendências via WhatsApp.
 - **[x] GP-03 (Memória Espacial / Onde Guardei Isso?):** Registro de localizações de objetos físicos e documentos na coleção `item_locations`, mantendo histórico de movimentações.
 - **[x] GP-04 (Morning Briefing Proativo das 08:00):** Consolidação matinal automatizada às 08h trazendo Agenda, Tarefas pendentes de hoje, Partidas da FURIA (com regras temporais) e Lançamentos de Animes do dia com idempotência no Firestore (`briefing_logs`).
+- **[x] GP-04.1 (Aprimoramentos do Morning Briefing, Filtros de Animes e Alertas de Clash of Clans):**
+  - **[x] Story 1 (Filtro Temporal de Lembretes & Correção de Tags):** Restringir exibição no Morning Briefing exclusivamente a lembretes agendados para a data do dia corrente e limpar a formatação de tags sem listas aninhadas.
+  - **[x] Story 2 (Filtros de Status de Animes):** Restringir episódios ao status `assistindo`, temporadas e continuações exclusivamente a `assistindo` ou `concluido` (banindo `pausado` e `dropado`), e lista de animes para assistir exclusivamente a `planejo_assistir` ou `assistindo` com 0 episódios vistos.
+  - **[x] Story 3 (Alertas Concorrentes de Clash of Clans):** Garantir que Guerra/CWL e Raid Weekend coexistam no resumo matinal e corrigir a verificação para membros com 0 ataques realizados na Capital do Clã.
+  - **[x] Story 4 (Motor Multi-Usuário do Briefing & Isolamento para Lari):** Executar disparos individuais baseados no horário configurado de cada usuário (`daniel` e `lari`) com isolamento estrito de `UserContext` e envio para o JID correspondente.
 
 ---
 

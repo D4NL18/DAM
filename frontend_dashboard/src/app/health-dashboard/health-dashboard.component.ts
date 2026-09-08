@@ -30,18 +30,12 @@ export class HealthDashboardComponent implements OnInit {
     this.healthApi.getSummary(startStr, endStr)
       .pipe(
         catchError(err => {
-          console.error('Erro ao buscar dados de saúde', err);
+          console.warn('Erro ao consultar Firestore health_metrics, retornando zerado:', err);
           return of({
-            totalSteps: 45000,
-            avgHeartRate: 72,
-            totalActiveEnergyBurned: 2100.5,
-            dailyRecords: [
-              { date: '2024-03-01', steps: 10000, activeEnergyBurned: 500 },
-              { date: '2024-03-02', steps: 8500, activeEnergyBurned: 420 },
-              { date: '2024-03-03', steps: 12000, activeEnergyBurned: 600 },
-              { date: '2024-03-04', steps: 7000, activeEnergyBurned: 350 },
-              { date: '2024-03-05', steps: 7500, activeEnergyBurned: 230 }
-            ]
+            totalSteps: 0,
+            avgHeartRate: 0,
+            totalActiveEnergyBurned: 0,
+            dailyRecords: []
           });
         })
       )
@@ -53,6 +47,19 @@ export class HealthDashboardComponent implements OnInit {
   }
 
   initChart(data: HealthSummary) {
+    if (!data.dailyRecords || data.dailyRecords.length === 0) {
+      this.chartOption = {
+        title: {
+          text: 'Sem dados de saúde recentes',
+          subtext: 'Envie métricas pelo webhook do Health Auto Export para visualizar',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#94a3b8', fontSize: 14 }
+        }
+      };
+      return;
+    }
+
     const dates = data.dailyRecords.map(r => r.date);
     const steps = data.dailyRecords.map(r => r.steps);
     const energy = data.dailyRecords.map(r => r.activeEnergyBurned);

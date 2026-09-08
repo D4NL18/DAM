@@ -17,7 +17,11 @@ public class FinanceService {
     private final FinanceTransactionRepository repository;
 
     public FinanceSummaryDTO getFinanceSummary() throws Exception {
-        List<FinanceTransaction> transactions = repository.findAll();
+        return getFinanceSummary("daniel");
+    }
+
+    public FinanceSummaryDTO getFinanceSummary(String userId) throws Exception {
+        List<FinanceTransaction> transactions = repository.findAll(userId);
         
         double totalAmount = 0.0;
         Map<String, Double> expensesByCategory = new HashMap<>();

@@ -20,12 +20,29 @@ public class HealthMetricRepository {
     private static final String COLLECTION_NAME = "health_metrics";
 
     public List<HealthMetric> findAll() throws ExecutionException, InterruptedException {
+        return findAll("daniel");
+    }
+
+    public List<HealthMetric> findAll(String targetUserId) throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> future = firestore.collection(COLLECTION_NAME).get();
         List<QueryDocumentSnapshot> documents = future.get().getDocuments();
         
         List<HealthMetric> metrics = new ArrayList<>();
+        String normalizedTarget = (targetUserId == null || targetUserId.isBlank()) ? "daniel" : targetUserId.trim().toLowerCase();
+
         for (QueryDocumentSnapshot document : documents) {
-            metrics.add(document.toObject(HealthMetric.class));
+            HealthMetric metric = document.toObject(HealthMetric.class);
+            String docUserId = document.getString("userId");
+            if (docUserId == null || docUserId.isBlank()) {
+                docUserId = document.getString("user_id");
+            }
+            if (docUserId == null || docUserId.isBlank()) {
+                docUserId = "daniel";
+            }
+            if (docUserId.equalsIgnoreCase(normalizedTarget)) {
+                metric.setUserId(docUserId);
+                metrics.add(metric);
+            }
         }
         return metrics;
     }

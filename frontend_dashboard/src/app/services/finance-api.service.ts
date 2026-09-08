@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AuthService } from './auth.service';
 
 export interface FinanceSummary {
   totalSpent: number;
@@ -22,11 +23,13 @@ export interface FinanceSummary {
   providedIn: 'root'
 })
 export class FinanceApiService {
-  private apiUrl = 'http://localhost:8080/api/v1/finance';
+  private apiUrl = 'https://dam-backend-557716987299.us-central1.run.app/api/v1/finance';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private authService: AuthService) {}
 
   getMonthlySummary(year: number, month: number): Observable<FinanceSummary> {
-    return this.http.get<FinanceSummary>(`${this.apiUrl}/monthly-summary?year=${year}&month=${month}`);
+    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const headers = new HttpHeaders({ 'X-User-Id': userId });
+    return this.http.get<FinanceSummary>(`${this.apiUrl}/monthly-summary?year=${year}&month=${month}&userId=${userId}`, { headers });
   }
 }

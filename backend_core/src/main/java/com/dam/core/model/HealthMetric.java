@@ -16,4 +16,5 @@ public class HealthMetric {
     private Integer steps;
     private Double activeCalories;
     private LocalDateTime date;
+    private String userId;
 }

@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "public": "frontend_dashboard/dist/frontend_dashboard/browser",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

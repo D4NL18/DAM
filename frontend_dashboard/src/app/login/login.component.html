@@ -1,0 +1,65 @@
+<div class="login-wrapper">
+  <div class="login-container card-shadow">
+    <div class="login-header">
+      <div class="brand-badge">
+        <span class="material-symbols-outlined icon">shield_person</span>
+      </div>
+      <h1 class="brand-title">DAM Assistant</h1>
+      <p class="brand-subtitle">Acesso Seguro Multi-Usuário</p>
+    </div>
+
+    <form class="login-form" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label for="username" class="form-label">Usuário</label>
+        <div class="input-wrapper">
+          <span class="material-symbols-outlined input-icon">person</span>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            class="form-input"
+            placeholder="Ex: Daniel ou Lari"
+            [(ngModel)]="username"
+            autocomplete="username"
+            required
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="password" class="form-label">Senha</label>
+        <div class="input-wrapper">
+          <span class="material-symbols-outlined input-icon">lock</span>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            class="form-input"
+            placeholder="Digite sua senha"
+            [(ngModel)]="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+      </div>
+
+      <div *ngIf="errorMessage" class="error-banner">
+        <span class="material-symbols-outlined">error</span>
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <button type="submit" class="submit-btn" [disabled]="isLoading">
+        <span *ngIf="!isLoading">Entrar no Dashboard</span>
+        <span *ngIf="isLoading" class="loading-state">
+          <span class="material-symbols-outlined spin">progress_activity</span>
+          Entrando...
+        </span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <span class="badge-pill">Isolamento Ativo</span>
+      <p class="footer-note">Seus dados de saúde, finanças e notas são 100% isolados por conta.</p>
+    </div>
+  </div>
+</div>

@@ -1,13 +1,28 @@
-# Estado Atual do Projeto (Orquestrador)
+# Estado Atual da Orquestração (STATE.md)
 
-## Contexto Global
-- **Fase Atual:** Fase 2 Concluída (Dashboard Web - Spring Boot + Angular)
-- **User Stories em andamento:** Concluídas (Dashboard, Serviços e Gráficos)
+## Status da Feature Ativa
+- **Feature:** Nenhuma (Aguardando nova solicitação do usuário)
+- **Branch:** `develop`
+- **Início:** -
+- **Status da Feature:** Concluída (GP-04.1 pronta para PR em `develop`)
 
-## Histórico Recente
-- Inicialização da documentação base via comando `/init`.
-- Deploy automatizado da Fase 1 no GCP concluído (DevOps).
-- Planejamento completo da Fase 2 (PO, Analista, Arquiteto e DBA) finalizado e documentado nos arquivos da pasta `.agents`.
-- **(Nova Execução)**: Executada a Fase 2 completa via Orquestrador, contemplando a criação do backend (Spring Boot - Controllers e testes rodando com sucesso) e do frontend (Angular).
-- **(Nova Execução)**: TailwindCSS removido e refatorado inteiramente para SCSS nativo (Glassmorphism e design premium), aprovado pelo UX Reviewer.
-- **(Nova Execução)**: Gráficos construídos via ECharts. Testes automatizados passaram e código seguro verificado pelo SecOps.
+## Esteira de Desenvolvimento (12 Passos)
+- [ ] **1. Quebra de Escopo (Product Owner)**
+- [ ] **2. Especificar (Analista)**
+- [ ] **3. Projetar (Arquiteto & Designer)**
+- [ ] **4. Modelagem de Dados Segura (DBA)**
+- [ ] **5. Planejar as Tarefas (Arquiteto)**
+- [ ] **6. Desenvolver Testes Unitários (Tester - TDD)**
+- [ ] **7. Executar (Desenvolvedor)**
+- [ ] **8. Code Review (Reviewer)**
+- [ ] **9. UX Review (UX Reviewer)**
+- [ ] **10. Testar e Auto-Healer (Tester)**
+- [ ] **11. Auditoria de Segurança (SecOps)**
+- [ ] **12. Release via Pull Request (DevOps)**
+
+---
+
+## Status Global do Sistema
+- **Arquitetura:** Microsserviços e Serverless (FastAPI + Evolution API + Angular 17 + Spring Boot 3 + Firestore)
+- **Multi-Tenant / Usuários:** Daniel (`+55 71 99126-9995`, admin) e Lari (`+55 71 98327-8254`, user).
+- **Segurança & Defesa:** Isolamento de dados estrito por `userId`, Guardrails contra Prompt Injection, Sanitização de logs, Criptografia AES-256 no Cofre.

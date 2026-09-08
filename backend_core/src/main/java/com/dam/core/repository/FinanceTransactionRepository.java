@@ -20,12 +20,29 @@ public class FinanceTransactionRepository {
     private static final String COLLECTION_NAME = "finances";
 
     public List<FinanceTransaction> findAll() throws ExecutionException, InterruptedException {
+        return findAll("daniel");
+    }
+
+    public List<FinanceTransaction> findAll(String targetUserId) throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> future = firestore.collection(COLLECTION_NAME).get();
         List<QueryDocumentSnapshot> documents = future.get().getDocuments();
         
         List<FinanceTransaction> transactions = new ArrayList<>();
+        String normalizedTarget = (targetUserId == null || targetUserId.isBlank()) ? "daniel" : targetUserId.trim().toLowerCase();
+
         for (QueryDocumentSnapshot document : documents) {
-            transactions.add(document.toObject(FinanceTransaction.class));
+            FinanceTransaction transaction = document.toObject(FinanceTransaction.class);
+            String docUserId = document.getString("userId");
+            if (docUserId == null || docUserId.isBlank()) {
+                docUserId = document.getString("user_id");
+            }
+            if (docUserId == null || docUserId.isBlank()) {
+                docUserId = "daniel";
+            }
+            if (docUserId.equalsIgnoreCase(normalizedTarget)) {
+                transaction.setUserId(docUserId);
+                transactions.add(transaction);
+            }
         }
         return transactions;
     }

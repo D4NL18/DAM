@@ -58,6 +58,26 @@ export class FinanceDashboardComponent implements OnInit {
   editingTransaction: FinanceTransaction | null = null;
   showImportModal: boolean = false;
 
+  // Modal de Confirmação Personalizado (substitui window.confirm)
+  confirmModal = {
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmButtonText: 'Confirmar',
+    cancelButtonText: 'Cancelar',
+    isDanger: true,
+    action: () => {}
+  };
+
+  // Notificações Toast de Sucesso e Erro (substitui window.alert)
+  toastNotification = {
+    show: false,
+    type: 'success' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: ''
+  };
+  private toastTimer: any = null;
+
   // Categorias e Cartões
   categories: FinanceCategory[] = [];
   cards: FinanceCard[] = [];
@@ -547,9 +567,64 @@ export class FinanceDashboardComponent implements OnInit {
     this.showTransactionModal = true;
   }
 
+  // --- Helpers de Feedback & Confirmação (Substitutos de alert/confirm) ---
+
+  showToast(message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success', title: string = ''): void {
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+    this.toastNotification = {
+      show: true,
+      type,
+      title,
+      message
+    };
+    this.toastTimer = setTimeout(() => {
+      this.toastNotification.show = false;
+    }, 3800);
+  }
+
+  closeToast(): void {
+    this.toastNotification.show = false;
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+  }
+
+  openConfirmDialog(options: {
+    title: string;
+    message: string;
+    confirmButtonText?: string;
+    cancelButtonText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }): void {
+    this.confirmModal = {
+      isOpen: true,
+      title: options.title,
+      message: options.message,
+      confirmButtonText: options.confirmButtonText || 'Confirmar',
+      cancelButtonText: options.cancelButtonText || 'Cancelar',
+      isDanger: options.isDanger ?? true,
+      action: options.onConfirm
+    };
+  }
+
+  onConfirmDialogProceed(): void {
+    const action = this.confirmModal.action;
+    this.confirmModal.isOpen = false;
+    if (action) {
+      action();
+    }
+  }
+
+  onConfirmDialogCancel(): void {
+    this.confirmModal.isOpen = false;
+  }
+
   saveTransaction(): void {
     if (!this.txForm.description.trim() || !this.txForm.amount || this.txForm.amount <= 0) {
-      alert('Por favor, informe a descrição e um valor maior que zero.');
+      this.showToast('Por favor, informe a descrição e um valor maior que zero.', 'warning');
       return;
     }
 
@@ -560,7 +635,7 @@ export class FinanceDashboardComponent implements OnInit {
       type: this.txForm.type,
       paymentMethod: this.txForm.paymentMethod,
       installment: this.txForm.installment ? this.txForm.installment.trim() : undefined,
-      owner: this.txForm.owner ? this.txForm.owner.trim() : this.userDisplayName,
+      owner: this.txForm.owner ? this.txForm.owner.trim() : undefined,
       date: this.txForm.date
     };
 
@@ -568,35 +643,54 @@ export class FinanceDashboardComponent implements OnInit {
       this.financeApi.updateTransaction(this.editingTransaction.id, payload).subscribe({
         next: () => {
           this.showTransactionModal = false;
+          this.showToast('Transação atualizada com sucesso!', 'success');
           this.loadDashboard();
           this.loadTrends();
         },
-        error: err => console.error('Erro ao atualizar transação:', err)
+        error: err => {
+          console.error('Erro ao atualizar transação:', err);
+          this.showToast('Erro ao atualizar transação.', 'error');
+        }
       });
     } else {
       this.financeApi.createTransaction(payload).subscribe({
         next: () => {
           this.showTransactionModal = false;
+          this.showToast('Transação cadastrada com sucesso!', 'success');
           this.loadDashboard();
           this.loadTrends();
         },
-        error: err => console.error('Erro ao salvar transação:', err)
+        error: err => {
+          console.error('Erro ao salvar transação:', err);
+          this.showToast('Erro ao gravar transação.', 'error');
+        }
       });
     }
   }
 
   deleteCurrentTransaction(): void {
     if (!this.editingTransaction) return;
-    if (confirm(`Deseja realmente excluir a transação "${this.editingTransaction.description}"?`)) {
-      this.financeApi.deleteTransaction(this.editingTransaction.id).subscribe({
-        next: () => {
-          this.showTransactionModal = false;
-          this.loadDashboard();
-          this.loadTrends();
-        },
-        error: err => console.error('Erro ao excluir transação:', err)
-      });
-    }
+    const tx = this.editingTransaction;
+    this.openConfirmDialog({
+      title: 'Excluir Transação',
+      message: `Deseja realmente excluir a transação "${tx.description}"?`,
+      confirmButtonText: 'Sim, Excluir',
+      isDanger: true,
+      onConfirm: () => {
+        this.financeApi.deleteTransaction(tx.id).subscribe({
+          next: () => {
+            this.showTransactionModal = false;
+            this.showToast('Transação excluída com sucesso!', 'success');
+            this.loadDashboard();
+            this.loadTrends();
+          },
+          error: err => {
+            console.error('Erro ao excluir transação:', err);
+            this.showToast('Erro ao excluir transação.', 'error');
+          }
+        });
+      }
+    });
   }
 
   // --- Gerenciador de Categorias & Cartões ---
@@ -607,16 +701,21 @@ export class FinanceDashboardComponent implements OnInit {
 
   addCategory(): void {
     if (!this.newCategoryName.trim()) return;
+    const name = this.newCategoryName.trim();
     this.financeApi.createCategory({
-      name: this.newCategoryName.trim(),
+      name,
       color: this.newCategoryColor
     }).subscribe({
       next: () => {
         this.newCategoryName = '';
+        this.showToast(`Categoria "${name}" criada com sucesso!`, 'success');
         this.loadCategoriesAndCards();
         this.loadDashboard();
       },
-      error: err => console.error('Erro ao criar categoria:', err)
+      error: err => {
+        console.error('Erro ao criar categoria:', err);
+        this.showToast('Erro ao criar categoria.', 'error');
+      }
     });
   }
 
@@ -626,42 +725,62 @@ export class FinanceDashboardComponent implements OnInit {
 
   saveEditCategory(): void {
     if (!this.editingCategory || !this.editingCategory.name.trim()) return;
+    const catName = this.editingCategory.name.trim();
     this.financeApi.updateCategory(this.editingCategory.id, {
-      name: this.editingCategory.name.trim(),
+      name: catName,
       color: this.editingCategory.color
     }).subscribe({
       next: () => {
         this.editingCategory = null;
+        this.showToast(`Categoria "${catName}" atualizada!`, 'success');
         this.loadCategoriesAndCards();
         this.loadDashboard();
       },
-      error: err => console.error('Erro ao atualizar categoria:', err)
+      error: err => {
+        console.error('Erro ao atualizar categoria:', err);
+        this.showToast('Erro ao atualizar categoria.', 'error');
+      }
     });
   }
 
   deleteCategory(cat: FinanceCategory): void {
-    if (confirm(`Deseja excluir a categoria "${cat.name}"? As despesas associadas passarão para "Outros".`)) {
-      this.financeApi.deleteCategory(cat.id).subscribe({
-        next: () => {
-          this.loadCategoriesAndCards();
-          this.loadDashboard();
-        },
-        error: err => console.error('Erro ao deletar categoria:', err)
-      });
-    }
+    this.openConfirmDialog({
+      title: 'Excluir Categoria',
+      message: `Deseja excluir a categoria "${cat.name}"? As despesas associadas passarão para "Outros".`,
+      confirmButtonText: 'Sim, Excluir',
+      isDanger: true,
+      onConfirm: () => {
+        this.financeApi.deleteCategory(cat.id).subscribe({
+          next: () => {
+            this.showToast(`Categoria "${cat.name}" excluída com sucesso!`, 'success');
+            this.loadCategoriesAndCards();
+            this.loadDashboard();
+          },
+          error: err => {
+            console.error('Erro ao deletar categoria:', err);
+            this.showToast('Erro ao excluir categoria.', 'error');
+          }
+        });
+      }
+    });
   }
 
   addCard(): void {
     if (!this.newCardName.trim()) return;
+    const cardName = this.newCardName.trim();
     this.financeApi.createCard({
-      name: this.newCardName.trim(),
+      name: cardName,
       type: this.newCardType
     }).subscribe({
       next: () => {
         this.newCardName = '';
+        this.showToast(`Cartão "${cardName}" cadastrado com sucesso!`, 'success');
         this.loadCategoriesAndCards();
       },
-      error: err => console.error('Erro ao cadastrar cartão:', err)
+      error: err => {
+        console.error('Erro ao cadastrar cartão:', err);
+        this.showToast('Erro ao cadastrar cartão.', 'error');
+      }
     });
   }
 
@@ -671,33 +790,56 @@ export class FinanceDashboardComponent implements OnInit {
 
   saveEditCard(): void {
     if (!this.editingCard || !this.editingCard.name.trim()) return;
+    const name = this.editingCard.name.trim();
     this.financeApi.updateCard(this.editingCard.id, {
-      name: this.editingCard.name.trim(),
+      name,
       type: this.editingCard.type
     }).subscribe({
       next: () => {
         this.editingCard = null;
+        this.showToast(`Cartão "${name}" atualizado!`, 'success');
         this.loadCategoriesAndCards();
       },
-      error: err => console.error('Erro ao atualizar cartão:', err)
+      error: err => {
+        console.error('Erro ao atualizar cartão:', err);
+        this.showToast('Erro ao atualizar cartão.', 'error');
+      }
     });
   }
 
   deleteCard(card: FinanceCard): void {
-    if (confirm(`Deseja remover o cartão "${card.name}"?`)) {
-      this.financeApi.deleteCard(card.id).subscribe({
-        next: () => this.loadCategoriesAndCards(),
-        error: err => console.error('Erro ao deletar cartão:', err)
-      });
-    }
+    this.openConfirmDialog({
+      title: 'Remover Cartão',
+      message: `Deseja realmente remover o cartão "${card.name}"?`,
+      confirmButtonText: 'Sim, Remover',
+      isDanger: true,
+      onConfirm: () => {
+        this.financeApi.deleteCard(card.id).subscribe({
+          next: () => {
+            this.showToast(`Cartão "${card.name}" removido!`, 'success');
+            this.loadCategoriesAndCards();
+          },
+          error: err => {
+            console.error('Erro ao deletar cartão:', err);
+            this.showToast('Erro ao remover cartão.', 'error');
+          }
+        });
+      }
+    });
   }
 
   // --- Ações de Limpeza e Importação ---
 
   clearPeriodTransactions(): void {
-    if (confirm(`Atenção: Deseja realmente limpar os lançamentos de ${this.tabTitle} para ${this.currentMonthLabel}?`)) {
-      alert('Para sua segurança, a exclusão em lote no Firestore requer confirmação individual ou script de migração seguro.');
-    }
+    this.openConfirmDialog({
+      title: 'Limpar Lançamentos',
+      message: `Atenção: Deseja realmente limpar os lançamentos de ${this.tabTitle} para ${this.currentMonthLabel}? Para sua segurança, esta ação requer confirmação.`,
+      confirmButtonText: 'Entendi',
+      isDanger: false,
+      onConfirm: () => {
+        this.showToast('Operação de limpeza em lote protegida pelo sistema.', 'info');
+      }
+    });
   }
 
   openImportModal(): void {

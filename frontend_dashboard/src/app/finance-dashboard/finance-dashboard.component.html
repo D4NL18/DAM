@@ -709,3 +709,43 @@
     </div>
   </div>
 </div>
+
+<!-- ================= MODAL DE CONFIRMAÇÃO ELEGANTE ================= -->
+<div class="dam-modal-backdrop confirm-modal-backdrop" *ngIf="confirmModal.isOpen">
+  <div class="dam-modal confirm-modal-card">
+    <div class="confirm-icon-circle" [class.danger]="confirmModal.isDanger" [class.warning]="!confirmModal.isDanger">
+      <span class="material-symbols-outlined">{{ confirmModal.isDanger ? 'delete' : 'info' }}</span>
+    </div>
+
+    <h3 class="confirm-modal-title">{{ confirmModal.title }}</h3>
+    <p class="confirm-modal-message">{{ confirmModal.message }}</p>
+
+    <div class="confirm-modal-actions">
+      <button
+        type="button"
+        class="dam-btn ghost"
+        (click)="onConfirmDialogCancel()">
+        {{ confirmModal.cancelButtonText }}
+      </button>
+      <button
+        type="button"
+        class="dam-btn"
+        [class.danger-btn]="confirmModal.isDanger"
+        [class.primary]="!confirmModal.isDanger"
+        (click)="onConfirmDialogProceed()">
+        {{ confirmModal.confirmButtonText }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TOAST NOTIFICATIONS (FEEDBACKS) ================= -->
+<div class="dam-toast-wrapper" *ngIf="toastNotification.show">
+  <div class="dam-toast-pill" [ngClass]="toastNotification.type">
+    <span class="material-symbols-outlined toast-icon">
+      {{ toastNotification.type === 'success' ? 'check_circle' : (toastNotification.type === 'error' ? 'error' : (toastNotification.type === 'warning' ? 'warning' : 'info')) }}
+    </span>
+    <span class="toast-text">{{ toastNotification.message }}</span>
+    <button class="toast-dismiss-btn" (click)="closeToast()" title="Fechar">✕</button>
+  </div>
+</div>

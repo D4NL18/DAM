@@ -2,9 +2,9 @@
 
 ## Status da Feature Ativa
 - **Feature:** GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real)
-- **Branch:** `feature/GP-04.2-reminders-anime-fixes`
+- **Branch:** `main` (Mergeado via PR #5)
 - **Início:** 2026-09-09
-- **Status da Feature:** Concluída (GP-04.2 pronta para PR em `develop`)
+- **Status da Feature:** Concluída e em Produção na VM `dam-server` (GCP)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [x] **1. Quebra de Escopo (Product Owner)**

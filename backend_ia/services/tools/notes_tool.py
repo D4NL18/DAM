@@ -218,19 +218,41 @@ def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
 
 
 def _filtrar_lembretes_por_data(lembretes: List[Dict[str, Any]], data_alvo: str) -> List[Dict[str, Any]]:
-    """Filtra lembretes cuja data/hora contenha o prefixo de data alvo."""
-    return [item for item in lembretes if data_alvo in str(item.get("data_hora_lembrete", ""))]
+    """
+    Filtra lembretes cuja data/hora coincida estritamente com a data alvo informada (YYYY-MM-DD).
+    Regra mandatória: SE NÃO FOR PRA HOJE / DATA ALVO, NÃO É PRA MOSTRAR!
+    Suporta tanto formato ISO (YYYY-MM-DD) quanto formato brasileiro (DD/MM/YYYY).
+    """
+    if not data_alvo:
+        return []
+    data_iso = str(data_alvo)[:10]
+    data_br = ""
+    try:
+        dt = datetime.strptime(data_iso, "%Y-%m-%d")
+        data_br = dt.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+
+    filtrados = []
+    for item in lembretes:
+        d_str = str(item.get("data_hora_lembrete", "")).strip()
+        if not d_str:
+            continue
+        if data_iso in d_str or (data_br and data_br in d_str):
+            filtrados.append(item)
+    return filtrados
 
 
 def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Optional[str] = None) -> str:
     """
+    REGRA MANDATÓRIA: SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR!
     Lista os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
-    Por padrão (apenas_hoje=True), lista estritamente os lembretes agendados para o dia corrente
-    no fuso horário de Brasília (UTC-3).
-    Caso o usuário deseje visualizar todos os lembretes (incluindo datas futuras), informe apenas_hoje=False.
+    Por padrão rigoroso (apenas_hoje=True), lista estritamente os lembretes agendados para o dia de HOJE
+    no fuso horário de Brasília (UTC-3). Lembretes de outras datas ou datas futuras NUNCA são retornados por padrão.
+    Caso o usuário deseje explicitamente visualizar lembretes futuros ou todos os lembretes, informe apenas_hoje=False.
 
     Args:
-        apenas_hoje (bool, opcional): Se True (padrão), filtra apenas para a data de hoje. Se False, lista todos.
+        apenas_hoje (bool, opcional): Se True (padrão absoluto), filtra estritamente para a data de hoje. Se False, lista todos.
         data_referencia (str, opcional): Data específica no formato 'YYYY-MM-DD' para filtro.
     """
     todos = _obter_todos_itens()

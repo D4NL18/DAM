@@ -118,6 +118,115 @@ def _calcular_tempo_restante(segundos_restantes: int) -> str:
     return " em " + " e ".join(partes) if partes else " em instantes"
 
 
+def _renovar_proximos_episodios_expirados(forcar: bool = False) -> None:
+    """
+    Verifica se algum anime da watchlist em status 'assistindo' possui o campo
+    'proximo_episodio.airing_at' com data no passado (expirado).
+    Caso encontre animes com episódio já exibido ou se forcar=True, executa consulta
+    GraphQL no AniList para atualizar os próximos episódios em memória e no Firestore.
+    """
+    agora_ts = int(datetime.now(timezone.utc).timestamp())
+    animes = list(_MEMORY_WATCHLIST.values())
+
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("anime_watchlist").stream()
+            db_animes = [d.to_dict() for d in docs]
+            if db_animes:
+                animes = db_animes
+        except Exception as e:
+            logger.warning(f"Erro ao ler anime_watchlist para checar expiracao: {e}")
+
+    precisa_renovar = forcar
+    if not precisa_renovar:
+        for a in animes:
+            if a.get("status_usuario", "").lower() == "assistindo":
+                pep = a.get("proximo_episodio")
+                if pep and isinstance(pep, dict):
+                    airing_at = pep.get("airing_at")
+                    if airing_at and airing_at <= agora_ts:
+                        precisa_renovar = True
+                        break
+
+    if not precisa_renovar:
+        return
+
+    user = (settings.ANILIST_USERNAME or "Tonho123").strip()
+    graphql_query = """
+    query ($userName: String) {
+      MediaListCollection (userName: $userName, type: ANIME, status: CURRENT) {
+        lists {
+          entries {
+            progress
+            media {
+              id
+              title {
+                romaji
+                english
+              }
+              status
+              episodes
+              nextAiringEpisode {
+                airingAt
+                timeUntilAiring
+                episode
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    try:
+        data = _consultar_anilist_graphql(graphql_query, {"userName": user})
+        if not data:
+            return
+        collection = data.get("MediaListCollection", {})
+        lists = collection.get("lists", [])
+        for lst in lists:
+            for entry in lst.get("entries", []):
+                media = entry.get("media")
+                if not media:
+                    continue
+                doc_id = str(media["id"])
+                nep = media.get("nextAiringEpisode")
+                proximo_ep = None
+                if nep:
+                    proximo_ep = {
+                        "episodio": nep["episode"],
+                        "airing_at": nep["airingAt"],
+                        "data_formatada": _format_timestamp_br(nep["airingAt"]),
+                        "tempo_restante_segundos": nep["timeUntilAiring"]
+                    }
+
+                if doc_id in _MEMORY_WATCHLIST:
+                    _MEMORY_WATCHLIST[doc_id]["proximo_episodio"] = proximo_ep
+                    _MEMORY_WATCHLIST[doc_id]["status_transmissao"] = media.get("status", "DESCONHECIDO")
+                    _MEMORY_WATCHLIST[doc_id]["ultimo_episodio_visto"] = int(entry.get("progress", 0))
+                    _MEMORY_WATCHLIST[doc_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                else:
+                    _MEMORY_WATCHLIST[doc_id] = {
+                        "anilist_id": media["id"],
+                        "titulo_principal": media["title"]["romaji"] or media["title"]["english"] or "Anime",
+                        "titulo_ingles": media["title"]["english"] or "Anime",
+                        "status_transmissao": media.get("status", "DESCONHECIDO"),
+                        "total_episodios": media.get("episodes"),
+                        "status_usuario": "assistindo",
+                        "ultimo_episodio_visto": int(entry.get("progress", 0)),
+                        "proximo_episodio": proximo_ep,
+                        "origem": "AniList Sync",
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+
+                if firebase.db is not None:
+                    try:
+                        firebase.db.collection("anime_watchlist").document(doc_id).set(_MEMORY_WATCHLIST[doc_id], merge=True)
+                    except Exception as err:
+                        logger.error(f"Erro ao persistir renovacao de anime no Firestore: {err}")
+    except Exception as e:
+        logger.error(f"Erro ao renovar episodios expirados via AniList: {e}")
+
+
 def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
     """
     Sincroniza a lista pessoal de animes diretamente do perfil público do AniList.
@@ -974,6 +1083,11 @@ def grade_semanal_animes() -> str:
     Monta a grade semanal de lançamentos de episódios dos animes que estão na sua lista.
     Organiza os animes por dia da semana (Segunda a Domingo) com o horário de lançamento no fuso de Brasília.
     """
+    try:
+        _renovar_proximos_episodios_expirados()
+    except Exception as e:
+        logger.warning(f"Erro ao verificar renovação de animes para grade semanal: {e}")
+
     animes = list(_MEMORY_WATCHLIST.values())
 
     if firebase.db is not None:

@@ -10,7 +10,7 @@ from services.user_context import UserContext, resolve_user_from_phone
 from services.tools.calendar_tool import consultar_agenda
 from services.tools.notes_tool import listar_lembretes_pendentes
 from services.tools.esports_tool import consultar_jogos_cs2, obter_partidas_estruturadas_cs2
-from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST
+from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST, _renovar_proximos_episodios_expirados
 from services.tools.clash_of_clans_tool import _fetch_coc_data, _encode_tag, _verificar_raid_season, _verificar_clan_war
 
 logger = logging.getLogger(__name__)
@@ -233,6 +233,11 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     """Identifica animes cadastrados na watchlist do usuário que lançam episódio hoje."""
     hoje = _obter_data_brasilia(data_hoje)
     hoje_data_str = hoje.strftime("%Y-%m-%d")
+
+    try:
+        _renovar_proximos_episodios_expirados()
+    except Exception as e:
+        logger.warning(f"Erro ao verificar renovação de episódios para briefing: {e}")
 
     animes_memoria = list(_MEMORY_WATCHLIST.values())
 
@@ -595,27 +600,81 @@ def _obter_todos_usuarios_briefing() -> List[str]:
     return usuarios
 
 
-def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool) -> bool:
-    """Verifica preferências e dispara o briefing caso o horário coincida."""
+def _normalizar_horario(horario: str) -> str:
+    """Normaliza horário para o formato HH:MM com zero à esquerda."""
+    partes = str(horario or "08:00").strip().split(":")
+    h = partes[0].zfill(2)
+    m = partes[1].zfill(2) if len(partes) > 1 else "00"
+    return f"{h}:{m}"
+
+
+def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool, permitir_catchup: bool = False) -> bool:
+    """Verifica preferências e dispara o briefing caso o horário coincida ou se precisar de catch-up matinal."""
     try:
         prefs = obter_preferencias_briefing(uid)
         if not prefs.get("ativo", True):
             return False
 
-        horario_user = str(prefs.get("horario", "08:00")).strip()
-        if horario_user == hora_minuto:
+        horario_user = _normalizar_horario(prefs.get("horario", "08:00"))
+        hora_alvo = _normalizar_horario(hora_minuto)
+
+        # Se for disparo forçado, dispara se o horário coincidir
+        if force:
+            if horario_user == hora_alvo:
+                enviar_briefing_matinal(force=True, user_id=uid)
+                return True
+            return False
+
+        # 1. Disparo no minuto exato configurado
+        if horario_user == hora_alvo:
             logger.info("Disparando briefing matinal para %s no horário configurado (%s).", uid, horario_user)
-            enviar_briefing_matinal(force=force, user_id=uid)
-            return True
+            res = enviar_briefing_matinal(force=False, user_id=uid)
+            return "✅" in res or "sucesso" in res.lower()
+
+        # 2. Catch-up matinal resiliente (se habilitado pelo background worker):
+        # Dispara se estiver dentro do período matinal (entre horário do usuário e 12:00)
+        # e o briefing ainda NÃO tiver sido enviado hoje (ex: servidor reiniciou ou estava desligado no minuto exato)
+        if permitir_catchup and horario_user < hora_alvo < "12:00":
+            hoje = _obter_data_brasilia()
+            hoje_str = hoje.strftime("%Y-%m-%d")
+            chave_user = f"{hoje_str}_{uid}"
+
+            ja_enviado = (chave_user in _MEMORY_BRIEFING_LOGS) or (uid == "daniel" and hoje_str in _MEMORY_BRIEFING_LOGS)
+            if not ja_enviado and firebase.db is not None:
+                try:
+                    doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
+                    if doc.exists and doc.to_dict().get("status") == "sucesso":
+                        _MEMORY_BRIEFING_LOGS.add(chave_user)
+                        ja_enviado = True
+                    elif uid == "daniel":
+                        doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
+                        if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
+                            _MEMORY_BRIEFING_LOGS.add(hoje_str)
+                            ja_enviado = True
+                except Exception:
+                    pass
+
+            if not ja_enviado:
+                logger.info(
+                    "Catch-up matinal: briefing de %s não foi enviado no minuto %s e horário atual (%s) está dentro da manhã. Disparando...",
+                    uid, horario_user, hora_alvo
+                )
+                res = enviar_briefing_matinal(force=False, user_id=uid)
+                return "✅" in res or "sucesso" in res.lower()
+
     except Exception:
         logger.exception("Erro ao disparar briefing agendado para %s", uid)
     return False
 
 
-def verificar_e_disparar_briefings_agendados(hora_minuto: Optional[str] = None, force: bool = False) -> List[str]:
+def verificar_e_disparar_briefings_agendados(
+    hora_minuto: Optional[str] = None,
+    force: bool = False,
+    permitir_catchup: bool = False
+) -> List[str]:
     """
     P-0417: Avalia usuários cadastrados e dispara o briefing para aqueles cujo horário
-    configurado coincidir com hora_minuto.
+    configurado coincidir com hora_minuto (ou catch-up matinal se habilitado).
     Retorna a lista de user_ids para os quais o disparo foi efetuado.
     """
     if not hora_minuto:
@@ -627,7 +686,7 @@ def verificar_e_disparar_briefings_agendados(hora_minuto: Optional[str] = None, 
 
     disparados = []
     for uid in usuarios_alvo:
-        if _disparar_briefing_se_horario_correto(uid, hora_alvo, force):
+        if _disparar_briefing_se_horario_correto(uid, hora_alvo, force, permitir_catchup):
             disparados.append(uid)
 
     return disparados
@@ -676,7 +735,11 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
 
     remote_jid = f"{telefone}@s.whatsapp.net"
     try:
-        WhatsAppService.send_text(remote_jid, mensagem)
+        resp = WhatsAppService.send_text(remote_jid, mensagem)
+        if not resp:
+            logger.error(f"Erro: WhatsAppService não confirmou envio do briefing para {remote_jid} ({target_user_name}).")
+            return f"Erro ao enviar briefing matinal via WhatsApp para {target_user_name}: envio não confirmado pela Evolution API."
+
         logger.info(f"Briefing matinal enviado com sucesso para {remote_jid} ({target_user_name}).")
 
         # Registra sucesso

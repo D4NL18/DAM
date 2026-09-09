@@ -357,3 +357,38 @@ class TestStory4MultiUserBriefing:
         enviados_0800 = verificar_e_disparar_briefings_agendados(hora_minuto="08:00")
         assert "daniel" in enviados_0800
         assert "lari" not in enviados_0800
+
+    @patch("services.briefing_service.enviar_briefing_matinal")
+    def test_verificar_e_disparar_briefings_catchup_matinal(self, mock_enviar):
+        """Dispara catch-up matinal caso o usuário tenha horário anterior e ainda não tenha recebido hoje."""
+        salvar_preferencias_briefing("lari", {
+            "userId": "lari",
+            "horario": "06:00",
+            "ativo": True
+        })
+        salvar_preferencias_briefing("daniel", {
+            "userId": "daniel",
+            "horario": "08:00",
+            "ativo": True
+        })
+
+        mock_enviar.return_value = "✅ Enviado com sucesso"
+        from services.briefing_service import verificar_e_disparar_briefings_agendados, _MEMORY_BRIEFING_LOGS
+        _MEMORY_BRIEFING_LOGS.clear()
+
+        # Às 06:15 com permitir_catchup=True, Lari (06:00) deve ser acionada via catch-up
+        enviados = verificar_e_disparar_briefings_agendados(hora_minuto="06:15", permitir_catchup=True)
+        assert "lari" in enviados
+        assert "daniel" not in enviados
+
+    @patch("services.briefing_service.WhatsAppService.send_text")
+    def test_enviar_briefing_falha_evolution_api_nao_registra_sucesso(self, mock_send):
+        """Se a Evolution API falhar (retornar None), não deve registrar sucesso nem idempotência."""
+        mock_send.return_value = None
+        from services.briefing_service import enviar_briefing_matinal, _MEMORY_BRIEFING_LOGS
+        _MEMORY_BRIEFING_LOGS.clear()
+
+        res = enviar_briefing_matinal(force=True, user_id="lari")
+        assert "Erro" in res
+        assert not any("lari" in k for k in _MEMORY_BRIEFING_LOGS)
+

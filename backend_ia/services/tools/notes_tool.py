@@ -77,21 +77,37 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
 
 
 
-def criar_anotacao(titulo: str, conteudo: str, tags: Optional[List[str]] = None) -> str:
+def _extrair_tokens_tags(dado: Any) -> List[str]:
+    """Extrai recursivamente tokens válidos de tags de strings ou listas aninhadas."""
+    if isinstance(dado, str):
+        return [t.lower() for t in TAG_TOKEN_PATTERN.findall(dado)]
+    if isinstance(dado, (list, tuple, set)):
+        tokens: List[str] = []
+        for item in dado:
+            tokens.extend(_extrair_tokens_tags(item))
+        return tokens
+    return []
+
+
+def _formatar_tags_exibicao(tags_raw: Any) -> str:
+    """Higieniza e formata tags para exibição limpa sem aninhamentos de arrays ou strings."""
+    if not tags_raw:
+        return ""
+    tokens = _extrair_tokens_tags(tags_raw)
+    tags_unicas = list(dict.fromkeys(tokens))
+    return f" [#{' #'.join(tags_unicas)}]" if tags_unicas else ""
+
+
+def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> str:
     """
     Cria e salva uma anotação de conhecimento pessoal na coleção 'notes_reminders'.
 
     Args:
         titulo (str): Título conciso da anotação.
         conteudo (str): Conteúdo descritivo ou corpo da anotação.
-        tags (list[str], opcional): Lista de etiquetas para categorização (ex: ['trabalho', 'ideias']).
+        tags (list[str] ou str, opcional): Lista ou string de etiquetas para categorização (ex: ['trabalho', 'ideias']).
     """
-    if tags is None:
-        tags_limpas = []
-    elif isinstance(tags, list):
-        tags_limpas = [str(t).strip().lower() for t in tags if str(t).strip()]
-    else:
-        tags_limpas = [t.strip().lower() for t in str(tags).split(",") if t.strip()]
+    tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
 
     item = {
         "id": str(uuid.uuid4()),
@@ -104,25 +120,20 @@ def criar_anotacao(titulo: str, conteudo: str, tags: Optional[List[str]] = None)
     }
 
     _salvar_item(item)
-    tags_str = f" [#{' #'.join(tags_limpas)}]" if tags_limpas else ""
+    tags_str = _formatar_tags_exibicao(tags_limpas)
     return f"📝 Anotação '{item['titulo']}' salva com sucesso!{tags_str} (ID: {item['id'][:8]})"
 
 
-def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[List[str]] = None) -> str:
+def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[Any] = None) -> str:
     """
     Cria um lembrete com data/hora para notificação e salva na coleção 'notes_reminders' com status 'pendente'.
 
     Args:
         titulo (str): Descrição ou assunto do lembrete.
         data_hora_lembrete (str): Data e horário do lembrete (ex: '2026-09-04 15:00' ou 'Amanhã às 10h').
-        tags (list[str], opcional): Lista de categorias/etiquetas do lembrete.
+        tags (list[str] ou str, opcional): Lista de categorias/etiquetas do lembrete.
     """
-    if tags is None:
-        tags_limpas = []
-    elif isinstance(tags, list):
-        tags_limpas = [str(t).strip().lower() for t in tags if str(t).strip()]
-    else:
-        tags_limpas = [t.strip().lower() for t in str(tags).split(",") if t.strip()]
+    tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
 
     item = {
         "id": str(uuid.uuid4()),
@@ -136,7 +147,7 @@ def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[List[str
     }
 
     _salvar_item(item)
-    tags_str = f" [#{' #'.join(tags_limpas)}]" if tags_limpas else ""
+    tags_str = _formatar_tags_exibicao(tags_limpas)
     return (
         f"⏰ Lembrete agendado com sucesso!\n"
         f"• **Assunto:** {item['titulo']}{tags_str}\n"
@@ -198,27 +209,6 @@ def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> 
     return "\n\n".join(linhas)
 
 
-def _extrair_tokens_tags(dado: Any) -> List[str]:
-    """Extrai recursivamente tokens válidos de tags de strings ou listas aninhadas."""
-    if isinstance(dado, str):
-        return [t.lower() for t in TAG_TOKEN_PATTERN.findall(dado)]
-    if isinstance(dado, (list, tuple, set)):
-        tokens: List[str] = []
-        for item in dado:
-            tokens.extend(_extrair_tokens_tags(item))
-        return tokens
-    return []
-
-
-def _formatar_tags_exibicao(tags_raw: Any) -> str:
-    """Higieniza e formata tags para exibição limpa sem aninhamentos de arrays ou strings."""
-    if not tags_raw:
-        return ""
-    tokens = _extrair_tokens_tags(tags_raw)
-    tags_unicas = list(dict.fromkeys(tokens))
-    return f" [#{' #'.join(tags_unicas)}]" if tags_unicas else ""
-
-
 def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
     """Retorna a string YYYY-MM-DD da data de referência informada ou de hoje em Brasília."""
     if data_referencia:
@@ -228,14 +218,42 @@ def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
 
 
 def _filtrar_lembretes_por_data(lembretes: List[Dict[str, Any]], data_alvo: str) -> List[Dict[str, Any]]:
-    """Filtra lembretes cuja data/hora contenha o prefixo de data alvo."""
-    return [item for item in lembretes if data_alvo in str(item.get("data_hora_lembrete", ""))]
-
-
-def listar_lembretes_pendentes(apenas_hoje: bool = False, data_referencia: Optional[str] = None) -> str:
     """
+    Filtra lembretes cuja data/hora coincida estritamente com a data alvo informada (YYYY-MM-DD).
+    Regra mandatória: SE NÃO FOR PRA HOJE / DATA ALVO, NÃO É PRA MOSTRAR!
+    Suporta tanto formato ISO (YYYY-MM-DD) quanto formato brasileiro (DD/MM/YYYY).
+    """
+    if not data_alvo:
+        return []
+    data_iso = str(data_alvo)[:10]
+    data_br = ""
+    try:
+        dt = datetime.strptime(data_iso, "%Y-%m-%d")
+        data_br = dt.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+
+    filtrados = []
+    for item in lembretes:
+        d_str = str(item.get("data_hora_lembrete", "")).strip()
+        if not d_str:
+            continue
+        if data_iso in d_str or (data_br and data_br in d_str):
+            filtrados.append(item)
+    return filtrados
+
+
+def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Optional[str] = None) -> str:
+    """
+    REGRA MANDATÓRIA: SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR!
     Lista os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
-    Pode filtrar opcionalmente apenas para o dia corrente ou data de referência informada.
+    Por padrão rigoroso (apenas_hoje=True), lista estritamente os lembretes agendados para o dia de HOJE
+    no fuso horário de Brasília (UTC-3). Lembretes de outras datas ou datas futuras NUNCA são retornados por padrão.
+    Caso o usuário deseje explicitamente visualizar lembretes futuros ou todos os lembretes, informe apenas_hoje=False.
+
+    Args:
+        apenas_hoje (bool, opcional): Se True (padrão absoluto), filtra estritamente para a data de hoje. Se False, lista todos.
+        data_referencia (str, opcional): Data específica no formato 'YYYY-MM-DD' para filtro.
     """
     todos = _obter_todos_itens()
     lembretes = [

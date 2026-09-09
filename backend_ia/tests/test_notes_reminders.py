@@ -86,7 +86,7 @@ class TestFase9Notes(unittest.TestCase):
         criar_lembrete("Consulta Médica", "2026-09-08 09:00", ["saude"])
         criar_lembrete("Pagar IPVA", "2026-09-05 10:00", ["financas"])
 
-        resultado = listar_lembretes_pendentes()
+        resultado = listar_lembretes_pendentes(apenas_hoje=False)
         self.assertIn("Lembretes Pendentes (2)", resultado)
         self.assertIn("Pagar IPVA", resultado)
         self.assertIn("Consulta Médica", resultado)

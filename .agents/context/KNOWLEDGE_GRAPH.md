@@ -162,5 +162,41 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Scheduler roda minuto a minuto avaliando as preferências de cada usuário ativo (`daniel`, `lari`, etc.) via `verificar_e_disparar_briefings_agendados`, disparando os briefings no horário exato configurado por cada um.
   - `montar_resumo_matinal` e `enviar_briefing_matinal` chaveiam o `UserContext.set_user(target_user_id)` com bloco seguro `try/finally`, assegurando que agenda, lembretes e dados de saúde de Daniel e Lari permaneçam 100% isolados sem vazamentos cruzados.
 
+## GP-04.2: Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real [P-0419 a P-0421]
+- **Lembretes Diários por Padrão (P-0419):**
+  - A ferramenta `listar_lembretes_pendentes` opera com `apenas_hoje=True` por padrão, garantindo que consultas gerais de lembretes tragam estritamente pendências do dia corrente (UTC-3), preservando a privacidade e relevância temporal. Listagem de tarefas futuras ou completas exige agora o parâmetro explícito `apenas_hoje=False`.
+- **Higienização Defensiva de Tags na Ingestão (P-0420):**
+  - Em `criar_lembrete` e `criar_anotacao`, toda entrada de tags (seja lista, string com vírgula ou string serializada de array como `"['financas', 'claro']"`) é sanitizada via regex `TAG_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_\-]+")`, persistindo listas limpas no Firestore e exibindo formatação limpa `[#financas #claro #recorrente]`. Registros legados no Firestore foram higienizados.
+- **Renovação Autônoma de Próximo Episódio via AniList (P-0421):**
+  - `anime_tracker_tool.py` implementa `_renovar_proximos_episodios_expirados()` que detecta animes em exibição (`assistindo`) com `airing_at` vencido no passado e reconsulta autonomamente o endpoint GraphQL do AniList.
+  - O Morning Briefing (`_obter_info_animes_briefing`) e a grade semanal (`grade_semanal_animes`) acionam a renovação dinâmica, selecionando com precisão os lançamentos reais de domingo (como `Seihantai na Kimi to Boku 2nd Season` às 05:00 e `Mushoku Tensei III` às 12:00) e eliminando qualquer exibição errônea de animes de meses posteriores (`Seishun Buta Yarou` em 15/10).
+
+## FG-06: Dashboard Avançado de Gastos & Gestão de Categorias e Cartões [P-001 a P-013]
+- **Design & Experiência Visual (P-001, P-002, P-006):**
+  - Dashboard Angular reproduz com precisão o design moderno: saudação personalizada, título "Orçamento" com botão de olho para alternar visibilidade (ocultando com `••••••` para privacidade), seletor de mês `< Mês de Ano >` e abas em estilo pílula arredondada (`Receita`, `Despesa fixa`, `Despesa variável`).
+  - Layout dividido em: tabela de lançamentos com badges de categoria coloridos e Donut Chart ECharts com raio customizado e legenda lateral em grid de 2 colunas com percentuais e cores consistentes. Barra inferior fixa com saldo do período em vermelho vibrante.
+- **Granularidade e Filtro de Categorias (P-003, P-007, P-008):**
+  - Paleta com mais de 12 categorias padrão de alta granularidade (Mercado, Carro, Oliver, Casa, Família, Christian, Farmácia, Karen, Gatos, Lazer, Mercadinho, iFood, etc.), com códigos hexadecimais unificados entre tabela e gráfico.
+  - Filtro interativo por categoria via dropdown e clique direto nas fatias do Donut chart.
+- **Gestão Completa de Categorias e Cartões (P-009 a P-012):**
+  - Modal integrado permitindo adicionar novas categorias (com seletor/paleta de cores), renomear e excluir categorias com migração automática para 'Outros'.
+  - Aba de cartões permitindo cadastrar, renomear e excluir métodos de pagamento com tipo (Crédito, Débito/Pix, Benefício, Outro).
+  - Router `/api/v1/finance` no FastAPI com endpoints: `/dashboard` (agregação com suporte a ano, mês, tipo e categoria), `/transactions` (CRUD com suporte a tipo fixa/variável/receita, parcelas e titular), `/categories` (CRUD com fallback para defaults) e `/cards` (CRUD com fallback para defaults).
+  - CORS atualizado permitindo `PUT` e `DELETE`.
+  - Isolamento rigoroso por `X-User-Id` garantindo conformidade SecOps e prevenção contra IDOR.
+
+## FG-07: Evolução Temporal de Gastos e Receitas por Períodos [P-014 a P-020]
+- **Design & Experiência Visual (P-014 a P-017):**
+  - Switcher no cabeçalho permitindo alternar fluidamente entre `Visão Mensal` (FG-06) e `Evolução Temporal` (FG-07).
+  - Barra superior de períodos com pílulas arredondadas: `Mês atual`, `3 meses`, `6 meses`, `12 meses` e `Personalizar` (com modal para datas customizadas).
+  - Card principal de tendências com três KPIs de topo: `● Receita` (bullet verde, valor, badge circular com seta verde, comparativo percentual ou 'Sem período anterior'), `● Gastos` (bullet vermelho, valor, badge circular com seta vermelha) e `Saldo do período`.
+  - Respeito à alternância de privacidade: valores são mascarados com asteriscos `*****` mantendo a estética e cores do design original.
+- **Gráfico de Curvas Suaves ECharts (P-018):**
+  - Gráfico Spline Area com duas séries contínuas: Receitas (linha verde com gradiente de preenchimento vertical suave) e Gastos (linha vermelha com gradiente de preenchimento vertical suave).
+  - Eixo X com siglas de meses em português e eixo Y abreviado em `mil` (ex: `10 mil`, `20 mil`).
+  - Tooltip customizado e interativo com valores em moeda brasileira (`R$`).
+- **Backend & Agregação Temporal (P-019, P-020):**
+  - Endpoint `GET /api/v1/finance/trends` em `backend_ia/routers/finance.py` com agregação cronológica mês a mês, cálculo de balanço mensal e cálculo comparativo contra o período imediatamente anterior.
+  - Isolamento estrito multi-usuário (`X-User-Id`), testes automatizados de unidade e segurança com 100% de cobertura.
 
 

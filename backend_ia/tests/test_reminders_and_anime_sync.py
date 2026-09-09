@@ -107,6 +107,32 @@ class TestRemindersDefaultToToday:
         assert len(itens) == 1
         assert itens[0]["tags"] == ["ideias", "dam"]
 
+    def test_listar_lembretes_pendentes_formato_brasileiro_hoje(self):
+        """P-0419: Lembrete gravado com formato brasileiro DD/MM/YYYY deve ser reconhecido para hoje."""
+        hoje_dt = datetime.now(TZ_BRASILIA)
+        hoje_br = hoje_dt.strftime("%d/%m/%Y")
+        data_br = f"{hoje_br} às 14:30"
+        data_amanha = (hoje_dt + timedelta(days=1)).strftime("%d/%m/%Y") + " 10:00"
+
+        criar_lembrete(titulo="Consulta Médica Hoje", data_hora_lembrete=data_br)
+        criar_lembrete(titulo="Tarefa de Amanhã", data_hora_lembrete=data_amanha)
+
+        resultado = listar_lembretes_pendentes()
+        assert "Consulta Médica Hoje" in resultado
+        assert "Tarefa de Amanhã" not in resultado
+
+    def test_prompts_contem_regra_absoluta_lembretes(self):
+        """P-0419: Valida que system_base e briefing_rules contêm a regra mandatória de lembretes."""
+        from services.prompts.system_base import get_system_base_prompt
+        from services.prompts.briefing_rules import get_briefing_prompt
+
+        base_prompt = get_system_base_prompt("2026-09-09 10:00")
+        briefing_prompt = get_briefing_prompt()
+
+        assert "SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR" in base_prompt
+        assert "SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR" in briefing_prompt
+
+
 
 class TestAnimeTrackerDynamicSync:
     """Testes para P-0421: Renovação dinâmica de próximos episódios e seleção do lançamento de domingo."""

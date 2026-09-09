@@ -88,7 +88,7 @@ export class FinanceDashboardComponent implements OnInit {
     type: 'expense_variable',
     paymentMethod: 'Cartão de Crédito Pessoal',
     installment: '',
-    owner: 'Christian',
+    owner: '',
     date: new Date().toISOString().substring(0, 10)
   };
 
@@ -117,7 +117,7 @@ export class FinanceDashboardComponent implements OnInit {
 
   get userDisplayName(): string {
     const user = this.authService.getCurrentUser();
-    return user?.name || 'Christian';
+    return user?.name || 'Daniel';
   }
 
   get currentMonthLabel(): string {
@@ -526,7 +526,7 @@ export class FinanceDashboardComponent implements OnInit {
       type: this.currentTab,
       paymentMethod: this.cards.length > 0 ? this.cards[0].name : 'Cartão de Crédito Pessoal',
       installment: '',
-      owner: this.userDisplayName,
+      owner: '',
       date: new Date().toISOString().substring(0, 10)
     };
     this.showTransactionModal = true;
@@ -541,7 +541,7 @@ export class FinanceDashboardComponent implements OnInit {
       type: tx.type,
       paymentMethod: tx.paymentMethod || 'Cartão de Crédito Pessoal',
       installment: tx.installment || '',
-      owner: tx.owner || this.userDisplayName,
+      owner: (tx.owner && tx.owner !== 'Christian') ? tx.owner : '',
       date: tx.date ? tx.date.substring(0, 10) : new Date().toISOString().substring(0, 10)
     };
     this.showTransactionModal = true;

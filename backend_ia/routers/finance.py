@@ -16,7 +16,6 @@ DEFAULT_CATEGORIES = [
     {"id": "cat-oliver", "name": "Oliver", "color": "#86efac"},
     {"id": "cat-casa", "name": "Casa", "color": "#15803d"},
     {"id": "cat-familia", "name": "Família", "color": "#22c55e"},
-    {"id": "cat-christian", "name": "Christian", "color": "#1e3a8a"},
     {"id": "cat-farmacia", "name": "Farmácia", "color": "#a855f7"},
     {"id": "cat-karen", "name": "Karen", "color": "#f472b6"},
     {"id": "cat-gatos", "name": "Gatos", "color": "#7e22ce"},
@@ -161,7 +160,7 @@ def get_finance_dashboard(
                         "type": tx_type,
                         "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
                         "installment": data.get("installment"),
-                        "owner": data.get("owner") or "Christian"
+                        "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else ""
                     })
         except Exception as e:
             logger.error(f"Erro ao processar finanças no Firestore: {e}")
@@ -215,7 +214,7 @@ def create_transaction(
         "type": payload.type or "expense_variable",
         "payment_method": payload.paymentMethod or "Cartão de Crédito Pessoal",
         "installment": payload.installment,
-        "owner": payload.owner or "Christian",
+        "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
         "date": date_val,
         "timestamp": datetime.now(timezone.utc),
         "created_at": datetime.now(timezone.utc).isoformat()

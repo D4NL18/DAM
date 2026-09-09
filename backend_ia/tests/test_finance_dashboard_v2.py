@@ -36,7 +36,7 @@ class TestFinanceDashboardV2:
             "type": "expense_variable",
             "payment_method": "Cartão de Crédito Pessoal",
             "installment": "2/3",
-            "owner": "Christian",
+            "owner": "Daniel",
             "date": "2026-04-01T10:00:00Z",
             "userId": "daniel"
         }
@@ -124,7 +124,7 @@ class TestFinanceDashboardV2:
                 "type": "expense_variable",
                 "paymentMethod": "Cartão de Crédito Secundário",
                 "date": "2026-04-01",
-                "owner": "Christian"
+                "owner": "Daniel"
             }
             res_post = client.post("/api/v1/finance/transactions", json=create_payload, headers={"X-User-Id": "daniel"})
             assert res_post.status_code in [200, 201]

@@ -280,9 +280,14 @@
                 <td class="col-date font-mono">{{ tx.date | date:'dd/MM' }}</td>
                 <td class="col-name">
                   <span class="tx-desc">{{ tx.description }}</span>
-                  <span class="tx-details-sep" *ngIf="tx.owner || tx.installment">·</span>
-                  <span class="tx-owner" *ngIf="tx.owner">{{ tx.owner }}</span>
-                  <span class="tx-installment" *ngIf="tx.installment">{{ tx.installment }}</span>
+                  <ng-container *ngIf="tx.owner && tx.owner !== 'Christian'">
+                    <span class="tx-details-sep">·</span>
+                    <span class="tx-owner">{{ tx.owner }}</span>
+                  </ng-container>
+                  <ng-container *ngIf="tx.installment">
+                    <span class="tx-details-sep">·</span>
+                    <span class="tx-installment">{{ tx.installment }}</span>
+                  </ng-container>
                 </td>
                 <td class="col-category">
                   <span class="category-badge-pill">
@@ -488,7 +493,7 @@
             type="text"
             class="dam-input"
             [(ngModel)]="txForm.owner"
-            placeholder="Ex: Christian, Daniel" />
+            placeholder="Ex: Daniel, Lari" />
         </div>
       </div>
     </div>

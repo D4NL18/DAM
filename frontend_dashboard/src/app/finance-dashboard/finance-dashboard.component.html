@@ -11,12 +11,31 @@
       </div>
     </div>
 
+    <!-- Switcher de Visualização: Visão Mensal vs Evolução Temporal -->
+    <div class="header-center">
+      <div class="view-switcher-pill">
+        <button
+          class="switcher-tab"
+          [class.active]="activeView === 'monthly'"
+          (click)="activeView = 'monthly'">
+          Visão Mensal
+        </button>
+        <button
+          class="switcher-tab"
+          [class.active]="activeView === 'trends'"
+          (click)="activeView = 'trends'">
+          Evolução Temporal
+        </button>
+      </div>
+    </div>
+
     <div class="header-right">
       <button class="bell-icon-btn" title="Notificações">
         <span class="material-symbols-outlined">notifications</span>
       </button>
 
-      <div class="month-navigator-pill">
+      <!-- Seletor de Mês (apenas na Visão Mensal) -->
+      <div class="month-navigator-pill" *ngIf="activeView === 'monthly'">
         <button class="nav-chevron-btn" (click)="prevMonth()" title="Mês anterior">
           <span class="material-symbols-outlined">chevron_left</span>
         </button>
@@ -28,219 +47,345 @@
     </div>
   </header>
 
-  <!-- Segmented Tabs & Sub-actions -->
-  <div class="navigation-tabs-bar">
-    <div class="segmented-pill-tabs">
-      <button
-        class="pill-tab"
-        [class.active]="currentTab === 'income'"
-        (click)="setTab('income')">
-        Receita
-      </button>
-      <button
-        class="pill-tab"
-        [class.active]="currentTab === 'expense_fixed'"
-        (click)="setTab('expense_fixed')">
-        Despesa fixa
-      </button>
-      <button
-        class="pill-tab"
-        [class.active]="currentTab === 'expense_variable'"
-        (click)="setTab('expense_variable')">
-        Despesa variável
-      </button>
+  <!-- ================= SEÇÃO: EVOLUÇÃO TEMPORAL (FG-07) ================= -->
+  <div class="trends-view-container" *ngIf="activeView === 'trends'">
+    <!-- Barra de Seleção de Períodos -->
+    <div class="trends-periods-bar">
+      <div class="period-pills-group">
+        <button
+          class="period-pill"
+          [class.active]="trendPeriod === 'current_month'"
+          (click)="setTrendPeriod('current_month')">
+          Mês atual
+        </button>
+        <button
+          class="period-pill"
+          [class.active]="trendPeriod === '3m'"
+          (click)="setTrendPeriod('3m')">
+          3 meses
+        </button>
+        <button
+          class="period-pill"
+          [class.active]="trendPeriod === '6m'"
+          (click)="setTrendPeriod('6m')">
+          6 meses
+        </button>
+        <button
+          class="period-pill"
+          [class.active]="trendPeriod === '12m'"
+          (click)="setTrendPeriod('12m')">
+          12 meses
+        </button>
+        <button
+          class="period-pill"
+          [class.active]="trendPeriod === 'custom'"
+          (click)="setTrendPeriod('custom')">
+          Personalizar
+        </button>
+      </div>
+
+      <div class="comparison-context-text" *ngIf="trendData?.comparison">
+        <span>{{ trendData!.comparison.comparisonText }}</span>
+      </div>
     </div>
 
-    <div class="quick-action-btns">
-      <button class="action-pill-btn" (click)="openImportModal()">
-        <span class="material-symbols-outlined">upload</span>
-        <span>Importar extrato</span>
-      </button>
-      <button class="action-pill-btn danger" (click)="clearPeriodTransactions()">
-        <span class="material-symbols-outlined">delete_outline</span>
-        <span>Limpar lançamentos</span>
-      </button>
+    <!-- Card Principal de Tendências -->
+    <div class="panel-card trend-main-card" *ngIf="!trendLoading; else trendSkeleton">
+      <!-- Top KPIs Row -->
+      <div class="trend-kpis-row">
+        <!-- KPI Receita -->
+        <div class="trend-kpi-item">
+          <div class="kpi-bullet-label">
+            <span class="kpi-bullet green"></span>
+            <span class="kpi-title">Receita</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value" [class.stars]="hideValues">
+              <ng-container *ngIf="!hideValues">{{ trendData?.totalIncome | currency:'BRL':'symbol':'1.2-2' }}</ng-container>
+              <ng-container *ngIf="hideValues">*****</ng-container>
+            </span>
+            <span class="kpi-arrow-badge green">
+              <span class="material-symbols-outlined">arrow_upward</span>
+            </span>
+          </div>
+          <span class="kpi-sub-note" *ngIf="trendData?.comparison?.hasPreviousPeriod">
+            +{{ trendData?.comparison?.incomeChangePct }}% vs período anterior
+          </span>
+          <span class="kpi-sub-note" *ngIf="!trendData?.comparison?.hasPreviousPeriod">
+            Sem período anterior
+          </span>
+        </div>
+
+        <!-- KPI Gastos -->
+        <div class="trend-kpi-item">
+          <div class="kpi-bullet-label">
+            <span class="kpi-bullet red"></span>
+            <span class="kpi-title">Gastos</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value red-stars" [class.stars]="hideValues">
+              <ng-container *ngIf="!hideValues">{{ trendData?.totalExpenses | currency:'BRL':'symbol':'1.2-2' }}</ng-container>
+              <ng-container *ngIf="hideValues">*****</ng-container>
+            </span>
+            <span class="kpi-arrow-badge red">
+              <span class="material-symbols-outlined">arrow_upward</span>
+            </span>
+          </div>
+          <span class="kpi-sub-note" *ngIf="trendData?.comparison?.hasPreviousPeriod">
+            +{{ trendData?.comparison?.expenseChangePct }}% vs período anterior
+          </span>
+          <span class="kpi-sub-note" *ngIf="!trendData?.comparison?.hasPreviousPeriod">
+            Sem período anterior
+          </span>
+        </div>
+      </div>
+
+      <!-- Linha de Saldo do Período -->
+      <div class="period-balance-header-row">
+        <span class="balance-title">Saldo do período</span>
+        <span class="balance-value-stars">
+          <ng-container *ngIf="!hideValues">
+            <span [class.positive]="trendData && trendData.periodBalance >= 0" [class.negative]="trendData && trendData.periodBalance < 0">
+              {{ trendData?.periodBalance | currency:'BRL':'symbol':'1.2-2' }}
+            </span>
+          </ng-container>
+          <ng-container *ngIf="hideValues">
+            <span class="stars green">*****</span>
+          </ng-container>
+        </span>
+      </div>
+
+      <!-- Gráfico de Curvas Suaves (Spline Area) -->
+      <div class="trend-chart-wrapper">
+        <div echarts [options]="trendChartOption" class="echarts-trend-instance"></div>
+      </div>
     </div>
+
+    <!-- Skeleton Loading para Tendências -->
+    <ng-template #trendSkeleton>
+      <div class="panel-card trend-main-card">
+        <div class="skeleton-line title-skel"></div>
+        <div class="skeleton-line row-skel" style="height: 180px;"></div>
+      </div>
+    </ng-template>
   </div>
 
-  <!-- Main Content Grid -->
-  <div class="dashboard-main-grid" *ngIf="!loading; else loadingState">
-    <!-- Left Column: Transactions Table Card -->
-    <div class="panel-card table-panel-card">
-      <div class="panel-header">
-        <h2 class="panel-title">{{ tabTitle }}</h2>
-        <div class="panel-header-actions">
-          <!-- Botão de Filtro com Dropdown -->
-          <div class="filter-dropdown-container">
-            <button class="header-action-btn" (click)="toggleFilterPopover()">
-              <span class="material-symbols-outlined">tune</span>
-              <span>Filtro</span>
-              <span class="filter-badge" *ngIf="selectedCategoryFilter">1</span>
-            </button>
-
-            <!-- Popover de Filtro -->
-            <div class="filter-popover" *ngIf="isFilterOpen">
-              <div class="filter-popover-header">
-                <strong>Filtrar por Categoria</strong>
-                <button class="close-popover" (click)="toggleFilterPopover()">✕</button>
-              </div>
-              <div class="filter-popover-list">
-                <button
-                  class="filter-cat-option"
-                  [class.selected]="!selectedCategoryFilter"
-                  (click)="clearCategoryFilter()">
-                  <span>Todas as categorias</span>
-                </button>
-                <button
-                  class="filter-cat-option"
-                  *ngFor="let cat of categories"
-                  [class.selected]="selectedCategoryFilter.toLowerCase() === cat.name.toLowerCase()"
-                  (click)="applyCategoryFilter(cat.name)">
-                  <span class="cat-dot-small" [style.backgroundColor]="cat.color"></span>
-                  <span>{{ cat.name }}</span>
-                </button>
-              </div>
-              <div class="filter-popover-footer" *ngIf="selectedCategoryFilter">
-                <button class="clear-filter-btn" (click)="clearCategoryFilter()">Remover filtro</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Botão + Adicionar -->
-          <button class="header-action-btn primary" (click)="openAddTransaction()">
-            <span class="material-symbols-outlined">add</span>
-            <span>Adicionar</span>
-          </button>
-        </div>
+  <!-- ================= SEÇÃO: VISÃO MENSAL (FG-06) ================= -->
+  <ng-container *ngIf="activeView === 'monthly'">
+    <!-- Segmented Tabs & Sub-actions -->
+    <div class="navigation-tabs-bar">
+      <div class="segmented-pill-tabs">
+        <button
+          class="pill-tab"
+          [class.active]="currentTab === 'income'"
+          (click)="setTab('income')">
+          Receita
+        </button>
+        <button
+          class="pill-tab"
+          [class.active]="currentTab === 'expense_fixed'"
+          (click)="setTab('expense_fixed')">
+          Despesa fixa
+        </button>
+        <button
+          class="pill-tab"
+          [class.active]="currentTab === 'expense_variable'"
+          (click)="setTab('expense_variable')">
+          Despesa variável
+        </button>
       </div>
 
-      <!-- Tabela de Lançamentos -->
-      <div class="table-scroll-wrapper">
-        <table class="dam-transactions-table" *ngIf="filteredTransactions.length > 0; else emptyTable">
-          <thead>
-            <tr>
-              <th class="col-date" (click)="toggleSort()">
-                Data
-                <span class="material-symbols-outlined sort-icon">
-                  {{ sortAscending ? 'arrow_upward' : 'arrow_downward' }}
-                </span>
-              </th>
-              <th class="col-name">Nome</th>
-              <th class="col-category">Categoria</th>
-              <th class="col-amount text-right">Valor</th>
-              <th class="col-actions"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let tx of filteredTransactions" class="tx-row">
-              <td class="col-date font-mono">{{ tx.date | date:'dd/MM' }}</td>
-              <td class="col-name">
-                <span class="tx-desc">{{ tx.description }}</span>
-                <span class="tx-details-sep" *ngIf="tx.owner || tx.installment">·</span>
-                <span class="tx-owner" *ngIf="tx.owner">{{ tx.owner }}</span>
-                <span class="tx-installment" *ngIf="tx.installment">{{ tx.installment }}</span>
-              </td>
-              <td class="col-category">
-                <span class="category-badge-pill">
-                  <span class="bullet" [style.backgroundColor]="tx.categoryColor || '#64748b'"></span>
-                  <span class="cat-name">{{ tx.category }}</span>
-                </span>
-              </td>
-              <td class="col-amount text-right" [class.negative]="tx.type !== 'income'" [class.positive]="tx.type === 'income'">
-                <span *ngIf="!hideValues">
-                  {{ tx.type === 'income' ? '+ ' : '- ' }}{{ tx.amount | currency:'BRL':'symbol':'1.2-2' }}
-                </span>
-                <span *ngIf="hideValues">••••••</span>
-              </td>
-              <td class="col-actions text-right">
-                <button class="icon-action-btn" (click)="openEditTransaction(tx)" title="Editar transação">
-                  <span class="material-symbols-outlined">edit</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <!-- Empty State da Tabela -->
-        <ng-template #emptyTable>
-          <div class="table-empty-state">
-            <div class="empty-icon-circle">
-              <span class="material-symbols-outlined">receipt_long</span>
-            </div>
-            <h3>Nenhum lançamento encontrado</h3>
-            <p>
-              Não há lançamentos de <strong>{{ tabTitle }}</strong> para <strong>{{ currentMonthLabel }}</strong>
-              <span *ngIf="selectedCategoryFilter"> na categoria <em>{{ selectedCategoryFilter }}</em></span>.
-            </p>
-            <button class="empty-add-btn" (click)="openAddTransaction()">
-              <span class="material-symbols-outlined">add</span>
-              <span>Cadastrar primeira transação</span>
-            </button>
-          </div>
-        </ng-template>
-      </div>
-    </div>
-
-    <!-- Right Column: Donut Chart Card -->
-    <div class="panel-card chart-panel-card">
-      <div class="donut-chart-container">
-        <div echarts [options]="chartOption" (chartClick)="onChartClick($event)" class="echarts-donut"></div>
-      </div>
-
-      <!-- Legenda com Porcentagens e Categorias em Grid de 2 Colunas -->
-      <div class="categories-legend-grid" *ngIf="dashboardData?.expensesByCategory && dashboardData!.expensesByCategory.length > 0">
-        <div
-          class="legend-item"
-          *ngFor="let item of dashboardData!.expensesByCategory"
-          (click)="applyCategoryFilter(item.category)"
-          [class.active]="selectedCategoryFilter.toLowerCase() === item.category.toLowerCase()"
-          [title]="'Filtrar por ' + item.category">
-          <span class="legend-color-dot" [style.backgroundColor]="item.color"></span>
-          <span class="legend-percentage">{{ item.percentage }}%</span>
-          <span class="legend-category-title">{{ item.category }}</span>
-        </div>
-      </div>
-
-      <!-- Link Gerenciar Categorias -->
-      <div class="chart-card-footer">
-        <button class="manage-categories-button" (click)="openManageModal()">
-          <span class="material-symbols-outlined">category</span>
-          <span>Gerenciar categorias</span>
+      <div class="quick-action-btns">
+        <button class="action-pill-btn" (click)="openImportModal()">
+          <span class="material-symbols-outlined">upload</span>
+          <span>Importar extrato</span>
+        </button>
+        <button class="action-pill-btn danger" (click)="clearPeriodTransactions()">
+          <span class="material-symbols-outlined">delete_outline</span>
+          <span>Limpar lançamentos</span>
         </button>
       </div>
     </div>
-  </div>
 
-  <!-- Loading Skeleton -->
-  <ng-template #loadingState>
-    <div class="dashboard-skeleton-grid">
-      <div class="skeleton-card skeleton-left">
-        <div class="skeleton-line title-skel"></div>
-        <div class="skeleton-line row-skel" *ngFor="let i of [1,2,3,4,5,6]"></div>
+    <!-- Main Content Grid -->
+    <div class="dashboard-main-grid" *ngIf="!loading; else loadingState">
+      <!-- Left Column: Transactions Table Card -->
+      <div class="panel-card table-panel-card">
+        <div class="panel-header">
+          <h2 class="panel-title">{{ tabTitle }}</h2>
+          <div class="panel-header-actions">
+            <!-- Botão de Filtro com Dropdown -->
+            <div class="filter-dropdown-container">
+              <button class="header-action-btn" (click)="toggleFilterPopover()">
+                <span class="material-symbols-outlined">tune</span>
+                <span>Filtro</span>
+                <span class="filter-badge" *ngIf="selectedCategoryFilter">1</span>
+              </button>
+
+              <!-- Popover de Filtro -->
+              <div class="filter-popover" *ngIf="isFilterOpen">
+                <div class="filter-popover-header">
+                  <strong>Filtrar por Categoria</strong>
+                  <button class="close-popover" (click)="toggleFilterPopover()">✕</button>
+                </div>
+                <div class="filter-popover-list">
+                  <button
+                    class="filter-cat-option"
+                    [class.selected]="!selectedCategoryFilter"
+                    (click)="clearCategoryFilter()">
+                    <span>Todas as categorias</span>
+                  </button>
+                  <button
+                    class="filter-cat-option"
+                    *ngFor="let cat of categories"
+                    [class.selected]="selectedCategoryFilter.toLowerCase() === cat.name.toLowerCase()"
+                    (click)="applyCategoryFilter(cat.name)">
+                    <span class="cat-dot-small" [style.backgroundColor]="cat.color"></span>
+                    <span>{{ cat.name }}</span>
+                  </button>
+                </div>
+                <div class="filter-popover-footer" *ngIf="selectedCategoryFilter">
+                  <button class="clear-filter-btn" (click)="clearCategoryFilter()">Remover filtro</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botão + Adicionar -->
+            <button class="header-action-btn primary" (click)="openAddTransaction()">
+              <span class="material-symbols-outlined">add</span>
+              <span>Adicionar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabela de Lançamentos -->
+        <div class="table-scroll-wrapper">
+          <table class="dam-transactions-table" *ngIf="filteredTransactions.length > 0; else emptyTable">
+            <thead>
+              <tr>
+                <th class="col-date" (click)="toggleSort()">
+                  Data
+                  <span class="material-symbols-outlined sort-icon">
+                    {{ sortAscending ? 'arrow_upward' : 'arrow_downward' }}
+                  </span>
+                </th>
+                <th class="col-name">Nome</th>
+                <th class="col-category">Categoria</th>
+                <th class="col-amount text-right">Valor</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let tx of filteredTransactions" class="tx-row">
+                <td class="col-date font-mono">{{ tx.date | date:'dd/MM' }}</td>
+                <td class="col-name">
+                  <span class="tx-desc">{{ tx.description }}</span>
+                  <span class="tx-details-sep" *ngIf="tx.owner || tx.installment">·</span>
+                  <span class="tx-owner" *ngIf="tx.owner">{{ tx.owner }}</span>
+                  <span class="tx-installment" *ngIf="tx.installment">{{ tx.installment }}</span>
+                </td>
+                <td class="col-category">
+                  <span class="category-badge-pill">
+                    <span class="bullet" [style.backgroundColor]="tx.categoryColor || '#64748b'"></span>
+                    <span class="cat-name">{{ tx.category }}</span>
+                  </span>
+                </td>
+                <td class="col-amount text-right" [class.negative]="tx.type !== 'income'" [class.positive]="tx.type === 'income'">
+                  <span *ngIf="!hideValues">
+                    {{ tx.type === 'income' ? '+ ' : '- ' }}{{ tx.amount | currency:'BRL':'symbol':'1.2-2' }}
+                  </span>
+                  <span *ngIf="hideValues">••••••</span>
+                </td>
+                <td class="col-actions text-right">
+                  <button class="icon-action-btn" (click)="openEditTransaction(tx)" title="Editar transação">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Empty State da Tabela -->
+          <ng-template #emptyTable>
+            <div class="table-empty-state">
+              <div class="empty-icon-circle">
+                <span class="material-symbols-outlined">receipt_long</span>
+              </div>
+              <h3>Nenhum lançamento encontrado</h3>
+              <p>
+                Não há lançamentos de <strong>{{ tabTitle }}</strong> para <strong>{{ currentMonthLabel }}</strong>
+                <span *ngIf="selectedCategoryFilter"> na categoria <em>{{ selectedCategoryFilter }}</em></span>.
+              </p>
+              <button class="empty-add-btn" (click)="openAddTransaction()">
+                <span class="material-symbols-outlined">add</span>
+                <span>Cadastrar primeira transação</span>
+              </button>
+            </div>
+          </ng-template>
+        </div>
       </div>
-      <div class="skeleton-card skeleton-right">
-        <div class="skeleton-circle"></div>
-        <div class="skeleton-grid-lines">
-          <div class="skeleton-line" *ngFor="let i of [1,2,3,4]"></div>
+
+      <!-- Right Column: Donut Chart Card -->
+      <div class="panel-card chart-panel-card">
+        <div class="donut-chart-container">
+          <div echarts [options]="chartOption" (chartClick)="onChartClick($event)" class="echarts-donut"></div>
+        </div>
+
+        <!-- Legenda com Porcentagens e Categorias em Grid de 2 Colunas -->
+        <div class="categories-legend-grid" *ngIf="dashboardData?.expensesByCategory && dashboardData!.expensesByCategory.length > 0">
+          <div
+            class="legend-item"
+            *ngFor="let item of dashboardData!.expensesByCategory"
+            (click)="applyCategoryFilter(item.category)"
+            [class.active]="selectedCategoryFilter.toLowerCase() === item.category.toLowerCase()"
+            [title]="'Filtrar por ' + item.category">
+            <span class="legend-color-dot" [style.backgroundColor]="item.color"></span>
+            <span class="legend-percentage">{{ item.percentage }}%</span>
+            <span class="legend-category-title">{{ item.category }}</span>
+          </div>
+        </div>
+
+        <!-- Link Gerenciar Categorias -->
+        <div class="chart-card-footer">
+          <button class="manage-categories-button" (click)="openManageModal()">
+            <span class="material-symbols-outlined">category</span>
+            <span>Gerenciar categorias</span>
+          </button>
         </div>
       </div>
     </div>
-  </ng-template>
 
-  <!-- Bottom Floating / Sticky Summary Bar -->
-  <div class="floating-summary-bar">
-    <button class="expand-chevron" title="Detalhes do saldo">
-      <span class="material-symbols-outlined">keyboard_arrow_up</span>
-    </button>
-    <div class="summary-balance-display">
-      <span class="balance-number" [class.negative]="netBalance < 0" [class.positive]="netBalance >= 0">
-        <ng-container *ngIf="!hideValues">
-          {{ netBalance < 0 ? '- ' : '+ ' }}{{ (netBalance < 0 ? -netBalance : netBalance) | currency:'BRL':'symbol':'1.2-2' }}
-        </ng-container>
-        <ng-container *ngIf="hideValues">••••••</ng-container>
-      </span>
+    <!-- Loading Skeleton -->
+    <ng-template #loadingState>
+      <div class="dashboard-skeleton-grid">
+        <div class="skeleton-card skeleton-left">
+          <div class="skeleton-line title-skel"></div>
+          <div class="skeleton-line row-skel" *ngFor="let i of [1,2,3,4,5,6]"></div>
+        </div>
+        <div class="skeleton-card skeleton-right">
+          <div class="skeleton-circle"></div>
+          <div class="skeleton-grid-lines">
+            <div class="skeleton-line" *ngFor="let i of [1,2,3,4]"></div>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <!-- Bottom Floating / Sticky Summary Bar -->
+    <div class="floating-summary-bar">
+      <button class="expand-chevron" title="Detalhes do saldo">
+        <span class="material-symbols-outlined">keyboard_arrow_up</span>
+      </button>
+      <div class="summary-balance-display">
+        <span class="balance-number" [class.negative]="netBalance < 0" [class.positive]="netBalance >= 0">
+          <ng-container *ngIf="!hideValues">
+            {{ netBalance < 0 ? '- ' : '+ ' }}{{ (netBalance < 0 ? -netBalance : netBalance) | currency:'BRL':'symbol':'1.2-2' }}
+          </ng-container>
+          <ng-container *ngIf="hideValues">••••••</ng-container>
+        </span>
+      </div>
     </div>
-  </div>
+  </ng-container>
 </div>
 
 <!-- ================= MODAL: ADICIONAR / EDITAR TRANSAÇÃO ================= -->
@@ -390,7 +535,6 @@
     <div class="modal-body">
       <!-- ABA 1: GERENCIAR CATEGORIAS -->
       <div *ngIf="manageActiveTab === 'categories'" class="manage-tab-content">
-        <!-- Formulário Adicionar Categoria -->
         <div class="add-box">
           <h4>Nova Categoria</h4>
           <div class="add-form-inline">
@@ -418,10 +562,8 @@
           </div>
         </div>
 
-        <!-- Lista de Categorias -->
         <div class="items-list-container">
           <div class="list-item-row" *ngFor="let cat of categories">
-            <!-- Edição inline -->
             <ng-container *ngIf="editingCategory && editingCategory.id === cat.id; else catViewMode">
               <div class="inline-edit-form">
                 <input type="text" class="dam-input edit-inline" [(ngModel)]="editingCategory.name" />
@@ -431,7 +573,6 @@
               </div>
             </ng-container>
 
-            <!-- Modo visualização -->
             <ng-template #catViewMode>
               <div class="item-info">
                 <span class="item-color-bullet" [style.backgroundColor]="cat.color"></span>
@@ -452,7 +593,6 @@
 
       <!-- ABA 2: GERENCIAR CARTÕES -->
       <div *ngIf="manageActiveTab === 'cards'" class="manage-tab-content">
-        <!-- Formulário Adicionar Cartão -->
         <div class="add-box">
           <h4>Novo Cartão / Conta</h4>
           <div class="add-form-inline">
@@ -473,10 +613,8 @@
           </div>
         </div>
 
-        <!-- Lista de Cartões -->
         <div class="items-list-container">
           <div class="list-item-row" *ngFor="let card of cards">
-            <!-- Edição inline -->
             <ng-container *ngIf="editingCard && editingCard.id === card.id; else cardViewMode">
               <div class="inline-edit-form">
                 <input type="text" class="dam-input edit-inline" [(ngModel)]="editingCard.name" />
@@ -491,7 +629,6 @@
               </div>
             </ng-container>
 
-            <!-- Modo visualização -->
             <ng-template #cardViewMode>
               <div class="item-info">
                 <span class="material-symbols-outlined card-icon">credit_card</span>
@@ -514,6 +651,32 @@
 
     <div class="modal-footer">
       <button class="dam-btn ghost" (click)="showManageModal = false">Concluído</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: PERSONALIZAR DATAS (FG-07) ================= -->
+<div class="dam-modal-backdrop" *ngIf="showCustomDateModal">
+  <div class="dam-modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Personalizar Intervalo de Datas</h3>
+      <button class="close-btn" (click)="showCustomDateModal = false">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label>Data Início</label>
+          <input type="date" class="dam-input" [(ngModel)]="customStartDate" />
+        </div>
+        <div class="form-group flex-1">
+          <label>Data Fim</label>
+          <input type="date" class="dam-input" [(ngModel)]="customEndDate" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="dam-btn ghost" (click)="showCustomDateModal = false">Cancelar</button>
+      <button class="dam-btn primary" (click)="applyCustomDates()">Aplicar Filtro</button>
     </div>
   </div>
 </div>

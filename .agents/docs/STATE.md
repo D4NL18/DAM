@@ -1,10 +1,10 @@
 # Estado Atual da Orquestração (STATE.md)
 
 ## Status da Feature Ativa
-- **Feature:** FG-06 (Dashboard Avançado de Gastos & Gestão de Categorias e Cartões)
-- **Branch:** `feature/P-001-dashboard-gastos-categorias-cartoes`
+- **Feature:** FG-07 (Evolução Temporal de Gastos & Receitas - Gráfico Histórico por Períodos)
+- **Branch:** `feature/P-002-evolucao-temporal-gastos`
 - **Início:** 2026-09-09
-- **Status da Feature:** Concluída e Validada (Pronta para Pull Request para develop)
+- **Status da Feature:** Concluído (Pronto para Merge)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [x] **1. Quebra de Escopo (Product Owner)**

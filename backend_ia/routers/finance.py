@@ -437,3 +437,142 @@ def delete_card(
             logger.error(f"Erro ao deletar cartão {card_id}: {e}")
 
     return {"success": True, "id": card_id}
+
+# --- Evolução Temporal e Tendências (FG-07) ---
+
+MONTH_NAMES_SHORT = [
+    "", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+]
+
+@router.get("/trends")
+def get_finance_trends(
+    period: str = Query(default="12m"),
+    startDate: Optional[str] = Query(None),
+    endDate: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    """Retorna séries históricas mensais de receitas e gastos para o período solicitado."""
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    now = datetime.now(timezone.utc)
+
+    if period == "current_month":
+        num_months = 1
+        period_label = "Mês atual"
+    elif period == "3m":
+        num_months = 3
+        period_label = "Últimos 3 meses"
+    elif period == "6m":
+        num_months = 6
+        period_label = "Últimos 6 meses"
+    else:  # default "12m" ou custom
+        num_months = 12
+        period_label = "Últimos 12 meses"
+
+    # Monta a série cronológica de meses (do mais antigo para o atual)
+    series_map: Dict[str, Dict[str, Any]] = {}
+    series_list: List[Dict[str, Any]] = []
+
+    for i in range(num_months - 1, -1, -1):
+        y = now.year
+        m = now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        key = f"{y}-{m:02d}"
+        label = f"{MONTH_NAMES_SHORT[m]} {y}"
+        item = {
+            "label": label,
+            "year": y,
+            "month": m,
+            "income": 0.0,
+            "expenses": 0.0,
+            "balance": 0.0
+        }
+        series_map[key] = item
+        series_list.append(item)
+
+    # Período anterior para comparação
+    prev_series_keys = set()
+    for i in range(num_months * 2 - 1, num_months - 1, -1):
+        y = now.year
+        m = now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        prev_series_keys.add(f"{y}-{m:02d}")
+
+    total_income = 0.0
+    total_expenses = 0.0
+    prev_income = 0.0
+    prev_expenses = 0.0
+
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("finances").stream()
+            for doc in docs:
+                data = doc.to_dict() or {}
+                if (data.get("userId") or data.get("user_id") or "daniel") != effective_user:
+                    continue
+
+                date_str = data.get("date") or data.get("created_at") or ""
+                if not date_str:
+                    continue
+
+                try:
+                    dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                    doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
+                except Exception:
+                    continue
+
+                amount = float(data.get("amount") or 0.0)
+                tx_type = data.get("type") or "expense_variable"
+
+                # Período corrente da série
+                if doc_key in series_map:
+                    if tx_type == "income":
+                        series_map[doc_key]["income"] += amount
+                        total_income += amount
+                    else:
+                        series_map[doc_key]["expenses"] += amount
+                        total_expenses += amount
+
+                # Período comparativo anterior
+                elif doc_key in prev_series_keys:
+                    if tx_type == "income":
+                        prev_income += amount
+                    else:
+                        prev_expenses += amount
+
+        except Exception as e:
+            logger.error(f"Erro ao agregar tendências financeiras no Firestore: {e}")
+
+    for item in series_list:
+        item["income"] = round(item["income"], 2)
+        item["expenses"] = round(item["expenses"], 2)
+        item["balance"] = round(item["income"] - item["expenses"], 2)
+
+    total_income = round(total_income, 2)
+    total_expenses = round(total_expenses, 2)
+    period_balance = round(total_income - total_expenses, 2)
+
+    has_prev = prev_income > 0 or prev_expenses > 0
+    income_change = round(((total_income - prev_income) / prev_income) * 100, 1) if prev_income > 0 else 0.0
+    expense_change = round(((total_expenses - prev_expenses) / prev_expenses) * 100, 1) if prev_expenses > 0 else 0.0
+
+    return {
+        "period": period,
+        "periodLabel": period_label,
+        "totalIncome": total_income,
+        "totalExpenses": total_expenses,
+        "periodBalance": period_balance,
+        "currency": "BRL",
+        "comparison": {
+            "hasPreviousPeriod": has_prev,
+            "incomeChangePct": income_change,
+            "expenseChangePct": expense_change,
+            "comparisonText": f"comparado com os {num_months} meses anteriores" if has_prev else "Sem período anterior"
+        },
+        "series": series_list
+    }
+

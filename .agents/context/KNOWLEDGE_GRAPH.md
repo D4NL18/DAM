@@ -181,8 +181,22 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 - **Gestão Completa de Categorias e Cartões (P-009 a P-012):**
   - Modal integrado permitindo adicionar novas categorias (com seletor/paleta de cores), renomear e excluir categorias com migração automática para 'Outros'.
   - Aba de cartões permitindo cadastrar, renomear e excluir métodos de pagamento com tipo (Crédito, Débito/Pix, Benefício, Outro).
-- **Backend RESTful & Isolamento Multi-Tenant (P-004, P-005, P-013):**
   - Router `/api/v1/finance` no FastAPI com endpoints: `/dashboard` (agregação com suporte a ano, mês, tipo e categoria), `/transactions` (CRUD com suporte a tipo fixa/variável/receita, parcelas e titular), `/categories` (CRUD com fallback para defaults) e `/cards` (CRUD com fallback para defaults).
   - CORS atualizado permitindo `PUT` e `DELETE`.
   - Isolamento rigoroso por `X-User-Id` garantindo conformidade SecOps e prevenção contra IDOR.
+
+## FG-07: Evolução Temporal de Gastos e Receitas por Períodos [P-014 a P-020]
+- **Design & Experiência Visual (P-014 a P-017):**
+  - Switcher no cabeçalho permitindo alternar fluidamente entre `Visão Mensal` (FG-06) e `Evolução Temporal` (FG-07).
+  - Barra superior de períodos com pílulas arredondadas: `Mês atual`, `3 meses`, `6 meses`, `12 meses` e `Personalizar` (com modal para datas customizadas).
+  - Card principal de tendências com três KPIs de topo: `● Receita` (bullet verde, valor, badge circular com seta verde, comparativo percentual ou 'Sem período anterior'), `● Gastos` (bullet vermelho, valor, badge circular com seta vermelha) e `Saldo do período`.
+  - Respeito à alternância de privacidade: valores são mascarados com asteriscos `*****` mantendo a estética e cores do design original.
+- **Gráfico de Curvas Suaves ECharts (P-018):**
+  - Gráfico Spline Area com duas séries contínuas: Receitas (linha verde com gradiente de preenchimento vertical suave) e Gastos (linha vermelha com gradiente de preenchimento vertical suave).
+  - Eixo X com siglas de meses em português e eixo Y abreviado em `mil` (ex: `10 mil`, `20 mil`).
+  - Tooltip customizado e interativo com valores em moeda brasileira (`R$`).
+- **Backend & Agregação Temporal (P-019, P-020):**
+  - Endpoint `GET /api/v1/finance/trends` em `backend_ia/routers/finance.py` com agregação cronológica mês a mês, cálculo de balanço mensal e cálculo comparativo contra o período imediatamente anterior.
+  - Isolamento estrito multi-usuário (`X-User-Id`), testes automatizados de unidade e segurança com 100% de cobertura.
+
 

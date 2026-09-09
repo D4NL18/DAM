@@ -9,7 +9,9 @@ import {
   FinanceTransaction,
   FinanceCategory,
   FinanceCard,
-  CategoryBreakdown
+  CategoryBreakdown,
+  FinanceTrendData,
+  FinanceTrendSeriesItem
 } from '../services/finance-api.service';
 import { AuthService } from '../services/auth.service';
 import { catchError, of } from 'rxjs';
@@ -26,7 +28,19 @@ export class FinanceDashboardComponent implements OnInit {
   loading = true;
   chartOption: EChartsOption = {};
 
-  // Controles de data e visualização
+  // Modo de visualização principal: 'monthly' (visão do mês detalhada) ou 'trends' (andamento/evolução por períodos)
+  activeView: 'monthly' | 'trends' = 'monthly';
+
+  // --- Evolução Temporal (FG-07) ---
+  trendPeriod: 'current_month' | '3m' | '6m' | '12m' | 'custom' = '12m';
+  trendData: FinanceTrendData | null = null;
+  trendLoading = false;
+  trendChartOption: EChartsOption = {};
+  showCustomDateModal = false;
+  customStartDate = '';
+  customEndDate = '';
+
+  // Controles de data e visualização mensal
   currentYear: number = new Date().getFullYear();
   currentMonth: number = new Date().getMonth() + 1; // 1-indexed
   currentTab: 'expense_variable' | 'expense_fixed' | 'income' = 'expense_variable';
@@ -98,6 +112,7 @@ export class FinanceDashboardComponent implements OnInit {
   ngOnInit(): void {
     this.loadCategoriesAndCards();
     this.loadDashboard();
+    this.loadTrends();
   }
 
   get userDisplayName(): string {
@@ -172,6 +187,175 @@ export class FinanceDashboardComponent implements OnInit {
       });
   }
 
+  loadTrends(): void {
+    this.trendLoading = true;
+    this.financeApi.getTrends(this.trendPeriod, this.customStartDate, this.customEndDate)
+      .pipe(
+        catchError(err => {
+          console.error('Erro ao carregar evolução temporal:', err);
+          return of({
+            period: this.trendPeriod,
+            periodLabel: 'Período',
+            totalIncome: 0,
+            totalExpenses: 0,
+            periodBalance: 0,
+            currency: 'BRL',
+            comparison: {
+              hasPreviousPeriod: false,
+              incomeChangePct: 0,
+              expenseChangePct: 0,
+              comparisonText: 'Sem período anterior'
+            },
+            series: []
+          });
+        })
+      )
+      .subscribe(data => {
+        this.trendData = data;
+        this.initTrendChart(data);
+        this.trendLoading = false;
+      });
+  }
+
+  setTrendPeriod(period: 'current_month' | '3m' | '6m' | '12m' | 'custom'): void {
+    this.trendPeriod = period;
+    if (period === 'custom') {
+      this.showCustomDateModal = true;
+    } else {
+      this.loadTrends();
+    }
+  }
+
+  applyCustomDates(): void {
+    this.showCustomDateModal = false;
+    this.loadTrends();
+  }
+
+  initTrendChart(data: FinanceTrendData): void {
+    if (!data || !data.series || data.series.length === 0) {
+      this.trendChartOption = {
+        title: {
+          text: 'Sem dados para o período',
+          left: 'center',
+          top: 'center',
+          textStyle: { color: '#94a3b8', fontSize: 13 }
+        }
+      };
+      return;
+    }
+
+    const xLabels = data.series.map(s => s.label);
+    const incomeData = data.series.map(s => s.income);
+    const expenseData = data.series.map(s => s.expenses);
+
+    this.trendChartOption = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'line',
+          lineStyle: { color: '#cbd5e1', width: 1, type: 'dashed' }
+        },
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        borderWidth: 0,
+        textStyle: { color: '#ffffff', fontSize: 12 },
+        formatter: (params: any) => {
+          if (!params || !params.length) return '';
+          const monthTitle = params[0].axisValue;
+          let html = `<div style="font-family: inherit; padding: 2px;"><strong>${monthTitle}</strong><br/>`;
+          params.forEach((p: any) => {
+            const valFormatted = this.hideValues
+              ? '*****'
+              : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.value);
+            html += `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background-color:${p.color};"></span>` +
+                    `${p.seriesName}: <strong>${valFormatted}</strong><br/>`;
+          });
+          html += `</div>`;
+          return html;
+        }
+      },
+      grid: {
+        top: 24,
+        right: 16,
+        bottom: 28,
+        left: 56,
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: xLabels,
+        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisTick: { show: false },
+        axisLabel: { color: '#64748b', fontSize: 11, margin: 12 }
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: {
+          show: true,
+          lineStyle: { color: '#f1f5f9', type: 'dashed' }
+        },
+        axisLabel: {
+          color: '#64748b',
+          fontSize: 11,
+          formatter: (value: number) => {
+            if (value >= 1000) {
+              return `${(value / 1000).toFixed(0)} mil`;
+            }
+            return `${value}`;
+          }
+        }
+      },
+      series: [
+        {
+          name: 'Receita',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          lineStyle: { color: '#15803d', width: 3 },
+          itemStyle: { color: '#15803d' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(21, 128, 61, 0.35)' },
+                { offset: 1, color: 'rgba(21, 128, 61, 0.01)' }
+              ]
+            }
+          },
+          data: incomeData
+        },
+        {
+          name: 'Gastos',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          lineStyle: { color: '#dc2626', width: 2.5 },
+          itemStyle: { color: '#dc2626' },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(220, 38, 38, 0.25)' },
+                { offset: 1, color: 'rgba(220, 38, 38, 0.01)' }
+              ]
+            }
+          },
+          data: expenseData
+        }
+      ]
+    };
+  }
+
   loadCategoriesAndCards(): void {
     this.financeApi.getCategories().subscribe({
       next: cats => {
@@ -225,6 +409,12 @@ export class FinanceDashboardComponent implements OnInit {
 
   toggleHideValues(): void {
     this.hideValues = !this.hideValues;
+    if (this.trendData) {
+      this.initTrendChart(this.trendData);
+    }
+    if (this.dashboardData) {
+      this.initChart(this.dashboardData.expensesByCategory);
+    }
   }
 
   toggleSort(): void {
@@ -379,6 +569,7 @@ export class FinanceDashboardComponent implements OnInit {
         next: () => {
           this.showTransactionModal = false;
           this.loadDashboard();
+          this.loadTrends();
         },
         error: err => console.error('Erro ao atualizar transação:', err)
       });
@@ -387,6 +578,7 @@ export class FinanceDashboardComponent implements OnInit {
         next: () => {
           this.showTransactionModal = false;
           this.loadDashboard();
+          this.loadTrends();
         },
         error: err => console.error('Erro ao salvar transação:', err)
       });
@@ -400,6 +592,7 @@ export class FinanceDashboardComponent implements OnInit {
         next: () => {
           this.showTransactionModal = false;
           this.loadDashboard();
+          this.loadTrends();
         },
         error: err => console.error('Erro ao excluir transação:', err)
       });

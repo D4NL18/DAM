@@ -62,6 +62,33 @@ export interface FinanceSummary {
   }>;
 }
 
+export interface FinanceTrendSeriesItem {
+  label: string;
+  year: number;
+  month: number;
+  income: number;
+  expenses: number;
+  balance: number;
+}
+
+export interface FinanceTrendComparison {
+  hasPreviousPeriod: boolean;
+  incomeChangePct: number;
+  expenseChangePct: number;
+  comparisonText: string;
+}
+
+export interface FinanceTrendData {
+  period: string;
+  periodLabel: string;
+  totalIncome: number;
+  totalExpenses: number;
+  periodBalance: number;
+  currency: string;
+  comparison: FinanceTrendComparison;
+  series: FinanceTrendSeriesItem[];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -134,5 +161,13 @@ export class FinanceApiService {
 
   deleteCard(id: string): Observable<any> {
     return this.http.delete(`${this.apiUrl}/cards/${id}`, { headers: this.getHeaders() });
+  }
+
+  getTrends(period: string = '12m', startDate?: string, endDate?: string): Observable<FinanceTrendData> {
+    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    let url = `${this.apiUrl}/trends?period=${period}&userId=${userId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.http.get<FinanceTrendData>(url, { headers: this.getHeaders() });
   }
 }

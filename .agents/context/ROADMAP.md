@@ -40,6 +40,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 2 (Backend & Firestore - Suporte a Despesas Fixas/Variáveis/Receitas, Granularidade e APIs CRUD):** Endpoints RESTful no FastAPI com suporte a filtros de tipo, mês, ano, CRUD de transações (`finances`) e compatibilidade legada com o bot.
   - **[x] Story 3 (Frontend & Backend - Filtro Avançado por Categoria e Interatividade):** Filtro popover por categorias e interatividade no Donut chart / legendas para filtrar a tabela.
   - **[x] Story 4 (Frontend & Backend - Gerenciador de Categorias e Cartões):** Modal completo para adicionar, renomear e excluir categorias (com paleta de cores) e cartões, integrados com coleções `finance_categories` e `finance_cards` no Firestore.
+- **[ ] FG-07 (Evolução Temporal de Gastos & Receitas - Gráfico Histórico por Períodos):**
+  - **[ ] Story 1 (Frontend - Visual da Evolução Temporal, Card de KPIs e Gráfico ECharts Suave):** Seletor de período em pílulas (Mês atual, 3 meses, 6 meses, 12 meses, Personalizar), KPIs superiores de Receita/Gastos/Saldo com estrelas de privacidade (`*****`), e gráfico de área com curvas suaves (Spline) e preenchimento em gradiente verde e vermelho.
+  - **[ ] Story 2 (Backend & Firestore - Agregação de Séries Temporais por Período):** Endpoint `/api/v1/finance/trends` consolidando séries temporais mensais de receitas e despesas com período comparativo e isolamento de usuário.
+  - **[ ] Story 3 (Frontend & Backend - Comparativo de Período Anterior e Filtro Customizado):** Cálculo automático de variação percentual vs período anterior e modal de intervalo customizado de datas.
+  - **[ ] Story 4 (Testes TDD, Segurança e QA):** Suíte de testes pytest para tendências históricas, validação de segurança SecOps e compilação do frontend.
 
 ---
 

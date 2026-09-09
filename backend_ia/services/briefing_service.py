@@ -10,7 +10,7 @@ from services.user_context import UserContext, resolve_user_from_phone
 from services.tools.calendar_tool import consultar_agenda
 from services.tools.notes_tool import listar_lembretes_pendentes
 from services.tools.esports_tool import consultar_jogos_cs2, obter_partidas_estruturadas_cs2
-from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST
+from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST, _renovar_proximos_episodios_expirados
 from services.tools.clash_of_clans_tool import _fetch_coc_data, _encode_tag, _verificar_raid_season, _verificar_clan_war
 
 logger = logging.getLogger(__name__)
@@ -233,6 +233,11 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     """Identifica animes cadastrados na watchlist do usuário que lançam episódio hoje."""
     hoje = _obter_data_brasilia(data_hoje)
     hoje_data_str = hoje.strftime("%Y-%m-%d")
+
+    try:
+        _renovar_proximos_episodios_expirados()
+    except Exception as e:
+        logger.warning(f"Erro ao verificar renovação de episódios para briefing: {e}")
 
     animes_memoria = list(_MEMORY_WATCHLIST.values())
 

@@ -22,6 +22,9 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 2 (Filtros de Status de Animes):** Restringir episódios ao status `assistindo`, temporadas e continuações exclusivamente a `assistindo` ou `concluido` (banindo `pausado` e `dropado`), e lista de animes para assistir exclusivamente a `planejo_assistir` ou `assistindo` com 0 episódios vistos.
   - **[x] Story 3 (Alertas Concorrentes de Clash of Clans):** Garantir que Guerra/CWL e Raid Weekend coexistam no resumo matinal e corrigir a verificação para membros com 0 ataques realizados na Capital do Clã.
   - **[x] Story 4 (Motor Multi-Usuário do Briefing & Isolamento para Lari):** Executar disparos individuais baseados no horário configurado de cada usuário (`daniel` e `lari`) com isolamento estrito de `UserContext` e envio para o JID correspondente.
+- **[x] GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real):**
+  - **[x] Story 1 (Lembretes Filtrados por Padrão para o Dia Corrente & Higienização Defensiva de Tags):** Tornar `apenas_hoje=True` o comportamento padrão de `listar_lembretes_pendentes`, atualizar documentação/prompts do assistente e aplicar extração determinística de tags por tokens regex na criação de notas e lembretes, higienizando também registros corrompidos no Firestore.
+  - **[x] Story 2 (Renovação Dinâmica do Próximo Episódio via AniList & Exibição Correta do Anime de Domingo):** Renovação autônoma de `nextAiringEpisode` no Firestore/memória quando a data prevista expirar, garantindo que o briefing matinal e consultas semanais exibam o próximo episódio real (lançamentos de domingo como Seihantai e Mushoku Tensei) e nunca animes futuros de meses adiante.
 
 ---
 

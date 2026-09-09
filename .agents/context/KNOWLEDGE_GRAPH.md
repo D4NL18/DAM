@@ -162,5 +162,11 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Scheduler roda minuto a minuto avaliando as preferências de cada usuário ativo (`daniel`, `lari`, etc.) via `verificar_e_disparar_briefings_agendados`, disparando os briefings no horário exato configurado por cada um.
   - `montar_resumo_matinal` e `enviar_briefing_matinal` chaveiam o `UserContext.set_user(target_user_id)` com bloco seguro `try/finally`, assegurando que agenda, lembretes e dados de saúde de Daniel e Lari permaneçam 100% isolados sem vazamentos cruzados.
 
-
-
+## GP-04.2: Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real [P-0419 a P-0421]
+- **Lembretes Diários por Padrão (P-0419):**
+  - A ferramenta `listar_lembretes_pendentes` opera com `apenas_hoje=True` por padrão, garantindo que consultas gerais de lembretes tragam estritamente pendências do dia corrente (UTC-3), preservando a privacidade e relevância temporal. Listagem de tarefas futuras ou completas exige agora o parâmetro explícito `apenas_hoje=False`.
+- **Higienização Defensiva de Tags na Ingestão (P-0420):**
+  - Em `criar_lembrete` e `criar_anotacao`, toda entrada de tags (seja lista, string com vírgula ou string serializada de array como `"['financas', 'claro']"`) é sanitizada via regex `TAG_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_\-]+")`, persistindo listas limpas no Firestore e exibindo formatação limpa `[#financas #claro #recorrente]`. Registros legados no Firestore foram higienizados.
+- **Renovação Autônoma de Próximo Episódio via AniList (P-0421):**
+  - `anime_tracker_tool.py` implementa `_renovar_proximos_episodios_expirados()` que detecta animes em exibição (`assistindo`) com `airing_at` vencido no passado e reconsulta autonomamente o endpoint GraphQL do AniList.
+  - O Morning Briefing (`_obter_info_animes_briefing`) e a grade semanal (`grade_semanal_animes`) acionam a renovação dinâmica, selecionando com precisão os lançamentos reais de domingo (como `Seihantai na Kimi to Boku 2nd Season` às 05:00 e `Mushoku Tensei III` às 12:00) e eliminando qualquer exibição errônea de animes de meses posteriores (`Seishun Buta Yarou` em 15/10).

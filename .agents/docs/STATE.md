@@ -1,10 +1,10 @@
 # Estado Atual da Orquestração (STATE.md)
 
 ## Status da Feature Ativa
-- **Feature:** GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real)
-- **Branch:** `main` (Mergeado via PR #5)
+- **Feature:** FG-07 (Evolução Temporal de Gastos & Receitas - Gráfico Histórico por Períodos)
+- **Branch:** `feature/P-002-evolucao-temporal-gastos`
 - **Início:** 2026-09-09
-- **Status da Feature:** Concluída e em Produção na VM `dam-server` (GCP)
+- **Status da Feature:** Concluído (Pronto para Merge)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [x] **1. Quebra de Escopo (Product Owner)**

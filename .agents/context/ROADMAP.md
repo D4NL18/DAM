@@ -35,6 +35,16 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] FG-03 (Splitwise de Viagens e Grupos):** Criação de grupos e despesas compartilhadas nas coleções `trip_groups` e `trip_expenses`, com algoritmo de minimização de dívidas (*Debt Minimization*).
 - **[x] FG-04 (GCP Billing & Monitoramento FinOps):** Endpoint de webhook para alertas de orçamentos e monitoramento de custos de nuvem.
 - **[x] FG-05 (Resumo Consolidado de Gastos por Cartão e Categoria):** Ferramenta `consultar_resumo_gastos` com agregação mensal/temporal de despesas no Firestore, agrupadas por cartões (Crédito Pessoal, Crédito Secundário, Débito/Pix) e categorias com subtotais, percentuais e destaques sintéticos no WhatsApp.
+- **[x] FG-06 (Dashboard Avançado de Gastos & Gestão de Categorias e Cartões):**
+  - **[x] Story 1 (Frontend - Layout Fiel ao Design, Abas, Ocultação de Valores e Navegação Mensal):** Interface Angular reproduzindo o design anexo com saudação, seletor de mês `< Mês/Ano >`, botão de privacidade (olho), abas em pílula (Receita / Fixa / Variável), tabela com badges de categoria e Donut Chart com legenda de percentuais e barra inferior de total.
+  - **[x] Story 2 (Backend & Firestore - Suporte a Despesas Fixas/Variáveis/Receitas, Granularidade e APIs CRUD):** Endpoints RESTful no FastAPI com suporte a filtros de tipo, mês, ano, CRUD de transações (`finances`) e compatibilidade legada com o bot.
+  - **[x] Story 3 (Frontend & Backend - Filtro Avançado por Categoria e Interatividade):** Filtro popover por categorias e interatividade no Donut chart / legendas para filtrar a tabela.
+  - **[x] Story 4 (Frontend & Backend - Gerenciador de Categorias e Cartões):** Modal completo para adicionar, renomear e excluir categorias (com paleta de cores) e cartões, integrados com coleções `finance_categories` e `finance_cards` no Firestore.
+- **[ ] FG-07 (Evolução Temporal de Gastos & Receitas - Gráfico Histórico por Períodos):**
+  - **[ ] Story 1 (Frontend - Visual da Evolução Temporal, Card de KPIs e Gráfico ECharts Suave):** Seletor de período em pílulas (Mês atual, 3 meses, 6 meses, 12 meses, Personalizar), KPIs superiores de Receita/Gastos/Saldo com estrelas de privacidade (`*****`), e gráfico de área com curvas suaves (Spline) e preenchimento em gradiente verde e vermelho.
+  - **[ ] Story 2 (Backend & Firestore - Agregação de Séries Temporais por Período):** Endpoint `/api/v1/finance/trends` consolidando séries temporais mensais de receitas e despesas com período comparativo e isolamento de usuário.
+  - **[ ] Story 3 (Frontend & Backend - Comparativo de Período Anterior e Filtro Customizado):** Cálculo automático de variação percentual vs período anterior e modal de intervalo customizado de datas.
+  - **[ ] Story 4 (Testes TDD, Segurança e QA):** Suíte de testes pytest para tendências históricas, validação de segurança SecOps e compilação do frontend.
 
 ---
 

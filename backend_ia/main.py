@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from datetime import datetime, timezone, timedelta
-from routers import webhook, health, billing, dashboard, briefing, files
+from routers import webhook, health, billing, dashboard, briefing, files, finance
 from config.firebase import init_firebase
 from services.ai_service import AIService
 from services.briefing_service import enviar_briefing_matinal, verificar_e_disparar_briefings_agendados
@@ -101,7 +101,7 @@ app.add_middleware(
         "http://localhost:4200"
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -110,6 +110,7 @@ app.include_router(webhook.router)
 app.include_router(health.router)
 app.include_router(billing.router)
 app.include_router(dashboard.router)
+app.include_router(finance.router)
 app.include_router(briefing.router)
 app.include_router(files.router)
 

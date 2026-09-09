@@ -43,7 +43,7 @@ export class FinanceDashboardComponent implements OnInit {
   // Controles de data e visualização mensal
   currentYear: number = new Date().getFullYear();
   currentMonth: number = new Date().getMonth() + 1; // 1-indexed
-  currentTab: 'expense_variable' | 'expense_fixed' | 'income' = 'expense_variable';
+  currentTab: 'total' | 'expense_variable' | 'expense_fixed' | 'income' = 'total';
   hideValues: boolean = false;
   sortAscending: boolean = false;
 
@@ -145,6 +145,7 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   get tabTitle(): string {
+    if (this.currentTab === 'total') return 'Todas as transações';
     if (this.currentTab === 'expense_variable') return 'Despesas variáveis';
     if (this.currentTab === 'expense_fixed') return 'Despesas fixas';
     return 'Receitas';
@@ -169,6 +170,9 @@ export class FinanceDashboardComponent implements OnInit {
 
   get periodTotalDisplay(): number {
     if (!this.dashboardData) return 0;
+    if (this.currentTab === 'total') {
+      return this.dashboardData.totalSpent + this.dashboardData.totalIncome;
+    }
     if (this.currentTab === 'expense_variable') {
       return this.dashboardData.totalVariable;
     }
@@ -420,10 +424,12 @@ export class FinanceDashboardComponent implements OnInit {
     this.loadDashboard();
   }
 
-  setTab(tab: 'expense_variable' | 'expense_fixed' | 'income'): void {
+  setTab(tab: 'total' | 'expense_variable' | 'expense_fixed' | 'income'): void {
     this.currentTab = tab;
     this.selectedCategoryFilter = '';
-    this.txForm.type = tab;
+    if (tab !== 'total') {
+      this.txForm.type = tab;
+    }
     this.loadDashboard();
   }
 
@@ -543,7 +549,7 @@ export class FinanceDashboardComponent implements OnInit {
       description: '',
       amount: null,
       category: this.categories.length > 0 ? this.categories[0].name : 'Mercado',
-      type: this.currentTab,
+      type: this.currentTab === 'total' ? 'expense_variable' : this.currentTab,
       paymentMethod: this.cards.length > 0 ? this.cards[0].name : 'Cartão de Crédito Pessoal',
       installment: '',
       owner: '',

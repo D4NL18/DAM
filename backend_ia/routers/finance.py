@@ -141,14 +141,20 @@ def get_finance_dashboard(
 
                 # Verifica se deve incluir na listagem e no gráfico da aba ativa
                 incluir = True
-                if type and tx_type != type:
+                if type and type != "total" and tx_type != type:
                     incluir = False
                 if category and cat.lower() != category.lower():
                     incluir = False
 
                 if incluir:
-                    if tx_type != "income":
+                    if type == "income":
+                        if tx_type == "income":
+                            category_map[cat] = category_map.get(cat, 0.0) + amount
+                    elif type == "total" or not type:
                         category_map[cat] = category_map.get(cat, 0.0) + amount
+                    else:
+                        if tx_type != "income":
+                            category_map[cat] = category_map.get(cat, 0.0) + amount
 
                     transactions.append({
                         "id": doc.id,

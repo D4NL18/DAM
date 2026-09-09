@@ -177,6 +177,12 @@
       <div class="segmented-pill-tabs">
         <button
           class="pill-tab"
+          [class.active]="currentTab === 'total'"
+          (click)="setTab('total')">
+          Total
+        </button>
+        <button
+          class="pill-tab"
           [class.active]="currentTab === 'income'"
           (click)="setTab('income')">
           Receita

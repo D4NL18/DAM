@@ -27,10 +27,10 @@ async def _rotina_briefing_diario():
             hora_minuto = agora.strftime("%H:%M")
 
             if minuto_atual != ultimo_minuto_disparado:
-                disparados = await asyncio.to_thread(verificar_e_disparar_briefings_agendados, hora_minuto, False)
+                ultimo_minuto_disparado = minuto_atual
+                disparados = await asyncio.to_thread(verificar_e_disparar_briefings_agendados, hora_minuto, False, True)
                 if disparados:
                     logger.info(f"Morning Briefing disparado às {hora_minuto} para: {', '.join(disparados)}")
-                    ultimo_minuto_disparado = minuto_atual
         except Exception as e:
             logger.error(f"Erro no scheduler do briefing matinal: {e}")
         

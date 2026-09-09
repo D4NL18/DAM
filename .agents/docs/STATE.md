@@ -1,10 +1,10 @@
 # Estado Atual da Orquestração (STATE.md)
 
 ## Status da Feature Ativa
-- **Feature:** GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real)
-- **Branch:** `main` (Mergeado via PR #5)
+- **Feature:** FG-06 (Dashboard Avançado de Gastos & Gestão de Categorias e Cartões)
+- **Branch:** `feature/P-001-dashboard-gastos-categorias-cartoes`
 - **Início:** 2026-09-09
-- **Status da Feature:** Concluída e em Produção na VM `dam-server` (GCP)
+- **Status da Feature:** Concluída e Validada (Pronta para Pull Request para develop)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [x] **1. Quebra de Escopo (Product Owner)**

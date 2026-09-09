@@ -1,4 +1,4 @@
-﻿# Coleção: `finances`
+# Coleção: `finances`
 
 ## 📋 Propósito
 
@@ -22,17 +22,19 @@ Armazena os **lançamentos financeiros** do usuário registrados via WhatsApp pe
 
 Document ID gerado automaticamente via `.add()`.
 
-### Campos
-
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
 | `id` | `String` | Sim | UUID v4 gerado pelo backend |
 | `description` | `String` | Sim | Nome do estabelecimento ou descrição (ex: `"Almoço Ifood"`) |
 | `amount` | `Number (Float)` | Sim | Valor da transação (positivo para despesas) |
-| `category` | `String` | Sim | Categoria inferida pela IA (ex: `"Alimentação"`, `"Transporte"`) |
-| `payment_method` | `String (Enum)` | Sim | Método de pagamento normalizado (3 valores possíveis) |
+| `category` | `String` | Sim | Categoria (ex: `"Mercado"`, `"Carro"`, `"Alimentação"`) |
+| `type` | `String (Enum)` | Opcional (Default: expense_variable) | Tipo: `'expense_variable'`, `'expense_fixed'`, `'income'` |
+| `payment_method` | `String` | Sim | Método de pagamento ou Cartão |
+| `installment` | `String` | Opcional | Identificador de parcela (ex: `"2/3"`, `"2/9"`) |
+| `owner` | `String` | Opcional | Titular ou responsável do lançamento (ex: `"Christian"`, `"Daniel"`) |
 | `date` | `String (ISO 8601)` | Sim | Data em formato ISO string (legível por humanos) |
 | `timestamp` | `Timestamp` | Sim | Timestamp Firestore nativo para range queries |
+| `userId` / `user_id` | `String` | Sim | Isolamento multi-tenant do usuário |
 
 ---
 

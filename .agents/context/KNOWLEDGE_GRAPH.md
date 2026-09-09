@@ -170,3 +170,19 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 - **Renovação Autônoma de Próximo Episódio via AniList (P-0421):**
   - `anime_tracker_tool.py` implementa `_renovar_proximos_episodios_expirados()` que detecta animes em exibição (`assistindo`) com `airing_at` vencido no passado e reconsulta autonomamente o endpoint GraphQL do AniList.
   - O Morning Briefing (`_obter_info_animes_briefing`) e a grade semanal (`grade_semanal_animes`) acionam a renovação dinâmica, selecionando com precisão os lançamentos reais de domingo (como `Seihantai na Kimi to Boku 2nd Season` às 05:00 e `Mushoku Tensei III` às 12:00) e eliminando qualquer exibição errônea de animes de meses posteriores (`Seishun Buta Yarou` em 15/10).
+
+## FG-06: Dashboard Avançado de Gastos & Gestão de Categorias e Cartões [P-001 a P-013]
+- **Design & Experiência Visual (P-001, P-002, P-006):**
+  - Dashboard Angular reproduz com precisão o design moderno: saudação personalizada, título "Orçamento" com botão de olho para alternar visibilidade (ocultando com `••••••` para privacidade), seletor de mês `< Mês de Ano >` e abas em estilo pílula arredondada (`Receita`, `Despesa fixa`, `Despesa variável`).
+  - Layout dividido em: tabela de lançamentos com badges de categoria coloridos e Donut Chart ECharts com raio customizado e legenda lateral em grid de 2 colunas com percentuais e cores consistentes. Barra inferior fixa com saldo do período em vermelho vibrante.
+- **Granularidade e Filtro de Categorias (P-003, P-007, P-008):**
+  - Paleta com mais de 12 categorias padrão de alta granularidade (Mercado, Carro, Oliver, Casa, Família, Christian, Farmácia, Karen, Gatos, Lazer, Mercadinho, iFood, etc.), com códigos hexadecimais unificados entre tabela e gráfico.
+  - Filtro interativo por categoria via dropdown e clique direto nas fatias do Donut chart.
+- **Gestão Completa de Categorias e Cartões (P-009 a P-012):**
+  - Modal integrado permitindo adicionar novas categorias (com seletor/paleta de cores), renomear e excluir categorias com migração automática para 'Outros'.
+  - Aba de cartões permitindo cadastrar, renomear e excluir métodos de pagamento com tipo (Crédito, Débito/Pix, Benefício, Outro).
+- **Backend RESTful & Isolamento Multi-Tenant (P-004, P-005, P-013):**
+  - Router `/api/v1/finance` no FastAPI com endpoints: `/dashboard` (agregação com suporte a ano, mês, tipo e categoria), `/transactions` (CRUD com suporte a tipo fixa/variável/receita, parcelas e titular), `/categories` (CRUD com fallback para defaults) e `/cards` (CRUD com fallback para defaults).
+  - CORS atualizado permitindo `PUT` e `DELETE`.
+  - Isolamento rigoroso por `X-User-Id` garantindo conformidade SecOps e prevenção contra IDOR.
+

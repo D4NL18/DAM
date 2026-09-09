@@ -1,127 +1,543 @@
-<div class="finance-dashboard" *ngIf="!loading && summary">
-  <div class="dashboard-header">
-    <div class="title-area">
-      <h2 class="page-title">Dashboard Financeiro</h2>
-      <p class="page-subtitle">Visão consolidada a partir dos lançamentos no Firestore</p>
+<div class="finance-dashboard-page">
+  <!-- Top Bar -->
+  <header class="page-top-header">
+    <div class="header-left">
+      <span class="greeting-text">Olá, {{ userDisplayName }}</span>
+      <div class="title-with-privacy">
+        <h1 class="main-title">Orçamento</h1>
+        <button class="eye-toggle-btn" (click)="toggleHideValues()" [title]="hideValues ? 'Mostrar valores' : 'Ocultar valores'">
+          <span class="material-symbols-outlined">{{ hideValues ? 'visibility_off' : 'visibility' }}</span>
+        </button>
+      </div>
     </div>
-    <div class="period-selector">
-      <button class="period-btn">Semana</button>
-      <button class="period-btn active">Mês</button>
-      <button class="period-btn">Ano</button>
+
+    <div class="header-right">
+      <button class="bell-icon-btn" title="Notificações">
+        <span class="material-symbols-outlined">notifications</span>
+      </button>
+
+      <div class="month-navigator-pill">
+        <button class="nav-chevron-btn" (click)="prevMonth()" title="Mês anterior">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <span class="month-label">{{ currentMonthLabel }}</span>
+        <button class="nav-chevron-btn" (click)="nextMonth()" title="Próximo mês">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Segmented Tabs & Sub-actions -->
+  <div class="navigation-tabs-bar">
+    <div class="segmented-pill-tabs">
+      <button
+        class="pill-tab"
+        [class.active]="currentTab === 'income'"
+        (click)="setTab('income')">
+        Receita
+      </button>
+      <button
+        class="pill-tab"
+        [class.active]="currentTab === 'expense_fixed'"
+        (click)="setTab('expense_fixed')">
+        Despesa fixa
+      </button>
+      <button
+        class="pill-tab"
+        [class.active]="currentTab === 'expense_variable'"
+        (click)="setTab('expense_variable')">
+        Despesa variável
+      </button>
+    </div>
+
+    <div class="quick-action-btns">
+      <button class="action-pill-btn" (click)="openImportModal()">
+        <span class="material-symbols-outlined">upload</span>
+        <span>Importar extrato</span>
+      </button>
+      <button class="action-pill-btn danger" (click)="clearPeriodTransactions()">
+        <span class="material-symbols-outlined">delete_outline</span>
+        <span>Limpar lançamentos</span>
+      </button>
     </div>
   </div>
 
-  <div class="bento-grid">
-    <!-- Resumo de Gastos (Highlight Card Baseado no Banco) -->
-    <div class="bento-card bento-saldo">
-      <div class="card-header">
-        <h3 class="card-title">Total de Gastos (Mês Atual)</h3>
-        <span class="material-symbols-outlined text-tertiary">account_balance_wallet</span>
-      </div>
-      <div class="card-body">
-        <div class="main-value">{{ summary.totalSpent | currency:summary.currency }}</div>
-        <div class="trend" [ngClass]="summary.totalSpent > 0 ? 'alert' : 'positive'">
-          <span class="material-symbols-outlined">{{ summary.totalSpent > 0 ? 'shopping_bag' : 'check_circle' }}</span>
-          <span>{{ summary.recentTransactions.length }} lançamentos no banco</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <div class="footer-item">
-          <p class="label">Categorias Ativas</p>
-          <p class="value">{{ summary.expensesByCategory.length }}</p>
-        </div>
-        <div class="footer-item">
-          <p class="label">Maior Categoria</p>
-          <p class="value alert">
-            {{ summary.expensesByCategory.length > 0 ? summary.expensesByCategory[0].category : 'Nenhuma' }}
-          </p>
-        </div>
-      </div>
-    </div>
+  <!-- Main Content Grid -->
+  <div class="dashboard-main-grid" *ngIf="!loading; else loadingState">
+    <!-- Left Column: Transactions Table Card -->
+    <div class="panel-card table-panel-card">
+      <div class="panel-header">
+        <h2 class="panel-title">{{ tabTitle }}</h2>
+        <div class="panel-header-actions">
+          <!-- Botão de Filtro com Dropdown -->
+          <div class="filter-dropdown-container">
+            <button class="header-action-btn" (click)="toggleFilterPopover()">
+              <span class="material-symbols-outlined">tune</span>
+              <span>Filtro</span>
+              <span class="filter-badge" *ngIf="selectedCategoryFilter">1</span>
+            </button>
 
-    <!-- Insights Financeiros Baseados em Dados Reais -->
-    <div class="bento-card bento-insights bg-primary-container">
-      <div class="card-header">
-        <span class="material-symbols-outlined">lightbulb</span>
-        <h3 class="card-title">Insights Financeiros</h3>
-      </div>
-      <div class="insights-list" *ngIf="summary.expensesByCategory.length > 0; else noInsights">
-        <div class="insight-item" *ngFor="let cat of summary.expensesByCategory.slice(0, 2)">
-          <p class="insight-label">{{ cat.category }}</p>
-          <p class="insight-text">
-            Representa <strong>{{ (cat.amount / (summary.totalSpent || 1) * 100) | number:'1.0-0' }}%</strong> do seu total mensal ({{ cat.amount | currency:summary.currency }}).
-          </p>
+            <!-- Popover de Filtro -->
+            <div class="filter-popover" *ngIf="isFilterOpen">
+              <div class="filter-popover-header">
+                <strong>Filtrar por Categoria</strong>
+                <button class="close-popover" (click)="toggleFilterPopover()">✕</button>
+              </div>
+              <div class="filter-popover-list">
+                <button
+                  class="filter-cat-option"
+                  [class.selected]="!selectedCategoryFilter"
+                  (click)="clearCategoryFilter()">
+                  <span>Todas as categorias</span>
+                </button>
+                <button
+                  class="filter-cat-option"
+                  *ngFor="let cat of categories"
+                  [class.selected]="selectedCategoryFilter.toLowerCase() === cat.name.toLowerCase()"
+                  (click)="applyCategoryFilter(cat.name)">
+                  <span class="cat-dot-small" [style.backgroundColor]="cat.color"></span>
+                  <span>{{ cat.name }}</span>
+                </button>
+              </div>
+              <div class="filter-popover-footer" *ngIf="selectedCategoryFilter">
+                <button class="clear-filter-btn" (click)="clearCategoryFilter()">Remover filtro</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botão + Adicionar -->
+          <button class="header-action-btn primary" (click)="openAddTransaction()">
+            <span class="material-symbols-outlined">add</span>
+            <span>Adicionar</span>
+          </button>
         </div>
       </div>
-      <ng-template #noInsights>
-        <div class="empty-state-box">
-          <span class="material-symbols-outlined text-muted">query_stats</span>
-          <p class="text-muted">Ainda não há lançamentos suficientes no Firestore neste mês para gerar insights preditivos.</p>
-        </div>
-      </ng-template>
-    </div>
 
-    <!-- Despesas por Categoria (Chart) -->
-    <div class="bento-card bento-despesas">
-      <div class="card-header">
-        <h3 class="card-title">Despesas por Categoria</h3>
-      </div>
-      <div class="chart-wrapper">
-        <div echarts [options]="chartOption" class="echarts-instance"></div>
-      </div>
-    </div>
-
-    <!-- Últimas Transações do Firestore -->
-    <div class="bento-card bento-transacoes">
-      <div class="card-header">
-        <h3 class="card-title">Últimas Transações (Firestore)</h3>
-        <span class="badge-count" *ngIf="summary.recentTransactions.length > 0">
-          {{ summary.recentTransactions.length }} registradas
-        </span>
-      </div>
-      <div class="table-container">
-        <table class="tx-table">
+      <!-- Tabela de Lançamentos -->
+      <div class="table-scroll-wrapper">
+        <table class="dam-transactions-table" *ngIf="filteredTransactions.length > 0; else emptyTable">
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Descrição / Categoria</th>
-              <th>Valor</th>
-              <th class="text-right">Origem</th>
+              <th class="col-date" (click)="toggleSort()">
+                Data
+                <span class="material-symbols-outlined sort-icon">
+                  {{ sortAscending ? 'arrow_upward' : 'arrow_downward' }}
+                </span>
+              </th>
+              <th class="col-name">Nome</th>
+              <th class="col-category">Categoria</th>
+              <th class="col-amount text-right">Valor</th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let tx of summary.recentTransactions">
-              <td>{{ tx.date | date:'shortDate' }}</td>
-              <td class="category-cell">
-                <div class="cat-icon bg-primary-light text-primary">
-                  <span class="material-symbols-outlined">
-                    {{ tx.category === 'Alimentação' ? 'restaurant' : (tx.category === 'Transporte' ? 'directions_car' : 'receipt') }}
-                  </span>
-                </div>
-                <div>
-                  <strong>{{ tx.description }}</strong>
-                  <span class="sub-cat">{{ tx.category }}</span>
-                </div>
+            <tr *ngFor="let tx of filteredTransactions" class="tx-row">
+              <td class="col-date font-mono">{{ tx.date | date:'dd/MM' }}</td>
+              <td class="col-name">
+                <span class="tx-desc">{{ tx.description }}</span>
+                <span class="tx-details-sep" *ngIf="tx.owner || tx.installment">·</span>
+                <span class="tx-owner" *ngIf="tx.owner">{{ tx.owner }}</span>
+                <span class="tx-installment" *ngIf="tx.installment">{{ tx.installment }}</span>
               </td>
-              <td class="value-cell negative">
-                {{ tx.amount | currency:summary.currency }}
+              <td class="col-category">
+                <span class="category-badge-pill">
+                  <span class="bullet" [style.backgroundColor]="tx.categoryColor || '#64748b'"></span>
+                  <span class="cat-name">{{ tx.category }}</span>
+                </span>
               </td>
-              <td class="text-right">
-                <span class="status-badge paid">Firestore</span>
+              <td class="col-amount text-right" [class.negative]="tx.type !== 'income'" [class.positive]="tx.type === 'income'">
+                <span *ngIf="!hideValues">
+                  {{ tx.type === 'income' ? '+ ' : '- ' }}{{ tx.amount | currency:'BRL':'symbol':'1.2-2' }}
+                </span>
+                <span *ngIf="hideValues">••••••</span>
               </td>
-            </tr>
-            <tr *ngIf="summary.recentTransactions.length === 0">
-              <td colspan="4" class="empty-state-cell">
-                <div class="empty-state-content">
-                  <span class="material-symbols-outlined">receipt_long</span>
-                  <p>Nenhuma despesa registrada no banco de dados para o mês selecionado.</p>
-                  <small>Envie comprovantes ou mensagens no WhatsApp para alimentar sua planilha automaticamente.</small>
-                </div>
+              <td class="col-actions text-right">
+                <button class="icon-action-btn" (click)="openEditTransaction(tx)" title="Editar transação">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
+
+        <!-- Empty State da Tabela -->
+        <ng-template #emptyTable>
+          <div class="table-empty-state">
+            <div class="empty-icon-circle">
+              <span class="material-symbols-outlined">receipt_long</span>
+            </div>
+            <h3>Nenhum lançamento encontrado</h3>
+            <p>
+              Não há lançamentos de <strong>{{ tabTitle }}</strong> para <strong>{{ currentMonthLabel }}</strong>
+              <span *ngIf="selectedCategoryFilter"> na categoria <em>{{ selectedCategoryFilter }}</em></span>.
+            </p>
+            <button class="empty-add-btn" (click)="openAddTransaction()">
+              <span class="material-symbols-outlined">add</span>
+              <span>Cadastrar primeira transação</span>
+            </button>
+          </div>
+        </ng-template>
       </div>
+    </div>
+
+    <!-- Right Column: Donut Chart Card -->
+    <div class="panel-card chart-panel-card">
+      <div class="donut-chart-container">
+        <div echarts [options]="chartOption" (chartClick)="onChartClick($event)" class="echarts-donut"></div>
+      </div>
+
+      <!-- Legenda com Porcentagens e Categorias em Grid de 2 Colunas -->
+      <div class="categories-legend-grid" *ngIf="dashboardData?.expensesByCategory && dashboardData!.expensesByCategory.length > 0">
+        <div
+          class="legend-item"
+          *ngFor="let item of dashboardData!.expensesByCategory"
+          (click)="applyCategoryFilter(item.category)"
+          [class.active]="selectedCategoryFilter.toLowerCase() === item.category.toLowerCase()"
+          [title]="'Filtrar por ' + item.category">
+          <span class="legend-color-dot" [style.backgroundColor]="item.color"></span>
+          <span class="legend-percentage">{{ item.percentage }}%</span>
+          <span class="legend-category-title">{{ item.category }}</span>
+        </div>
+      </div>
+
+      <!-- Link Gerenciar Categorias -->
+      <div class="chart-card-footer">
+        <button class="manage-categories-button" (click)="openManageModal()">
+          <span class="material-symbols-outlined">category</span>
+          <span>Gerenciar categorias</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Skeleton -->
+  <ng-template #loadingState>
+    <div class="dashboard-skeleton-grid">
+      <div class="skeleton-card skeleton-left">
+        <div class="skeleton-line title-skel"></div>
+        <div class="skeleton-line row-skel" *ngFor="let i of [1,2,3,4,5,6]"></div>
+      </div>
+      <div class="skeleton-card skeleton-right">
+        <div class="skeleton-circle"></div>
+        <div class="skeleton-grid-lines">
+          <div class="skeleton-line" *ngFor="let i of [1,2,3,4]"></div>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- Bottom Floating / Sticky Summary Bar -->
+  <div class="floating-summary-bar">
+    <button class="expand-chevron" title="Detalhes do saldo">
+      <span class="material-symbols-outlined">keyboard_arrow_up</span>
+    </button>
+    <div class="summary-balance-display">
+      <span class="balance-number" [class.negative]="netBalance < 0" [class.positive]="netBalance >= 0">
+        <ng-container *ngIf="!hideValues">
+          {{ netBalance < 0 ? '- ' : '+ ' }}{{ (netBalance < 0 ? -netBalance : netBalance) | currency:'BRL':'symbol':'1.2-2' }}
+        </ng-container>
+        <ng-container *ngIf="hideValues">••••••</ng-container>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: ADICIONAR / EDITAR TRANSAÇÃO ================= -->
+<div class="dam-modal-backdrop" *ngIf="showTransactionModal">
+  <div class="dam-modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">{{ editingTransaction ? 'Editar Lançamento' : 'Novo Lançamento' }}</h3>
+      <button class="close-btn" (click)="showTransactionModal = false">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Tipo de Transação -->
+      <div class="form-group">
+        <label>Tipo de Transação</label>
+        <div class="type-selector-pill">
+          <button
+            type="button"
+            class="type-pill"
+            [class.selected]="txForm.type === 'expense_variable'"
+            (click)="txForm.type = 'expense_variable'">
+            Despesa variável
+          </button>
+          <button
+            type="button"
+            class="type-pill"
+            [class.selected]="txForm.type === 'expense_fixed'"
+            (click)="txForm.type = 'expense_fixed'">
+            Despesa fixa
+          </button>
+          <button
+            type="button"
+            class="type-pill"
+            [class.selected]="txForm.type === 'income'"
+            (click)="txForm.type = 'income'">
+            Receita
+          </button>
+        </div>
+      </div>
+
+      <!-- Descrição & Valor -->
+      <div class="form-row">
+        <div class="form-group flex-2">
+          <label for="txDesc">Descrição / Nome *</label>
+          <input
+            id="txDesc"
+            type="text"
+            class="dam-input"
+            [(ngModel)]="txForm.description"
+            placeholder="Ex: Financiamento Song, Ração..."
+            required />
+        </div>
+        <div class="form-group flex-1">
+          <label for="txAmount">Valor (R$) *</label>
+          <input
+            id="txAmount"
+            type="number"
+            step="0.01"
+            class="dam-input"
+            [(ngModel)]="txForm.amount"
+            placeholder="0,00"
+            required />
+        </div>
+      </div>
+
+      <!-- Categoria & Cartão -->
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label for="txCat">Categoria</label>
+          <select id="txCat" class="dam-select" [(ngModel)]="txForm.category">
+            <option *ngFor="let cat of categories" [value]="cat.name">{{ cat.name }}</option>
+          </select>
+        </div>
+        <div class="form-group flex-1">
+          <label for="txCard">Cartão / Método</label>
+          <select id="txCard" class="dam-select" [(ngModel)]="txForm.paymentMethod">
+            <option *ngFor="let card of cards" [value]="card.name">{{ card.name }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Data, Parcela & Titular -->
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label for="txDate">Data</label>
+          <input id="txDate" type="date" class="dam-input" [(ngModel)]="txForm.date" />
+        </div>
+        <div class="form-group flex-1">
+          <label for="txInst">Parcelas (Opcional)</label>
+          <input
+            id="txInst"
+            type="text"
+            class="dam-input"
+            [(ngModel)]="txForm.installment"
+            placeholder="Ex: 2/3, 2/9" />
+        </div>
+        <div class="form-group flex-1">
+          <label for="txOwner">Responsável</label>
+          <input
+            id="txOwner"
+            type="text"
+            class="dam-input"
+            [(ngModel)]="txForm.owner"
+            placeholder="Ex: Christian, Daniel" />
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button
+        type="button"
+        class="dam-btn danger"
+        *ngIf="editingTransaction"
+        (click)="deleteCurrentTransaction()">
+        Excluir
+      </button>
+      <div class="footer-actions-right">
+        <button type="button" class="dam-btn ghost" (click)="showTransactionModal = false">Cancelar</button>
+        <button type="button" class="dam-btn primary" (click)="saveTransaction()">
+          {{ editingTransaction ? 'Salvar Alterações' : 'Adicionar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: GERENCIAR CATEGORIAS E CARTÕES ================= -->
+<div class="dam-modal-backdrop" *ngIf="showManageModal">
+  <div class="dam-modal-card large">
+    <div class="modal-header">
+      <div class="modal-title-tabs">
+        <button
+          class="modal-tab-btn"
+          [class.active]="manageActiveTab === 'categories'"
+          (click)="manageActiveTab = 'categories'">
+          Gerenciar Categorias ({{ categories.length }})
+        </button>
+        <button
+          class="modal-tab-btn"
+          [class.active]="manageActiveTab === 'cards'"
+          (click)="manageActiveTab = 'cards'">
+          Gerenciar Cartões ({{ cards.length }})
+        </button>
+      </div>
+      <button class="close-btn" (click)="showManageModal = false">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- ABA 1: GERENCIAR CATEGORIAS -->
+      <div *ngIf="manageActiveTab === 'categories'" class="manage-tab-content">
+        <!-- Formulário Adicionar Categoria -->
+        <div class="add-box">
+          <h4>Nova Categoria</h4>
+          <div class="add-form-inline">
+            <input
+              type="text"
+              class="dam-input"
+              [(ngModel)]="newCategoryName"
+              placeholder="Nome da categoria (ex: Academia, Pets...)" />
+            
+            <div class="color-picker-wrapper">
+              <input type="color" class="color-input" [(ngModel)]="newCategoryColor" />
+              <div class="color-swatch-list">
+                <button
+                  type="button"
+                  class="swatch-circle"
+                  *ngFor="let c of colorPalette.slice(0, 8)"
+                  [style.backgroundColor]="c"
+                  [class.active]="newCategoryColor.toLowerCase() === c.toLowerCase()"
+                  (click)="newCategoryColor = c">
+                </button>
+              </div>
+            </div>
+
+            <button type="button" class="dam-btn primary" (click)="addCategory()">Adicionar</button>
+          </div>
+        </div>
+
+        <!-- Lista de Categorias -->
+        <div class="items-list-container">
+          <div class="list-item-row" *ngFor="let cat of categories">
+            <!-- Edição inline -->
+            <ng-container *ngIf="editingCategory && editingCategory.id === cat.id; else catViewMode">
+              <div class="inline-edit-form">
+                <input type="text" class="dam-input edit-inline" [(ngModel)]="editingCategory.name" />
+                <input type="color" class="color-input" [(ngModel)]="editingCategory.color" />
+                <button class="dam-btn primary small" (click)="saveEditCategory()">Salvar</button>
+                <button class="dam-btn ghost small" (click)="editingCategory = null">Cancelar</button>
+              </div>
+            </ng-container>
+
+            <!-- Modo visualização -->
+            <ng-template #catViewMode>
+              <div class="item-info">
+                <span class="item-color-bullet" [style.backgroundColor]="cat.color"></span>
+                <strong class="item-name">{{ cat.name }}</strong>
+              </div>
+              <div class="item-actions">
+                <button class="icon-btn" (click)="startEditCategory(cat)" title="Renomear categoria">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button class="icon-btn danger" (click)="deleteCategory(cat)" title="Excluir categoria">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABA 2: GERENCIAR CARTÕES -->
+      <div *ngIf="manageActiveTab === 'cards'" class="manage-tab-content">
+        <!-- Formulário Adicionar Cartão -->
+        <div class="add-box">
+          <h4>Novo Cartão / Conta</h4>
+          <div class="add-form-inline">
+            <input
+              type="text"
+              class="dam-input"
+              [(ngModel)]="newCardName"
+              placeholder="Nome do cartão (ex: Nubank, Itaú Débito...)" />
+            
+            <select class="dam-select" [(ngModel)]="newCardType">
+              <option value="credito">Crédito</option>
+              <option value="debito">Débito / Pix</option>
+              <option value="beneficio">Benefício (VR/VA)</option>
+              <option value="outro">Outro</option>
+            </select>
+
+            <button type="button" class="dam-btn primary" (click)="addCard()">Adicionar</button>
+          </div>
+        </div>
+
+        <!-- Lista de Cartões -->
+        <div class="items-list-container">
+          <div class="list-item-row" *ngFor="let card of cards">
+            <!-- Edição inline -->
+            <ng-container *ngIf="editingCard && editingCard.id === card.id; else cardViewMode">
+              <div class="inline-edit-form">
+                <input type="text" class="dam-input edit-inline" [(ngModel)]="editingCard.name" />
+                <select class="dam-select" [(ngModel)]="editingCard.type">
+                  <option value="credito">Crédito</option>
+                  <option value="debito">Débito / Pix</option>
+                  <option value="beneficio">Benefício (VR/VA)</option>
+                  <option value="outro">Outro</option>
+                </select>
+                <button class="dam-btn primary small" (click)="saveEditCard()">Salvar</button>
+                <button class="dam-btn ghost small" (click)="editingCard = null">Cancelar</button>
+              </div>
+            </ng-container>
+
+            <!-- Modo visualização -->
+            <ng-template #cardViewMode>
+              <div class="item-info">
+                <span class="material-symbols-outlined card-icon">credit_card</span>
+                <strong class="item-name">{{ card.name }}</strong>
+                <span class="type-tag">{{ card.type }}</span>
+              </div>
+              <div class="item-actions">
+                <button class="icon-btn" (click)="startEditCard(card)" title="Renomear cartão">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button class="icon-btn danger" (click)="deleteCard(card)" title="Remover cartão">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="dam-btn ghost" (click)="showManageModal = false">Concluído</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: IMPORTAR EXTRATO ================= -->
+<div class="dam-modal-backdrop" *ngIf="showImportModal">
+  <div class="dam-modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Importar Extrato Bancário</h3>
+      <button class="close-btn" (click)="closeImportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted">
+        O DAM processa extratos bancários (OFX, CSV ou texto copiado do app) diretamente pelo motor de IA no WhatsApp
+        ou através do upload de arquivos.
+      </p>
+      <div class="upload-dropzone">
+        <span class="material-symbols-outlined dropzone-icon">cloud_upload</span>
+        <p>Arraste seu arquivo de extrato (.csv, .ofx) ou clique para selecionar</p>
+        <input type="file" class="file-input" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="dam-btn ghost" (click)="closeImportModal()">Fechar</button>
     </div>
   </div>
 </div>

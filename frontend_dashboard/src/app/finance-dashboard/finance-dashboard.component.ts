@@ -475,7 +475,7 @@ export class FinanceDashboardComponent implements OnInit {
     if (!breakdowns || breakdowns.length === 0) {
       this.chartOption = {
         title: {
-          text: 'Sem lançamentos no período',
+          text: 'Sem despesas no período',
           left: 'center',
           top: 'center',
           textStyle: { color: '#94a3b8', fontSize: 13, fontWeight: 'normal' }

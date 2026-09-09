@@ -108,7 +108,7 @@ class TestFinanceDashboardV2:
             assert len(data_var["transactions"]) == 1
             assert data_var["transactions"][0]["description"] == "Financiamento Song"
 
-            # Aba tipo=total (todas as entradas + gráfico consolidado)
+            # Aba tipo=total (todas as entradas na tabela, mas gráfico exibindo apenas o negativo/despesas)
             resp_total = client.get("/api/v1/finance/dashboard?year=2026&month=4&type=total", headers={"X-User-Id": "daniel"})
             assert resp_total.status_code == 200
             data_total = resp_total.json()
@@ -116,7 +116,7 @@ class TestFinanceDashboardV2:
             total_cats = [c["category"] for c in data_total["expensesByCategory"]]
             assert "Carro" in total_cats
             assert "Casa" in total_cats
-            assert "Receitas" in total_cats
+            assert "Receitas" not in total_cats
 
     def test_transactions_crud(self):
         """P-005: Adição, edição e exclusão de transações."""

@@ -147,14 +147,9 @@ def get_finance_dashboard(
                     incluir = False
 
                 if incluir:
-                    if type == "income":
-                        if tx_type == "income":
-                            category_map[cat] = category_map.get(cat, 0.0) + amount
-                    elif type == "total" or not type:
+                    # O gráfico deve exibir apenas o negativo (despesas)
+                    if tx_type != "income":
                         category_map[cat] = category_map.get(cat, 0.0) + amount
-                    else:
-                        if tx_type != "income":
-                            category_map[cat] = category_map.get(cat, 0.0) + amount
 
                     transactions.append({
                         "id": doc.id,

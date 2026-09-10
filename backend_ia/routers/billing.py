@@ -81,3 +81,14 @@ async def gcp_billing_alert(
         WhatsAppService.send_text(dest_jid, alerta_msg)
 
     return {"status": "alert_processed", "percentual": percentual}
+
+
+@router.get("/api/finops-scorecard")
+async def get_finops_scorecard():
+    """
+    Retorna o Scorecard FinOps de 5 pilares do GCP (PC-11).
+    Avaliação consolidada da infraestrutura Serverless, Always Free e eficiência de tokens.
+    """
+    from services.tools.gcp_billing_tool import calcular_finops_scorecard
+    return calcular_finops_scorecard()
+

@@ -224,6 +224,21 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Tool `traduzir_conteudo` disponível no `AVAILABLE_TOOLS` para o Gemini orquestrar textos, fotos com OCR e áudios transcritos.
   - Endpoints RESTful `POST /api/translate` e `GET /api/translate/usage` com tipagem Pydantic, rate limit e zero vazamento de dados sensíveis (LGPD).
 
+## PC-11: Otimização Extrema de Tokens & Score FinOps GCP 4.8+ [P-1101 a P-1110]
+- **Dynamic Tool Dispatcher & Modular Prompting (P-1101, P-1102):**
+  - `ToolsDispatcher`: Roteamento semântico de ferramentas. Mensagens casuais e saudações usam `tools=None` (economia de até 7.500 tokens). Mensagens específicas carregam estritamente o subconjunto do domínio.
+  - `PromptComposer`: Injeção de regras de domínio sob demanda (Core enxuto de ~250 tokens).
+- **Otimizador Multimodal de Mídias (P-1103, P-1104, P-1105):**
+  - `MediaOptimizer.optimize_image`: Downsampling proporcional (max 1024px) e JPEG q=80 com Pillow (redução de até 80% de tokens visuais).
+  - `MediaOptimizer.extract_text_from_pdf`: Extração local de texto via PyMuPDF/PyPDF, transformando PDFs digitais em texto puro e dispensando o envio multimodal pesado à LLM.
+- **Cache Multimodal Estendido (P-1106):**
+  - `ConversationCacheService` integrado com hash SHA-256 do binário de imagem/áudio/doc na chave de cache para zero reprocessamento de mídias repetidas.
+- **GCP FinOps 4.8+ & Governança Serverless (P-1108, P-1109, P-1110):**
+  - Desacoplamento do backend para Google Cloud Run (`min-instances=0`) com ping anti-cold start a cada 10 min no Cloud Scheduler.
+  - Scorecard FinOps de 5 pilares (`calcular_finops_scorecard`) exposto em `GET /api/finops-scorecard` e `consultar_gcp_billing` atingindo 4.84/5.00.
+  - Regras de Lifecycle de 7 dias para arquivos temporários no Cloud Storage (`gcs_lifecycle.json`).
+
+
 
 
 

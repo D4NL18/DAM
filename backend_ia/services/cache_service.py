@@ -148,13 +148,23 @@ class ConversationCacheService:
         return " ".join(limpo.split()).strip()
 
     @classmethod
-    def generate_cache_key(cls, remote_jid: str, query: str) -> str:
+    def generate_cache_key(
+        cls, 
+        remote_jid: str, 
+        query: str, 
+        media_base64: Optional[str] = None
+    ) -> str:
         """
-        RN-CACHE-002 e RN-CACHE-003: Gera uma chave hash SHA-256 única
-        garantindo isolamento por usuário (remote_jid) e normalização semântica.
+        RN-CACHE-002, RN-CACHE-003 e P-1106: Gera uma chave hash SHA-256 única
+        garantindo isolamento por usuário (remote_jid), normalização semântica
+        e hash do binário de mídia quando presente.
         """
         norm_query = cls.normalize_text(query)
-        raw_key = f"{remote_jid.strip().lower()}:{norm_query}"
+        media_hash = ""
+        if media_base64:
+            from services.media_optimizer import MediaOptimizer
+            media_hash = MediaOptimizer.compute_media_hash(media_base64)
+        raw_key = f"{remote_jid.strip().lower()}:{norm_query}:{media_hash}"
         return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
     @classmethod
@@ -275,9 +285,15 @@ class ConversationCacheService:
         return None
 
     @classmethod
-    def get_cached_response(cls, remote_jid: str, query: str) -> Optional[str]:
+    def get_cached_response(
+        cls, 
+        remote_jid: str, 
+        query: str, 
+        media_base64: Optional[str] = None
+    ) -> Optional[str]:
         """
         Recupera resposta em cache para a mensagem caso elegível e não expirada.
+        Suporta queries textuais e requisições com mídias multimodais (P-1106).
         """
         # Verifica se o usuário pediu forçamento de atualização
         norm_query = cls.normalize_text(query)
@@ -291,7 +307,11 @@ class ConversationCacheService:
         if volatility in (QueryVolatility.REALTIME_VOLATILE, QueryVolatility.STATE_CHANGING_ACTION):
             return None
 
-        cache_key = cls.generate_cache_key(remote_jid, query)
+        # Se for UNKNOWN mas tiver mídia, permite cache
+        if volatility == QueryVolatility.UNKNOWN and not media_base64:
+            return None
+
+        cache_key = cls.generate_cache_key(remote_jid, query, media_base64=media_base64)
         now = _now_br()
 
         # 1. Consulta L1 (Memória)
@@ -345,10 +365,12 @@ class ConversationCacheService:
         remote_jid: str,
         query: str,
         response_text: str,
-        custom_ttl: Optional[int] = None
+        custom_ttl: Optional[int] = None,
+        media_base64: Optional[str] = None
     ) -> bool:
         """
         Salva uma resposta elegível no cache L1 e L2 com TTL apropriado.
+        Suporta queries textuais e mídias multimodais (P-1106).
         Retorna True se foi salva, ou False se não elegível.
         """
         if not response_text:
@@ -367,6 +389,8 @@ class ConversationCacheService:
             if custom_ttl <= 0:
                 return False
             ttl_seconds = custom_ttl
+            if volatility == QueryVolatility.UNKNOWN:
+                volatility = QueryVolatility.STATIC_INFORMATIONAL
         else:
             if volatility == QueryVolatility.CLASH_OF_CLANS:
                 ttl_seconds = 3600  # 1 hora (mesmo dia / mesma fase de guerra)
@@ -379,12 +403,16 @@ class ConversationCacheService:
                     return False
             elif volatility == QueryVolatility.STATIC_INFORMATIONAL:
                 ttl_seconds = 43200  # 12 horas
+            elif media_base64:
+                # Mídias informativas com TTL padrão de 1 hora
+                ttl_seconds = 3600
+                volatility = QueryVolatility.STATIC_INFORMATIONAL
             else:
                 return False
 
         expires_at = now + timedelta(seconds=ttl_seconds)
         norm_query = cls.normalize_text(query)
-        cache_key = cls.generate_cache_key(remote_jid, query)
+        cache_key = cls.generate_cache_key(remote_jid, query, media_base64=media_base64)
 
         entry = CacheEntry(
             remote_jid=remote_jid,
@@ -403,15 +431,24 @@ class ConversationCacheService:
         # 2. Grava em L2 (Firestore) de forma não-bloqueante/fail-safe
         try:
             if firebase.db is not None:
-                firebase.db.collection("conversation_cache").document(cache_key).set({
+                media_hash = ""
+                if media_base64:
+                    from services.media_optimizer import MediaOptimizer
+                    media_hash = MediaOptimizer.compute_media_hash(media_base64)
+
+                payload_doc = {
                     "remote_jid": remote_jid,
                     "query_normalized": norm_query,
                     "response_text": response_text,
-                    "domain": volatility.value,
+                    "domain": volatility.value if hasattr(volatility, "value") else str(volatility),
                     "created_at": now.isoformat(),
                     "expires_at": expires_at.isoformat(),
                     "ttl_seconds": ttl_seconds
-                }, merge=True)
+                }
+                if media_hash:
+                    payload_doc["media_hash"] = media_hash
+
+                firebase.db.collection("conversation_cache").document(cache_key).set(payload_doc, merge=True)
         except Exception as e:
             logger.warning(f"[CACHE] Falha ao persistir no Firestore: {e}")
 

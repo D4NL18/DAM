@@ -1,4 +1,4 @@
-﻿# Coleção: `conversation_cache`
+# Coleção: `conversation_cache`
 
 ## 📋 Propósito
 
@@ -26,6 +26,7 @@ Document ID: hash SHA-256 truncado de `{remote_jid}:{query_normalized}`.
 |---|---|---|---|
 | `remote_jid` | `String` | Sim | JID do usuário associado à resposta cacheada |
 | `query_normalized` | `String` | Sim | Texto da query normalizado (sem acentos, lowercase) |
+| `media_hash` | `String (SHA-256)` | Não | Hash SHA-256 do binário da imagem/áudio/doc quando houver mídia |
 | `response_text` | `String` | Sim | Texto completo da resposta gerada pelo LLM |
 | `domain` | `String (Enum)` | Sim | Domínio de volatilidade da query |
 | `created_at` | `String (ISO 8601)` | Sim | Data/hora de criação |

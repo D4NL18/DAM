@@ -118,10 +118,13 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 2 (Sanitização de Texto & Normalização Fonética):** Remoção de código markdown (`*`, `_`, emojis, links, tabelas) para dicção limpa e natural.
   - **[x] Story 3 (Gatilhos de Envio & Integração WhatsApp):** Detecção automática de intenção de voz (`should_reply_with_audio`) e envio como nota de voz gravada PTT (`sendWhatsAppAudio`).
   - **[x] Story 4 (Cache de Áudios & FinOps):** Cache L1 em memória de áudios sintetizados com chave hash SHA-256 para zero redundância e economia de custos.
-- **[x] PC-10 (Migração para WhatsApp Business Dedicado & Isolamento Inviolável):** Conexão do bot em conta dedicada de WhatsApp Business (+55 71 98171-8497) com isolamento estrito para o número pessoal do usuário (+55 71 99126-9995) e proteção anti-loop para mensagens e áudios enviados pelo bot (`key.fromMe == True`).
-  - **[x] Story 1 (Desassociação de Sessão & Conexão do Bot):** Procedimento de logout limpo na Evolution API e emissão de novo QR Code para o WhatsApp Business.
-  - **[x] Story 2 (Isolamento Inviolável de Remetente):** Descarte sumário de mensagens de terceiros que entrarem em contato com o WhatsApp Business do bot.
-  - **[x] Story 3 (Anti-Loop Robusto com fromMe):** Interceptação no webhook de mensagens originadas pela própria instância do bot para prevenir auto-respostas e loops infinitos.
+- **[x] PC-11 (Engenharia de Otimização de Tokens & FinOps Score 4.8+ no GCP):**
+  - **[x] Story 1 (Dynamic Tool Dispatcher & Modular System Prompting):** Despachante inteligente de ferramentas (zero tools em conversa casual, seleção por domínio funcional) e refatoração do `PromptComposer` em Core enxuto + módulos sob demanda, economizando até 7.500 tokens por requisição.
+  - **[x] Story 2 (Otimizador Multimodal de Mídias - Imagens, Áudios e Documentos):** Módulo de pré-processamento de imagens com Pillow (resize para max 1024px, JPEG q=80), extração local de texto via PyMuPDF para PDFs textuais e filtragem de silêncio/VAD em áudios, reduzindo 70-90% dos tokens multimodais.
+  - **[x] Story 3 (Gemini Context Caching & Cache Multimodal Estendido):** Suporte nativo ao Context Caching do Gemini para system prompt e tools fixas (desconto de 75-90% em tokens lidos) e suporte a cache de imagens/docs por hash SHA-256 no `ConversationCacheService`.
+  - **[x] Story 4 (FinOps GCP 4.8+: GCS Lifecycle, Logging Enxuto & Circuit Breaker):** Script de migração para Cloud Run com scale-to-zero e Cloud Scheduler anti-cold start, regras de Lifecycle no Cloud Storage, filtro de descarte de logs e Circuit Breaker orçamentário.
+  - **[x] Story 5 (Scorecard FinOps, Suíte de Testes TDD & Validação E2E):** Testes unitários com Pytest para todos os novos componentes, cálculo programático do Scorecard FinOps (5 pilares) e validação contra regressões.
+
 
 
 

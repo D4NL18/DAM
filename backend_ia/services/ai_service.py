@@ -94,83 +94,12 @@ from config.timezone import get_brasilia_now_str
 from services.guardrails_service import GuardrailsService
 from services.prompts.prompt_composer import PromptComposer
 from services.cache_service import ConversationCacheService
+from services.tools_dispatcher import ToolsDispatcher
+from services.media_optimizer import MediaOptimizer
 import base64
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-# Lista de ferramentas que a IA pode usar
-AVAILABLE_TOOLS = [
-    consultar_saude,
-    registrar_gasto,
-    consultar_resumo_gastos,
-    agendar_evento,
-    consultar_agenda,
-    editar_evento,
-    excluir_evento,
-    consultar_status_veiculo,
-    acionar_travas_veiculo,
-    consultar_jogos_cs2,
-    acionar_rotina_alexa,
-    falar_na_alexa,
-    consultar_rota,
-    calcular_horario_saida,
-    otimizar_rota_multiplos_pontos,
-    planejar_roteiro_viagem,
-    criar_anotacao,
-    criar_lembrete,
-    buscar_anotacoes,
-    listar_lembretes_pendentes,
-    concluir_lembrete,
-    salvar_ideia_presente,
-    consultar_ideias_presente,
-    alertar_datas_proximas,
-    dividir_conta_restaurante,
-    registrar_localizacao_objeto,
-    onde_guardei_objeto,
-    listar_historico_movimentacoes,
-    salvar_credencial,
-    consultar_credencial,
-    gerar_senha_forte,
-    listar_servicos_cofre,
-    traduzir_e_explicar_cardapio,
-    converter_unidade,
-    interpretar_e_converter,
-    onde_assistir,
-    calcular_churrasco,
-    criar_grupo_viagem,
-    adicionar_despesa_viagem,
-    calcular_fechamento_viagem,
-    calcular_saldo_jornada,
-    calcular_fechamento_semanal,
-    registrar_ponto_dia,
-    adicionar_anime_watchlist,
-    consultar_proximo_episodio,
-    listar_meus_animes,
-    atualizar_progresso_anime,
-    marcar_anime_concluido,
-    grade_semanal_animes,
-    sincronizar_perfil_anilist,
-    consultar_novas_temporadas,
-    explorar_temporada_animes,
-    consultar_briefing_matinal,
-    configurar_preferencias_briefing,
-    consultar_preferencias_briefing,
-    cadastrar_ou_atualizar_veiculo,
-    consultar_clash_of_clans,
-    consultar_gcp_billing,
-    consultar_lista_substituicao,
-    avaliar_substituicao_alimento,
-    salvar_endereco,
-    consultar_enderecos_salvos,
-    remover_endereco,
-    salvar_video,
-    consultar_videos_salvos,
-    marcar_video_assistido,
-    remover_video_salvo,
-    gerenciar_arquivos,
-    traduzir_conteudo
-]
 
 
 class AIService:
@@ -194,18 +123,42 @@ class AIService:
             logger.warning(f"Mensagem bloqueada por Guardrail [{remote_jid}]: {injection_reason}")
             return GuardrailsService.get_defensive_response()
 
-        # 2. Sanitização e Delimitação Semântica da Mensagem
+        # 2. Otimização Multimodal de Mídias (P-1103 e P-1104)
+        orig_media_b64 = media_base64
+        if media_base64 and media_mimetype:
+            # 2.1. Extração Local Prioritária para Documentos PDF (PyMuPDF)
+            if "pdf" in media_mimetype.lower():
+                extracted_pdf_text = MediaOptimizer.extract_text_from_pdf(media_base64)
+                if extracted_pdf_text:
+                    logger.info(f"[AI SERVICE] PDF convertido em texto digital local com sucesso. Dispensando envio multimodal.")
+                    user_text = f"{user_text}\n\n[Documento PDF Extraído]:\n{extracted_pdf_text}"
+                    media_base64 = None
+                    media_mimetype = None
+
+            # 2.2. Downsampling Adaptativo e Compressão de Imagens (Pillow)
+            elif "image" in media_mimetype.lower():
+                media_base64, media_mimetype = MediaOptimizer.optimize_image(
+                    media_base64=media_base64,
+                    media_mimetype=media_mimetype,
+                    max_dimension=1024,
+                    quality=80
+                )
+
+        # 3. Sanitização e Delimitação Semântica da Mensagem
         safe_prompt = GuardrailsService.wrap_user_message(user_text)
 
-        # 3. Otimização de Tokens: Cache Semântico de Conversa (PC-08)
-        if not media_base64 and not media_mimetype:
-            cached_response = ConversationCacheService.get_cached_response(remote_jid, user_text)
-            if cached_response:
-                logger.info(f"[CACHE HIT] Resposta servida diretamente do cache para {remote_jid}")
-                return cached_response
+        # 4. Otimização de Tokens: Cache Semântico e Multimodal (PC-08 / P-1106)
+        cached_response = ConversationCacheService.get_cached_response(
+            remote_jid=remote_jid, 
+            query=user_text,
+            media_base64=media_base64 or orig_media_b64
+        )
+        if cached_response:
+            logger.info(f"[CACHE HIT] Resposta servida diretamente do cache para {remote_jid}")
+            return cached_response
 
-        # 4. Busca o histórico do usuário
-        history_docs = ChatRepository.get_recent_history(remote_jid, limit=10)
+        # 5. Busca o histórico do usuário (Janela Enxuta)
+        history_docs = ChatRepository.get_recent_history(remote_jid, limit=8)
         
         # Constrói o histórico no formato para start_chat
         history = []
@@ -215,17 +168,22 @@ class AIService:
 
         try:
             agora = get_brasilia_now_str("%Y-%m-%d %H:%M")
-            system_instruction = PromptComposer.compose_system_instruction(agora)
+
+            # 6. Roteamento Dinâmico de Ferramentas & Prompts Modulares (P-1101 e P-1102)
+            has_media = bool(media_base64 or orig_media_b64)
+            selected_tools = ToolsDispatcher.resolve_tools(user_text, has_media=has_media)
+            detected_domains = ToolsDispatcher.detect_domains(user_text)
+            system_instruction = PromptComposer.compose_system_instruction(agora, domains=detected_domains)
 
             model = genai.GenerativeModel(
                 model_name='gemini-3.6-flash',
-                tools=AVAILABLE_TOOLS,
+                tools=selected_tools,
                 system_instruction=system_instruction
             )
             
             chat = model.start_chat(
                 history=history,
-                enable_automatic_function_calling=True
+                enable_automatic_function_calling=True if selected_tools else False
             )
             
             if media_base64 and media_mimetype:
@@ -236,7 +194,7 @@ class AIService:
                 clean_b64 = clean_b64.strip().replace("\n", "").replace("\r", "")
                 media_bytes = base64.b64decode(clean_b64)
 
-                # Normaliza MIME type para o padrão aceito pelo Gemini (sem parâmetros extras como codecs)
+                # Normaliza MIME type para o padrão aceito pelo Gemini
                 clean_mimetype = media_mimetype.split(";")[0].strip()
 
                 part = {
@@ -249,11 +207,17 @@ class AIService:
 
             final_text = response.text
 
-            # 5. Salva no cache se elegível (PC-08)
-            if not media_base64 and not media_mimetype and final_text:
-                ConversationCacheService.save_response(remote_jid, user_text, final_text)
+            # 7. Salva no cache se elegível (PC-08 / P-1106)
+            if final_text:
+                ConversationCacheService.save_response(
+                    remote_jid=remote_jid, 
+                    query=user_text, 
+                    response_text=final_text,
+                    media_base64=media_base64 or orig_media_b64
+                )
 
             return final_text
         except Exception as e:
             logger.error(f"Erro no Gemini: {e}")
             return "Desculpe, meus servidores estão indisponíveis no momento. Tente novamente mais tarde."
+

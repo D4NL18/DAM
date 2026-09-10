@@ -33,7 +33,7 @@ Implementar o método de download de Base64 em `WhatsAppService`, conectar no fl
 - [x] **Etapa 4:** Adicionar suíte de testes TDD em `backend_ia/tests/test_multimodal.py`.
 
 **Audit (Testes e Validação):**
-- [ ] **Cenário 1:** Envio de imagem sem base64 inline no payload: o webhook deve acionar `get_base64_from_media_message`, obter os dados e repassar ao `AIService`.
-- [ ] **Cenário 2:** Envio de áudio com `audio/ogg; codecs=opus`: o MIME type entregue ao Gemini deve ser `audio/ogg` e o áudio decodificado corretamente.
-- [ ] **Cenário 3:** Base64 com prefixo `data:image/png;base64,iVBOR...`: o `AIService` deve decodificar sem erro de padding.
-- [ ] **Cenário 4:** Falha na Evolution API ao obter mídia (retorno None): o sistema deve registrar log seguro e responder ao usuário sem acionar a IA cegamente.
+- [x] **Cenário 1:** Envio de imagem sem base64 inline no payload: o webhook deve acionar `get_base64_from_media_message`, obter os dados e repassar ao `AIService`.
+- [x] **Cenário 2:** Envio de áudio com `audio/ogg; codecs=opus`: o MIME type entregue ao Gemini deve ser `audio/ogg` e o áudio decodificado corretamente.
+- [x] **Cenário 3:** Base64 com prefixo `data:image/png;base64,iVBOR...`: o `AIService` deve decodificar sem erro de padding.
+- [x] **Cenário 4:** Falha na Evolution API ao obter mídia (retorno None): o sistema deve registrar log seguro e responder ao usuário sem acionar a IA cegamente.

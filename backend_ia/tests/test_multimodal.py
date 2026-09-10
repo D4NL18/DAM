@@ -211,6 +211,39 @@ class TestMultimodalIntegration(unittest.TestCase):
         self.assertEqual(call_content[0]["mime_type"], "audio/ogg")
         self.assertEqual(call_content[0]["data"], raw_audio_bytes)
 
+    @patch("routers.webhook.WhatsAppService.send_text")
+    @patch("routers.webhook.WhatsAppService.get_base64_from_media_message")
+    @patch("routers.webhook.ChatRepository.save_log")
+    def test_webhook_handles_media_download_failure_gracefully(self, mock_save_log, mock_get_media, mock_send_text):
+        """Cenário 4: Falha na Evolution API ao obter mídia -> envia aviso amigável."""
+        mock_get_media.return_value = None  # Falha no download
+        payload = {
+            "event": "messages.upsert",
+            "data": {
+                "key": {
+                    "remoteJid": "5511987654321@s.whatsapp.net",
+                    "fromMe": False,
+                    "id": "IMG_FAIL_001"
+                },
+                "messageType": "imageMessage",
+                "message": {
+                    "imageMessage": {
+                        "mimetype": "image/jpeg"
+                    }
+                }
+            }
+        }
+
+        # Faz a chamada síncrona do process_and_reply diretamente para validar o comportamento
+        from routers.webhook import process_and_reply
+        import asyncio
+        asyncio.run(process_and_reply("5511987654321@s.whatsapp.net", "Analise esta imagem enviada pelo usuário.", None, None))
+        
+        mock_send_text.assert_called_once()
+        sent_text = mock_send_text.call_args[0][1]
+        self.assertIn("Não consegui carregar", sent_text)
+
 if __name__ == "__main__":
     unittest.main()
+
 

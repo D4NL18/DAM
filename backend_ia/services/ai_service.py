@@ -157,14 +157,23 @@ class AIService:
             logger.info(f"[CACHE HIT] Resposta servida diretamente do cache para {remote_jid}")
             return cached_response
 
-        # 5. Busca o histórico do usuário (Janela Enxuta)
+        # 5. Busca o histórico do usuário (Janela Dinâmica por Token Budget)
         history_docs = ChatRepository.get_recent_history(remote_jid, limit=8)
         
-        # Constrói o histórico no formato para start_chat
+        # Constrói o histórico com token-budget dinâmico (P-1201)
+        MAX_HISTORY_TOKENS = 1500
         history = []
-        for msg in history_docs:
+        token_budget_used = 0
+        for msg in reversed(history_docs):  # Mais recente primeiro
+            text_content = msg.get("text") or ""
+            estimated_tokens = len(text_content) // 4  # Heurística: ~4 chars/token
+            if token_budget_used + estimated_tokens > MAX_HISTORY_TOKENS:
+                break
+            token_budget_used += estimated_tokens
             role = "model" if msg.get("fromMe") else "user"
-            history.append({"role": role, "parts": [msg.get("text")]})
+            history.insert(0, {"role": role, "parts": [text_content]})
+        
+        logger.info(f"[AI SERVICE] History: {len(history)}/{len(history_docs)} msgs loaded (~{token_budget_used} tokens)")
 
         try:
             agora = get_brasilia_now_str("%Y-%m-%d %H:%M")

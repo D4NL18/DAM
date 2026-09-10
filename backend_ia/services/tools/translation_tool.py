@@ -25,17 +25,12 @@ def traduzir_conteudo(
     idioma_origem: Optional[str] = None
 ) -> str:
     """
-    Traduz qualquer conteúdo em texto puro, texto extraído de imagens (OCR) ou transcrito de áudios
-    para o idioma de destino solicitado utilizando a Google Cloud Translation API.
-    A resposta é entregue estritamente em formato de texto legível.
+    Translate text, image-extracted text, or audio transcripts using Google Cloud Translation.
 
     Args:
-        texto: O texto que deve ser traduzido (digitado pelo usuário, extraído de imagem/placa/menu, ou transcrito de áudio).
-        idioma_destino: Idioma de chegada (ex: 'pt', 'en', 'es', 'fr', 'de', 'ja' ou 'inglês', 'espanhol', 'japonês'). Padrão: 'pt'.
-        idioma_origem: Idioma de partida, se conhecido. Se omitido, a detecção é feita automaticamente.
-
-    Returns:
-        Texto formatado contendo o idioma identificado e a tradução gerada.
+        texto: Text to translate.
+        idioma_destino: Target language code/name (default 'pt').
+        idioma_origem: Source language if known (default auto-detect).
     """
     if not texto or not texto.strip():
         return "⚠️ Texto vazio. Por favor, informe o conteúdo que deseja traduzir."

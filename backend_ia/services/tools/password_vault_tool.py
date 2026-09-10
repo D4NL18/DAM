@@ -80,12 +80,11 @@ def _mascarar_senha(senha: str) -> str:
 
 def gerar_senha_forte(tamanho: int = 16, incluir_simbolos: bool = True) -> str:
     """
-    Gera uma senha aleatória e criptograficamente segura usando o módulo secrets.
-    Garante presença de maiúsculas, minúsculas, dígitos e símbolos.
+    Generate a cryptographically secure random password.
 
     Args:
-        tamanho: Comprimento total da senha (mínimo 8 caracteres, padrão 16).
-        incluir_simbolos: Se True, inclui símbolos especiais (!@#$%&*...).
+        tamanho: Total length (min 8, default 16).
+        incluir_simbolos: Whether to include special symbols.
     """
     tamanho = max(8, tamanho)
 
@@ -115,20 +114,19 @@ def gerar_senha_forte(tamanho: int = 16, incluir_simbolos: bool = True) -> str:
     return "".join(caracteres)
 
 def salvar_credencial(
-
     servico: str, 
     usuario: str, 
     senha: str, 
     notas: Optional[str] = None
 ) -> str:
     """
-    Criptografa e armazena com segurança uma credencial no cofre (Firestore: vault_credentials).
+    Encrypt and securely store credentials in the password vault.
     
     Args:
-        servico: Nome do serviço ou site (ex: 'GitHub', 'Banco Inter', 'Netflix').
-        usuario: Nome de usuário, e-mail ou login.
-        senha: Senha em texto plano a ser criptografada antes de salvar.
-        notas: Informações contextuais opcionais (ex: 'Conta corporativa').
+        servico: Service or website name.
+        usuario: Username, email, or login.
+        senha: Plain text password to encrypt.
+        notas: Optional contextual notes.
     """
     if not servico or not servico.strip():
         return "Por favor, informe o nome do serviço para salvar no cofre."
@@ -189,7 +187,11 @@ def salvar_credencial(
 
 def consultar_credencial(servico: str, revelar_senha: bool = False) -> str:
     """
-    Recupera uma credencial do cofre do usuário ativo.
+    Retrieve credentials from the user's secure vault.
+
+    Args:
+        servico: Service name to search.
+        revelar_senha: If True, reveals password in plain text. Default False (masked).
     """
     if not servico or not servico.strip():
         return "Por favor, informe o nome do serviço que deseja consultar."
@@ -271,7 +273,7 @@ def consultar_credencial(servico: str, revelar_senha: bool = False) -> str:
 
 def listar_servicos_cofre() -> str:
     """
-    Lista todos os serviços cadastrados no cofre seguro do usuário ativo.
+    List all services stored in the active user's password vault.
     """
     user_id = UserContext.get_user_id()
     servicos: List[Dict[str, Any]] = []

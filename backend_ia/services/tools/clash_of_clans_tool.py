@@ -134,11 +134,10 @@ def _verificar_clan_war(data: dict, player_tag: str) -> str | None:
 
 def consultar_clash_of_clans(tipo: str) -> str:
     """
-    Consulta o status atual do Clash of Clans para o jogador e cla configurados.
-    Use para responder perguntas sobre raids da Capital do Cla ou guerras de clas.
+    Query current Clash of Clans status for raid weekends or clan wars.
 
     Args:
-        tipo (str): Tipo de consulta — 'raid' para Capital do Cla, 'guerra' para Guerra de Clas.
+        tipo (str): Query type — 'raid' for Clan Capital, 'guerra' for Clan Wars.
     """
     tipo_norm = tipo.lower().strip()
     user_id = UserContext.get_user_id()

@@ -53,13 +53,12 @@ def cadastrar_ou_atualizar_veiculo(
     detalhes: Optional[str] = None
 ) -> str:
     """
-    Cadastra ou atualiza o veículo do usuário conectado.
-    Permite registrar modelo, placa e características para controle individual.
+    Register or update the connected user's vehicle (model, license plate, notes).
 
     Args:
-        modelo (str): Marca e modelo do carro (ex: 'Honda HR-V 2023', 'Jeep Compass').
-        placa (str, optional): Placa do veículo.
-        detalhes (str, optional): Observações ou quilometragem estimada.
+        modelo (str): Vehicle make and model.
+        placa (str, optional): License plate.
+        detalhes (str, optional): Additional notes.
     """
     user_id = UserContext.get_user_id()
     user_name = UserContext.get_user_name()
@@ -93,8 +92,7 @@ def cadastrar_ou_atualizar_veiculo(
 
 def consultar_status_veiculo() -> str:
     """
-    Consulta a telemetria em tempo real do veículo do usuário ativo.
-    Retorna nível de combustível, autonomia estimada, status de travas, portas e saúde geral.
+    Query real-time vehicle telemetry (fuel level, estimated range, lock status, tire pressure).
     """
     user_id = UserContext.get_user_id()
     user_name = UserContext.get_user_name()
@@ -130,10 +128,10 @@ def consultar_status_veiculo() -> str:
 
 def acionar_travas_veiculo(acao: str) -> str:
     """
-    Envia comando remoto seguro para travar ou destravar as portas do veículo do usuário ativo.
+    Send remote command to lock or unlock vehicle doors.
 
     Args:
-        acao (str): 'travar' para trancar as portas ou 'destravar' para abrir as portas.
+        acao (str): 'travar' to lock or 'destravar' to unlock.
     """
     user_id = UserContext.get_user_id()
     user_name = UserContext.get_user_name()

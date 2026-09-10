@@ -17,11 +17,11 @@ def _limpar_dados_memoria():
 
 def criar_grupo_viagem(nome_viagem: str, participantes: List[str]) -> str:
     """
-    Cria um novo grupo de viagem para divisão de despesas.
+    Create a new trip group for expense splitting.
 
     Args:
-        nome_viagem (str): Nome identificador da viagem (ex: 'Floripa 2026', 'Carnaval Rio').
-        participantes (list[str]): Lista com os nomes dos participantes da viagem.
+        nome_viagem (str): Trip identifier name.
+        participantes (list[str]): List of participant names.
     """
     nome_limpo = nome_viagem.strip()
     if not nome_limpo:
@@ -65,15 +65,14 @@ def adicionar_despesa_viagem(
     participantes_divisao: Optional[List[str]] = None
 ) -> str:
     """
-    Registra uma despesa de viagem paga por um participante e dividida entre membros do grupo.
+    Record a trip expense paid by one participant and split among group members.
 
     Args:
-        nome_viagem (str): Nome da viagem.
-        descricao (str): Descrição do gasto (ex: 'Jantar Frutos do Mar', 'Pedágio', 'Airbnb').
-        valor (float): Valor total da despesa.
-        pagador (str): Nome do participante que efetuou o pagamento.
-        participantes_divisao (list[str], opcional): Lista dos participantes que devem dividir a conta.
-                                                     Se omitido ou vazio, divide igualmente entre todos os membros do grupo.
+        nome_viagem (str): Trip name.
+        descricao (str): Expense description.
+        valor (float): Total amount.
+        pagador (str): Participant who paid.
+        participantes_divisao (list[str], optional): Participants sharing the expense (defaults to all).
     """
     nome_limpo = nome_viagem.strip()
     key = nome_limpo.lower()
@@ -153,13 +152,11 @@ def adicionar_despesa_viagem(
 
 def calcular_fechamento_viagem(nome_viagem: str, chave_pix: Optional[str] = None) -> str:
     """
-    Calcula o fechamento financeiro de uma viagem utilizando algoritmo determinístico
-    de Debt Minimization (Minimização de Dívidas).
-    Retorna o total gasto, saldos líquidos individuais e o menor número de liquidações Pix necessárias.
+    Calculate trip balance settlement using Debt Minimization, returning net balances and minimal transfers.
 
     Args:
-        nome_viagem (str): Nome da viagem.
-        chave_pix (str, opcional): Chave Pix para exibir nas instruções de pagamento.
+        nome_viagem (str): Trip name.
+        chave_pix (str, optional): Pix key for payment instructions.
     """
     nome_limpo = nome_viagem.strip()
     key = nome_limpo.lower()

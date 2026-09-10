@@ -228,13 +228,10 @@ def _renovar_proximos_episodios_expirados(forcar: bool = False) -> None:
 
 
 def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
-    """
-    Sincroniza a lista pessoal de animes diretamente do perfil público do AniList.
-    Importa animes que você está assistindo (Watching) e planeja assistir (Planning),
-    salvando no Firestore com progresso de episódios e datas de lançamento de novos episódios.
+    """Synchronizes your personal anime list directly from your public AniList profile.
 
     Args:
-        username (str, opcional): Nome de usuário no AniList. Se omitido, utiliza a configuração padrão do sistema.
+        username (str, optional): AniList username. Uses the system default if omitted.
     """
     user = (username or settings.ANILIST_USERNAME or "").strip()
     if not user:
@@ -374,12 +371,10 @@ def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
 
 
 def consultar_novas_temporadas(titulo_anime: str) -> str:
-    """
-    Pesquisa por continuações, sequências, filmes canônicos e novas temporadas de um anime via AniList.
-    Identifica se uma 2ª ou 3ª temporada já foi anunciada, status de produção e datas de estreia.
+    """Searches for continuations, sequels, canonical movies, and new seasons of an anime via AniList.
 
     Args:
-        titulo_anime (str): Nome do anime (ex: 'Frieren', 'Chainsaw Man', 'Solo Leveling', 'Jujutsu Kaisen').
+        titulo_anime (str): Anime name.
     """
     titulo_busca = titulo_anime.strip()
     if not titulo_busca:
@@ -504,13 +499,11 @@ def consultar_novas_temporadas(titulo_anime: str) -> str:
 
 
 def explorar_temporada_animes(estacao: Optional[str] = None, ano: Optional[int] = None) -> str:
-    """
-    Explora os animes mais esperados e lançamentos de uma temporada específica (Inverno, Primavera, Verão, Outono).
-    Se omitido, consulta a temporada atual ou próxima.
+    """Explores the most anticipated anime and releases of a specific season.
 
     Args:
-        estacao (str, opcional): 'inverno'/'winter', 'primavera'/'spring', 'verao'/'summer', 'outono'/'fall'.
-        ano (int, opcional): Ano de exibição (ex: 2026).
+        estacao (str, optional): 'inverno'/'winter', 'primavera'/'spring', 'verao'/'summer', 'outono'/'fall'.
+        ano (int, optional): Broadcast year.
     """
     agora = datetime.now()
     ano_final = int(ano) if ano else agora.year
@@ -609,12 +602,10 @@ def explorar_temporada_animes(estacao: Optional[str] = None, ano: Optional[int] 
 
 
 def consultar_proximo_episodio(titulo: str) -> str:
-    """
-    Consulta quando sairá o próximo episódio de um anime em tempo real via AniList API.
-    Informa número do episódio, dia da semana, horário no fuso de Brasília e contagem regressiva.
+    """Queries when the next episode of an anime will be released via AniList API.
 
     Args:
-        titulo (str): Nome do anime (ex: 'Solo Leveling', 'Jujutsu Kaisen', 'One Piece').
+        titulo (str): Anime name.
     """
     titulo_busca = titulo.strip()
     if not titulo_busca:
@@ -704,14 +695,12 @@ def adicionar_anime_watchlist(
     status: str = "assistindo", 
     ultimo_episodio_visto: int = 0
 ) -> str:
-    """
-    Busca um anime pelo título no AniList e salva na sua lista pessoal (Firestore).
-    Armazena título oficial, total de episódios, status de transmissão e dados do próximo episódio.
+    """Searches for an anime by title on AniList and saves it to your personal list.
 
     Args:
-        titulo (str): Nome do anime (ex: 'Solo Leveling', 'Frieren', 'Demon Slayer').
+        titulo (str): Anime name.
         status (str): Status ('assistindo', 'planejo_assistir', 'concluido', 'pausado').
-        ultimo_episodio_visto (int): Último episódio que você já assistiu.
+        ultimo_episodio_visto (int): Last episode you watched.
     """
     titulo_busca = titulo.strip()
     if not titulo_busca:

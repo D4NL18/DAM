@@ -127,16 +127,12 @@ def _formatar_numero(valor: float) -> str:
 
 def converter_unidade(valor: float, unidade_origem: str, unidade_destino: str) -> str:
     """
-    Cálculo determinístico com alta precisão matemática (sem alucinações de LLM)
-    para conversão de unidades nas categorias de distância, temperatura, peso/massa e volume/culinária.
+    Convert units across distance, temperature, weight/mass, and volume/cooking.
 
     Args:
-        valor (float): O valor numérico a ser convertido.
-        unidade_origem (str): Unidade inicial (ex: 'mi', 'ft', 'in', 'yd', 'F', 'K', 'lb', 'oz', 'gal', 'fl oz', 'xícara', 'colher de sopa').
-        unidade_destino (str): Unidade desejada (ex: 'km', 'm', 'cm', 'C', 'kg', 'g', 'L', 'ml').
-
-    Returns:
-        str: Resultado determinístico exato com explicação de cálculo e destaques práticos culinários.
+        valor (float): Numeric value to convert.
+        unidade_origem (str): Source unit (e.g. 'mi', 'km', 'F', 'C', 'lb', 'kg', 'oz', 'cup', 'ml').
+        unidade_destino (str): Target unit (e.g. 'km', 'mi', 'C', 'F', 'kg', 'lb', 'g', 'ml').
     """
     u_orig = _normalizar_unidade(unidade_origem)
     u_dest = _normalizar_unidade(unidade_destino)
@@ -245,16 +241,10 @@ def converter_unidade(valor: float, unidade_origem: str, unidade_destino: str) -
 
 def interpretar_e_converter(texto: str) -> str:
     """
-    Parser inteligente que extrai valores e unidades de frases comuns do cotidiano e executa a conversão precisa.
-    Exemplos:
-    - '35 milhas em km'
-    - '180 fahrenheit para celsius'
-    - '150 libras em kg'
-    - '350 F em C'
-    - '2 xícaras em ml'
-    - '3 colheres de sopa em ml'
-    - '500g em oz'
-    - 'quanto é 5 ft em cm?'
+    Parse everyday conversion requests in free text and execute the conversion.
+
+    Args:
+        texto: Natural language conversion query (e.g. '35 miles to km', '350 F to C').
     """
     if not texto or not texto.strip():
         return "Por favor, forneça uma frase ou valor para conversão (ex: '35 milhas em km', '350 F para C', '150 libras em kg')."

@@ -1,6 +1,6 @@
 """
-GCP Billing Tool — Módulo de Monitoramento de Faturamento e FinOps da Nuvem (PC-11)
-Domain: Finanças & Gastos (FinOps)
+GCP Billing Tool — Cloud FinOps and Billing Monitoring Module.
+Domain: Finance & Spending.
 """
 import logging
 from datetime import datetime, timezone
@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 def calcular_finops_scorecard() -> Dict[str, Any]:
     """
-    P-1108, P-1109, P-1110: Calcula o Scorecard FinOps de 5 pilares do GCP.
-    Retorna métricas detalhadas e a nota consolidada (alvo >= 4.8/5.0).
+    Calculates the 5-pillar GCP FinOps Scorecard.
+    Returns detailed metrics and the consolidated score.
     """
     pilares = {
         "computacao_serverless": {
@@ -56,8 +56,8 @@ def calcular_finops_scorecard() -> Dict[str, Any]:
 
 def consultar_gcp_billing() -> str:
     """
-    Consulta o status do faturamento (billing), consumo de recursos e orçamento
-    da infraestrutura do DAM no Google Cloud Platform (GCP), exibindo o Scorecard FinOps 4.8+.
+    Queries the billing status, resource consumption, and budget of the DAM infrastructure on GCP.
+    Displays the FinOps Scorecard.
     """
     snapshot = None
 

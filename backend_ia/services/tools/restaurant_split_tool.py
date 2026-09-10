@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 from typing import List, Dict, Any, Optional
 
@@ -14,19 +14,12 @@ def dividir_conta_restaurante(
     chave_pix: Optional[str] = None
 ) -> str:
     """
-    Divide a conta de restaurante de forma justa e proporcional entre os participantes.
-    Calcula subtotal por pessoa, aplica a taxa de serviço percentual proporcionalmente,
-    ajusta eventuais centavos para fechar o total exato da conta e gera uma mensagem formatada para WhatsApp.
+    Split restaurant bills fairly and proportionally among participants with tip/service fee calculation.
 
     Args:
-        consumo_participantes (list[dict]): Lista de participantes e seus consumos.
-            Exemplo:
-            [
-                {"nome": "Você", "itens": [{"nome": "Hambúrguer", "valor": 42.0}, {"nome": "1/2 Pizza", "valor": 20.0}]},
-                {"nome": "João", "itens": [{"nome": "Cerveja", "valor": 36.0}]}
-            ]
-        taxa_servico_percent (float, optional): Percentual da taxa de serviço/gorjeta (padrão: 10.0).
-        chave_pix (str, optional): Chave Pix para inclusão no demonstrativo de cobrança.
+        consumo_participantes (list[dict]): List of participants and items consumed (keys: 'nome', 'itens' with 'nome'/'valor').
+        taxa_servico_percent (float, optional): Service fee/tip percentage (default 10.0).
+        chave_pix (str, optional): Pix payment key for reimbursement summary.
     """
     # Suporte caso o modelo ou chamador passe como string JSON
     if isinstance(consumo_participantes, str):

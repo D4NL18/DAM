@@ -7,11 +7,10 @@ logger = logging.getLogger(__name__)
 
 def consultar_saude(dias_retroativos: int = 7) -> str:
     """
-    Consulta os dados de saúde (passos, calorias, etc) do usuário salvos no banco de dados.
-    Use esta ferramenta quando o usuário perguntar sobre sua saúde, quantos passos deu, ou calorias gastas.
+    Queries the user's health data saved in the database.
 
     Args:
-        dias_retroativos (int): O número de dias para buscar no passado. Padrão é 7.
+        dias_retroativos (int): The number of days to search in the past.
     """
     if firebase.db is None:
         return "Erro: O banco de dados não está disponível no momento."

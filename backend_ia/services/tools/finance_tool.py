@@ -35,17 +35,13 @@ def normalizar_metodo_pagamento(metodo: Optional[str]) -> Optional[str]:
 
 def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamento: str) -> str:
     """
-    Registra um novo gasto financeiro do usuário.
-    Todo gasto deve obrigatoriamente estar associado a uma das 3 modalidades:
-    - 'Cartão de Crédito Secundário'
-    - 'Cartão de Crédito Pessoal'
-    - 'Cartão de Débito' (Pix conta como débito)
+    Record a new expense for the user.
 
     Args:
-        descricao (str): O que foi comprado ou pago (ex: 'Almoço Ifood', 'Uber').
-        valor (float): O valor gasto.
-        categoria (str): A categoria do gasto (ex: 'Alimentação', 'Transporte', 'Lazer', 'Moradia').
-        metodo_pagamento (str): 'Cartão de Crédito Secundário', 'Cartão de Crédito Pessoal' ou 'Cartão de Débito' (se for Pix, use 'Cartão de Débito').
+        descricao (str): Expense description.
+        valor (float): Amount spent.
+        categoria (str): Expense category (e.g. Food, Transport, Leisure).
+        metodo_pagamento (str): 'Cartão de Crédito Secundário', 'Cartão de Crédito Pessoal' or 'Cartão de Débito'.
     """
     metodo_normalizado = normalizar_metodo_pagamento(metodo_pagamento)
     if not metodo_normalizado:
@@ -86,14 +82,12 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
 
 def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None, dias_retroativos: Optional[int] = None) -> str:
     """
-    Consulta o resumo consolidado de gastos financeiros do usuário agrupados por cartão/método e por categoria.
-    Use esta ferramenta quando o usuário perguntar 'como estão meus gastos esse mês?', 'quanto gastei?', 'resumo financeiro',
-    'quanto gastei no cartão pessoal?', 'quais foram meus gastos por categoria?', etc.
+    Query expense summary grouped by payment method and category.
 
     Args:
-        mes (int, opcional): Número do mês (1 a 12). Padrão é o mês atual.
-        ano (int, opcional): Ano (ex: 2026). Padrão é o ano atual.
-        dias_retroativos (int, opcional): Número de dias para trás (ex: 7, 15, 30). Se informado, resume os últimos N dias em vez do mês civil.
+        mes (int, optional): Month (1-12). Defaults to current month.
+        ano (int, optional): Year (e.g. 2026). Defaults to current year.
+        dias_retroativos (int, optional): Days back to summarize instead of calendar month.
     """
     if firebase.db is None:
         return "Erro: O banco de dados não está disponível no momento."

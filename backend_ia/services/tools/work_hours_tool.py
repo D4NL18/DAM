@@ -109,11 +109,11 @@ def interpretar_horas(horas_input: Union[str, List[str], float, int]) -> float:
 
 def calcular_saldo_jornada(horas_trabalhadas_texto: str, meta_diaria_horas: float = 8.0) -> str:
     """
-    Calcula o saldo de jornada diária comparando as horas trabalhadas com a meta diária.
+    Calculate daily work hours balance against a target.
 
     Args:
-        horas_trabalhadas_texto (str): String com as horas trabalhadas (ex: '8h', '7h30', '9h15', '8.5h', ou '09:00, 18:00').
-        meta_diaria_horas (float): Meta diária de horas a cumprir (padrão: 8.0).
+        horas_trabalhadas_texto (str): Worked hours (e.g. '8h', '7h30', '09:00, 18:00').
+        meta_diaria_horas (float): Daily target hours (default 8.0).
     """
     try:
         horas_trabalhadas = interpretar_horas(horas_trabalhadas_texto)
@@ -141,11 +141,11 @@ def calcular_saldo_jornada(horas_trabalhadas_texto: str, meta_diaria_horas: floa
 
 def calcular_fechamento_semanal(registros_dias: Any, meta_semanal_horas: float = 40.0) -> str:
     """
-    Calcula o fechamento semanal do banco de horas acumulando os registros diários.
+    Calculate weekly work hours summary aggregating daily entries.
 
     Args:
-        registros_dias: Lista de dicionários ou JSON string representando cada dia trabalhado (ex: [{'dia': 'Segunda', 'horas': '8h30'}]).
-        meta_semanal_horas (float): Meta total semanal contratual (padrão: 40.0).
+        registros_dias: List of day records (e.g. [{'dia': 'Segunda', 'horas': '8h30'}]).
+        meta_semanal_horas (float): Weekly contractual target hours (default 40.0).
     """
     if isinstance(registros_dias, str):
         try:
@@ -205,13 +205,13 @@ def registrar_ponto_dia(
     descricao: Optional[str] = None
 ) -> str:
     """
-    Registra o ponto diário de horas trabalhadas no sistema (Firestore e memória).
+    Record daily worked hours in the system.
 
     Args:
-        data (str): Data do registro (ex: '2026-09-03', 'Hoje', '03/09/2026').
-        horas_trabalhadas_texto (str): Horas trabalhadas ('8h', '7h30', '09:00, 18:00', etc.).
-        meta_diaria_horas (float): Meta de horas para o dia (padrão: 8.0).
-        descricao (str, opcional): Observações sobre o dia (ex: 'Plantão', 'Home office', 'Compensação').
+        data (str): Date of record (e.g. 'YYYY-MM-DD', 'Hoje').
+        horas_trabalhadas_texto (str): Worked hours ('8h', '7h30', '09:00, 18:00').
+        meta_diaria_horas (float): Daily target hours (default 8.0).
+        descricao (str, optional): Notes about the day.
     """
     try:
         horas_trabalhadas = interpretar_horas(horas_trabalhadas_texto)

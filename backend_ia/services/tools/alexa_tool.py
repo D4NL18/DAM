@@ -9,10 +9,7 @@ logger = logging.getLogger(__name__)
 VOICE_MONKEY_BASE_URL = "https://api-v3.voicemonkey.io"
 
 def determinar_acao_e_device(rotina: str, ambiente: Optional[str] = None) -> tuple[str, str]:
-    """
-    Determina o dispositivo ('pc', 'tv', 'ar') e o estado ('open' para ligar, 'close' para desligar).
-    Permite que 1 único trigger faça tanto Ligar quanto Desligar na Alexa via sensor de abertura.
-    """
+    """Determines the device and state to trigger via Alexa."""
     r = rotina.strip().lower()
     
     # Detecta se é desligamento
@@ -34,7 +31,7 @@ def determinar_acao_e_device(rotina: str, ambiente: Optional[str] = None) -> tup
     return r.replace("-", " "), state
 
 def _resolver_device_id(target: str, token: str) -> str:
-    """Busca o Device ID oficial do Voice Monkey a partir do nome (ex: 'pc' -> 'pc-0xvhr')."""
+    """Fetches the official Device ID from Voice Monkey based on the given target name."""
     try:
         req = urllib.request.Request(
             f"{VOICE_MONKEY_BASE_URL}/devices?token={token}",
@@ -53,13 +50,11 @@ def _resolver_device_id(target: str, token: str) -> str:
     return target
 
 def acionar_rotina_alexa(rotina: str, ambiente: Optional[str] = None) -> str:
-    """
-    Aciona uma rotina ou dispositivo de automação residencial na Alexa via Voice Monkey API.
-    Use quando o usuário pedir para ligar/desligar luzes, aparelhos ou iniciar cenas (ex: 'Ligar PC', 'Ligar TV', 'Desligar TV', 'Ligar Ar', 'Desligar Ar').
+    """Triggers a smart home routine or device on Alexa via Voice Monkey API.
 
     Args:
-        rotina (str): Nome da rotina, cena ou comando (ex: 'Ligar PC', 'Ligar TV', 'Desligar TV', 'Ligar Ar', 'Desligar Ar').
-        ambiente (str, optional): Cômodo ou ambiente da casa (ex: 'Sala', 'Escritório', 'Quarto').
+        rotina (str): Name of the routine, scene, or command.
+        ambiente (str, optional): Room or environment in the house.
     """
     ambiente_str = f" no ambiente '{ambiente}'" if ambiente else ""
     token = settings.VOICE_MONKEY_API_TOKEN
@@ -105,12 +100,11 @@ def acionar_rotina_alexa(rotina: str, ambiente: Optional[str] = None) -> str:
     )
 
 def falar_na_alexa(mensagem: str, ambiente: Optional[str] = None) -> str:
-    """
-    Faz a Alexa falar uma frase ou aviso em voz alta na caixa de som do cômodo especificado.
+    """Makes Alexa speak a phrase or announcement aloud in the specified room.
 
     Args:
-        mensagem (str): A frase ou anúncio a ser falado pela Alexa (ex: 'O almoço está pronto', 'Hora de tomar o remédio').
-        ambiente (str, optional): Cômodo da casa (ex: 'Quarto', 'Sala', 'Cozinha').
+        mensagem (str): The phrase or announcement to be spoken by Alexa.
+        ambiente (str, optional): Room in the house.
     """
     token = settings.VOICE_MONKEY_API_TOKEN
     ambiente_str = f" no ambiente '{ambiente}'" if ambiente else ""

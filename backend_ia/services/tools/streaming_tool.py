@@ -546,12 +546,11 @@ def _formatar_resposta(dados: Dict[str, Any]) -> str:
 
 def onde_assistir(titulo: str, tipo_midia: str = "todos") -> str:
     """
-    Identifica em quais plataformas de streaming no Brasil o filme ou série está disponível.
-    Distingue entre Assinatura (Stream plano), Aluguel (Rent) e Compra (Buy).
-    
+    Find which streaming platforms in Brazil have a movie or TV show available (Subscription, Rent, Buy).
+
     Args:
-        titulo: Nome do filme ou série a consultar.
-        tipo_midia: 'filme', 'serie' ou 'todos'. Padrão é 'todos'.
+        titulo: Movie or TV show title.
+        tipo_midia: 'filme', 'serie' or 'todos' (default).
     """
     if not titulo or not titulo.strip():
         return "Por favor, informe o nome de um filme ou série para saber onde assistir."

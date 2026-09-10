@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def geocodificar_endereco(endereco: str) -> Dict[str, Any]:
-    """Consulta o Google Maps Geocoding API para normalizar o endereço e obter coordenadas."""
+    """Queries the Google Maps Geocoding API to normalize the address and obtain coordinates."""
     if not endereco:
         return {"formatted_address": "", "latitude": None, "longitude": None}
 
@@ -47,10 +47,7 @@ def geocodificar_endereco(endereco: str) -> Dict[str, Any]:
 
 
 def salvar_endereco(apelido: str, endereco: str, detalhes: str = "", user_jid: str = "") -> str:
-    """
-    Salva ou atualiza um endereço frequente ou local favorito do usuário no banco de dados.
-    Permite apelidos amigáveis como 'casa', 'trabalho', 'academia', 'casa dos pais'.
-    """
+    """Saves or updates a frequently used address or favorite location in the database."""
     clean_alias = normalize_alias(apelido)
     if not clean_alias:
         return "Erro: É necessário informar um apelido para o local (ex: 'casa', 'trabalho', 'academia')."
@@ -84,9 +81,7 @@ def salvar_endereco(apelido: str, endereco: str, detalhes: str = "", user_jid: s
 
 
 def consultar_enderecos_salvos(apelido: str = "", user_jid: str = "") -> str:
-    """
-    Consulta a lista de endereços e locais favoritos salvos pelo usuário ou busca um apelido específico.
-    """
+    """Queries the list of saved addresses and favorite locations or searches for a specific alias."""
     if apelido:
         clean_alias = normalize_alias(apelido)
         dado = AddressRepository.get_address(user_jid, clean_alias)
@@ -115,9 +110,7 @@ def consultar_enderecos_salvos(apelido: str = "", user_jid: str = "") -> str:
 
 
 def remover_endereco(apelido: str, user_jid: str = "") -> str:
-    """
-    Remove um endereço ou local favorito cadastrado pelo apelido.
-    """
+    """Removes a registered address or favorite location by its alias."""
     clean_alias = normalize_alias(apelido)
     if not clean_alias:
         return "Erro: Informe o apelido do endereço a ser removido."

@@ -117,13 +117,12 @@ def gerenciar_arquivos(
     parametros: Optional[str] = None
 ) -> str:
     """
-    Ajuda e orquestra conversões de arquivos e documentos (PDF para Word, Word para PDF, fotos para PDF, juntar PDFs, dividir PDF, converter imagens, extrair texto).
-    Use esta função para informar ao usuário sobre as conversões suportadas, dar instruções de como enviar documentos ou consultar o histórico de conversões.
+    Manage file and document conversions (PDF to Word, Word to PDF, merge, split, extract text).
 
     Args:
-        acao: 'listar_formatos' para ver todos os tipos suportados, 'instrucoes' para saber como enviar ou 'historico' para ver conversões recentes.
-        tipo_conversao: Tipo da conversão específica caso o usuário queira instruções (ex: 'pdf_para_word', 'fotos_para_pdf', 'juntar_pdfs').
-        parametros: Informações adicionais fornecidas pelo usuário.
+        acao: 'listar_formatos' for supported formats, 'instrucoes' for instructions, 'historico' for history.
+        tipo_conversao: Specific conversion type for instructions.
+        parametros: Additional parameters.
     """
     return FileConverterTool.execute(acao=acao, tipo_conversao=tipo_conversao, parametros=parametros)
 

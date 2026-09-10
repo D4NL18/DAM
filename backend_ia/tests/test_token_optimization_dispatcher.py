@@ -75,8 +75,8 @@ class TestPromptComposerModularity:
     def test_core_prompt_is_concise(self):
         """P-1102: System prompt padrão sem domínios específicos deve ser conciso."""
         prompt = PromptComposer.compose_system_instruction(domains=[])
-        assert "Você é o DAM" in prompt
-        assert "PRECISÃO TEMPORAL" in prompt
+        assert "You are DAM" in prompt or "Você é o DAM" in prompt
+        assert "TIME PRECISION" in prompt or "PRECISÃO TEMPORAL" in prompt
         # Regras pesadas não devem estar presentes se não solicitadas
         assert "Dietbox" not in prompt
         assert "Anilist" not in prompt
@@ -84,8 +84,8 @@ class TestPromptComposerModularity:
     def test_on_demand_domain_injection(self):
         """P-1102: Injeta regras de domínio apenas quando explicitamente solicitadas."""
         prompt_fin = PromptComposer.compose_system_instruction(domains=["finance"])
-        assert "FINANCEIRO" in prompt_fin or "despesas" in prompt_fin.lower()
+        assert "FINANCIAL" in prompt_fin or "FINANCEIRO" in prompt_fin or "despesas" in prompt_fin.lower()
         assert "Dietbox" not in prompt_fin
 
         prompt_nutri = PromptComposer.compose_system_instruction(domains=["nutrition"])
-        assert "Dietbox" in prompt_nutri or "substituição" in prompt_nutri.lower()
+        assert "Dietbox" in prompt_nutri or "substituição" in prompt_nutri.lower() or "nutrition" in prompt_nutri.lower()

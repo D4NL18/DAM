@@ -30,14 +30,13 @@ def registrar_localizacao_objeto(
     detalhes: Optional[str] = None
 ) -> str:
     """
-    Registra ou atualiza o local de um objeto na memória espacial do usuário.
-    Se o objeto já existia, preserva o histórico de locais anteriores por onde ele passou.
+    Record or update an item's location in the user's spatial memory.
 
     Args:
-        objeto: Nome do objeto (ex: 'Passaporte', 'Chave reserva do carro', 'Óculos de sol').
-        local: Onde o objeto foi guardado (ex: 'Segunda gaveta da cômoda do quarto', 'No chaveiro da entrada').
-        categoria: Categoria do objeto (ex: 'Documentos', 'Veículos', 'Acessórios', 'Geral').
-        detalhes: Informações adicionais contextuais (ex: 'Dentro de uma pasta azul').
+        objeto: Item name.
+        local: Where the item is stored.
+        categoria: Item category.
+        detalhes: Additional contextual details.
     """
     if not objeto or not objeto.strip():
         return "Por favor, informe o nome do objeto que deseja registrar."
@@ -132,7 +131,7 @@ def registrar_localizacao_objeto(
 
 def onde_guardei_objeto(objeto: str) -> str:
     """
-    Pesquisa na memória espacial onde um determinado objeto foi guardado pelo usuário ativo.
+    Search where an item was stored in spatial memory.
     """
     if not objeto or not objeto.strip():
         return "Por favor, especifique o objeto que está procurando."
@@ -217,10 +216,10 @@ def onde_guardei_objeto(objeto: str) -> str:
 
 def listar_historico_movimentacoes(objeto: str) -> str:
     """
-    Exibe o histórico cronológico de todos os locais por onde o objeto já passou.
+    Display the chronological location history of a stored item.
 
     Args:
-        objeto: Nome do objeto cuja trajetória você deseja consultar.
+        objeto: Name of the item.
     """
     if not objeto or not objeto.strip():
         return "Por favor, especifique o objeto para consultar o histórico."

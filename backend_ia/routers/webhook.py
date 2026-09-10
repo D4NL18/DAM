@@ -109,8 +109,12 @@ async def process_and_reply(
     try:
         # Se a mensagem dependia exclusivamente da mídia e o download falhou:
         if not media_base64 and (
-            text == "Analise esta imagem enviada pelo usuário."
-            or text == "Transcreva e responda ao que o usuário solicitou neste áudio."
+            text in [
+                "Analyze this image.",
+                "Transcribe and respond to this audio.",
+                "Analise esta imagem enviada pelo usuário.",
+                "Transcreva e responda ao que o usuário solicitou neste áudio."
+            ]
         ):
             logger.warning(f"--> [BACKGROUND] Download da mídia falhou para {masked_jid}. Enviando aviso ao usuário.")
             aviso = "Não consegui carregar o arquivo de mídia que você enviou no momento. Poderia tentar reenviar, por favor?"
@@ -226,7 +230,7 @@ async def whatsapp_webhook(
     if "imageMessage" in message or message_type == "imageMessage":
         img_info = message.get("imageMessage", {})
         caption = img_info.get("caption") if isinstance(img_info, dict) else None
-        text = caption or text or "Analise esta imagem enviada pelo usuário."
+        text = caption or text or "Analyze this image."
         b64 = message.get("base64") or data.get("base64")
         mimetype = img_info.get("mimetype", "image/jpeg") if isinstance(img_info, dict) else "image/jpeg"
         if not b64 and message_id:
@@ -241,7 +245,7 @@ async def whatsapp_webhook(
     # Suporte Multimodal a Áudio (US-3.6)
     elif "audioMessage" in message or message_type == "audioMessage":
         audio_info = message.get("audioMessage", {})
-        text = text or "Transcreva e responda ao que o usuário solicitou neste áudio."
+        text = text or "Transcribe and respond to this audio."
         b64 = message.get("base64") or data.get("base64")
         mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
         if not b64 and message_id:
@@ -258,7 +262,7 @@ async def whatsapp_webhook(
         doc_info = message.get("documentMessage", {})
         doc_filename = doc_info.get("fileName", "documento") if isinstance(doc_info, dict) else "documento"
         caption = doc_info.get("caption") if isinstance(doc_info, dict) else None
-        text = caption or text or f"Recebi o documento '{doc_filename}'. Analise ou processe a conversão solicitada."
+        text = caption or text or f"Process this document: '{doc_filename}'."
         b64 = message.get("base64") or data.get("base64")
         mimetype = doc_info.get("mimetype", "application/pdf") if isinstance(doc_info, dict) else "application/pdf"
         if not b64 and message_id:

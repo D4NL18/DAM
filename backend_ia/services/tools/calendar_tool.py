@@ -72,15 +72,15 @@ def agendar_evento(
     usuario: str = "auto"
 ) -> str:
     """
-    Agenda um evento ou reunião no Google Calendar do usuário.
+    Schedule an event or meeting on Google Calendar.
     
     Args:
-        titulo (str): O nome do evento.
-        inicio_iso (str): Data e hora de início no formato ISO (ex: '2026-03-10T15:00:00-03:00').
-        duracao_minutos (int): Duração do evento em minutos.
-        descricao (str, optional): Descrição, notas ou pauta detalhada do evento.
-        localizacao (str, optional): Localização física, sala ou link de videoconferência.
-        usuario (str, optional): 'auto' para o usuário atual, ou 'daniel'/'lari' se aplicável.
+        titulo (str): Event title.
+        inicio_iso (str): Start datetime in ISO format.
+        duracao_minutos (int): Duration in minutes. Default 60.
+        descricao (str, optional): Event description or notes.
+        localizacao (str, optional): Location or video call link.
+        usuario (str, optional): 'auto' for current user, or 'daniel'/'lari'.
     """
     service = _get_calendar_service()
     if not service:
@@ -126,12 +126,12 @@ def agendar_evento(
 
 def consultar_agenda(dias: int = 1, dias_a_frente: int = None, usuario: str = "auto") -> str:
     """
-    Consulta os próximos eventos no Google Calendar de um usuário.
+    Query upcoming Google Calendar events.
     
     Args:
-        dias (int): Número de dias no futuro para buscar eventos (default: 1).
-        dias_a_frente (int, optional): Alias para número de dias no futuro.
-        usuario (str, optional): 'auto' para a agenda do usuário atual, ou 'daniel'/'lari' para consultar uma agenda específica.
+        dias (int): Days ahead to search (default: 1).
+        dias_a_frente (int, optional): Alias for days ahead.
+        usuario (str, optional): 'auto' for current user, or 'daniel'/'lari'.
     """
     service = _get_calendar_service()
     if not service:
@@ -255,12 +255,12 @@ def excluir_evento(
     usuario: str = "auto"
 ) -> str:
     """
-    Exclui ou cancela um evento do Google Calendar pelo nome/título ou termo de busca.
+    Delete or cancel a Google Calendar event by name or search term.
     
     Args:
-        termo_busca (str): Título, nome ou palavra-chave do evento a ser cancelado/excluído.
-        data_referencia (str, optional): Data aproximada do evento (ex: '2026-09-10' ou '10/09/2026').
-        usuario (str, optional): 'auto' para o usuário atual, ou 'daniel'/'lari' se aplicável.
+        termo_busca (str): Event title or search keyword.
+        data_referencia (str, optional): Approximate date of the event (e.g. 'YYYY-MM-DD').
+        usuario (str, optional): 'auto' for current user, or 'daniel'/'lari'.
     """
     service = _get_calendar_service()
     if not service:
@@ -308,17 +308,17 @@ def editar_evento(
     usuario: str = "auto"
 ) -> str:
     """
-    Edita ou remarca um evento existente no Google Calendar sem duplicar.
+    Edit or reschedule an existing Google Calendar event.
     
     Args:
-        termo_busca (str): Título, nome atual ou palavra-chave do evento a ser modificado.
-        novo_titulo (str, optional): Novo título para o evento.
-        novo_inicio_iso (str, optional): Nova data e hora de início no formato ISO (ex: '2026-09-10T14:00:00-03:00').
-        nova_duracao_minutos (int, optional): Nova duração do evento em minutos.
-        nova_descricao (str, optional): Nova descrição ou pauta.
-        nova_localizacao (str, optional): Nova localização ou link de reunião.
-        data_referencia (str, optional): Data atual aproximada do evento para busca (ex: 'YYYY-MM-DD').
-        usuario (str, optional): 'auto' para a agenda do usuário atual, ou 'daniel'/'lari'.
+        termo_busca (str): Current title or keyword of the event.
+        novo_titulo (str, optional): New title.
+        novo_inicio_iso (str, optional): New start datetime in ISO format.
+        nova_duracao_minutos (int, optional): New duration in minutes.
+        nova_descricao (str, optional): New description.
+        nova_localizacao (str, optional): New location.
+        data_referencia (str, optional): Approximate date for search.
+        usuario (str, optional): 'auto' for current user, or 'daniel'/'lari'.
     """
     service = _get_calendar_service()
     if not service:

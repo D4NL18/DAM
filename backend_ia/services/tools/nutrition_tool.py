@@ -184,14 +184,10 @@ def _format_kcal(val: Any) -> str:
 
 def consultar_lista_substituicao(alimento_ou_grupo: str) -> str:
     """
-    Consulta os alimentos permitidos na Lista de Substituição oficial do Dietbox (Samuel Meller Silva).
-    Use esta ferramenta quando o usuário perguntar quais alimentos pode comer em um determinado grupo,
-    ou qual a porção/medida caseira oficial de um alimento da lista.
+    Query allowed foods in the official Dietbox substitution list or check portion sizes.
 
     Args:
-        alimento_ou_grupo: Nome do alimento (ex: 'arroz branco', 'frango grelhado', 'banana') ou 
-                           nome do grupo ('carboidratos', 'carnes e ovos', 'frutas', 'laticinios',
-                           'legumes e verduras', 'leguminosas', 'oleos e gorduras').
+        alimento_ou_grupo: Food name or food group name.
     """
     termo_limpo = _sanitizar_texto(alimento_ou_grupo)
     if not termo_limpo:
@@ -253,13 +249,11 @@ def consultar_lista_substituicao(alimento_ou_grupo: str) -> str:
 
 def avaliar_substituicao_alimento(alimento_desejado: str, alimento_a_substituir: str = "") -> str:
     """
-    Avalia a substituição de um alimento por outro com base na Lista de Substituição oficial do Dietbox.
-    Se o alimento_desejado NÃO constar na lista oficial, emite um ALERTA OBRIGATÓRIO, pesquisa dados
-    nutricionais na internet/tabela comparando os macronutrientes com a substituição e levanta pontos de atenção.
+    Evaluate food substitution against the official Dietbox list, with nutritional comparisons.
 
     Args:
-        alimento_desejado: Alimento que o usuário deseja consumir (ex: 'batata doce', 'chocolate', 'whey protein', 'pizza').
-        alimento_a_substituir: (Opcional) Alimento prescrito na dieta que seria substituído (ex: 'arroz branco', 'frango grelhado').
+        alimento_desejado: Food the user wants to consume.
+        alimento_a_substituir: (Optional) Prescribed food to be replaced.
     """
     alimento_desejado_limpo = _sanitizar_texto(alimento_desejado)
     alimento_substituir_limpo = _sanitizar_texto(alimento_a_substituir)

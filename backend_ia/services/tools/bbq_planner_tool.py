@@ -12,15 +12,14 @@ def calcular_churrasco(
     tipos_carne: Optional[List[str]] = None
 ) -> str:
     """
-    Calculadora Inteligente de Churrasco e Eventos.
-    Aplica regras consagradas per capita ajustadas pela duração do evento.
+    Calculate BBQ food and beverage quantities based on guests and duration.
     
     Args:
-        adultos_que_bebem: Número de adultos que consomem bebidas alcoólicas.
-        adultos_que_nao_bebem: Número de adultos que não bebem álcool.
-        criancas: Número de crianças participantes.
-        duracao_horas: Duração estimada da festa em horas (padrão 4h).
-        tipos_carne: Lista opcional com cortes desejados (ex: ['picanha', 'linguiça', 'frango']).
+        adultos_que_bebem (int): Number of drinking adults.
+        adultos_que_nao_bebem (int): Number of non-drinking adults.
+        criancas (int): Number of children.
+        duracao_horas (int): Duration in hours. Default 4.
+        tipos_carne (list[str], optional): Preferred meat cuts.
     """
     adultos_total = max(0, adultos_que_bebem) + max(0, adultos_que_nao_bebem)
     criancas_total = max(0, criancas)

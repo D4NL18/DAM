@@ -71,14 +71,13 @@ def salvar_video(
     tags: str = ""
 ) -> str:
     """
-    Salva um vídeo de rede social (TikTok, Instagram, YouTube) para assistir mais tarde ou guardar como referência.
+    Save a social media video (TikTok, Instagram, YouTube) for later reference.
 
-    :param url: Link completo do vídeo.
-    :param titulo: Título ou nome breve do vídeo (opcional).
-    :param descricao: Resumo detalhado sobre o que é o vídeo, receita, treino, dicas ou assunto (opcional).
-    :param categoria: Categoria do conteúdo (ex: 'Culinária', 'Treino', 'Tecnologia', 'Humor').
-    :param tags: Palavras-chave separadas por vírgula para facilitar a busca (ex: 'strogonoff, fit, almoco').
-    :return: Confirmação formatada para o WhatsApp.
+    :param url: Full video link.
+    :param titulo: Short video title (optional).
+    :param descricao: Description of what the video is about (optional).
+    :param categoria: Content category (e.g. Cooking, Fitness, Tech).
+    :param tags: Comma-separated search tags.
     """
     url_sanitizada, valida = _validar_e_sanitizar_url(url)
     if not valida:
@@ -147,14 +146,12 @@ def consultar_videos_salvos(
     limite: int = 10
 ) -> str:
     """
-    Busca vídeos salvos por assunto/descrição, título, categoria ou tags,
-    com filtros opcionais de plataforma e status.
+    Search saved videos by keyword, title, category, or tags, with platform and status filters.
 
-    :param termo_busca: Palavra-chave livre sobre o que era o vídeo, título, etc.
-    :param plataforma: 'TikTok', 'Instagram', 'YouTube' ou vazio para todas.
-    :param status: 'pendente', 'assistido' ou 'todos'.
-    :param limite: Quantidade máxima de resultados (padrão: 10).
-    :return: Lista formatada com os vídeos salvos.
+    :param termo_busca: Keyword to search for in title or description.
+    :param plataforma: 'TikTok', 'Instagram', 'YouTube' or empty for all.
+    :param status: 'pendente', 'assistido' or 'todos'.
+    :param limite: Max results (default 10).
     """
     user_id = UserContext.get_user_id()
     repo = SavedVideosRepository.get_instance()
@@ -211,10 +208,9 @@ def consultar_videos_salvos(
 
 def marcar_video_assistido(termo_ou_id: str) -> str:
     """
-    Marca um vídeo salvo como assistido.
+    Mark a saved video as watched by ID or title/description keyword.
 
-    :param termo_ou_id: ID do vídeo ou trecho do título/descrição para localizar o vídeo.
-    :return: Confirmação ou solicitação de desambiguação.
+    :param termo_ou_id: Video ID or title/description search snippet.
     """
     if not termo_ou_id or not termo_ou_id.strip():
         return "⚠️ Por favor, informe o título, assunto ou ID do vídeo que você assistiu."
@@ -253,10 +249,9 @@ def marcar_video_assistido(termo_ou_id: str) -> str:
 
 def remover_video_salvo(termo_ou_id: str) -> str:
     """
-    Remove permanentemente um vídeo da lista de salvos.
+    Permanently delete a video from the saved list.
 
-    :param termo_ou_id: ID do vídeo ou trecho do título/descrição para localizar o vídeo.
-    :return: Confirmação de exclusão ou mensagem amigável.
+    :param termo_ou_id: Video ID or title/description search snippet.
     """
     if not termo_ou_id or not termo_ou_id.strip():
         return "⚠️ Por favor, informe o título, assunto ou ID do vídeo que deseja remover."

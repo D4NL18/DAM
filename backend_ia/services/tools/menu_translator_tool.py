@@ -417,18 +417,12 @@ def traduzir_e_explicar_cardapio(
     restricoes_alimentares: Optional[str] = None
 ) -> str:
     """
-    Traduz pratos de cardápios internacionais (inglês, francês, italiano, japonês, espanhol, alemão),
-    fornecendo descrição culinária detalhada (ingredientes principais, modo de preparo, ex: sous-vide,
-    confit, flambado, ao molho gorgonzola, etc.), analogias claras com pratos conhecidos no Brasil e alertas
-    pontuais caso contenha ingredientes alérgenos conhecidos ou conflitantes com restrições alimentares informadas.
+    Translate international menu items with culinary descriptions, Brazilian analogies, and allergen alerts.
 
     Args:
-        texto_cardapio (str): Nome ou descrição do prato no cardápio (ex: 'Boeuf Bourguignon', 'Tonkatsu', 'Shepherd\'s Pie').
-        idioma_origem (str, opcional): Idioma original do cardápio ('francês', 'inglês', 'italiano', 'japonês', 'espanhol', 'alemão', 'auto').
-        restricoes_alimentares (str, opcional): Restrições do comensal (ex: 'vegano', 'sem glúten', 'intolerância a lactose', 'alergia a frutos do mar').
-
-    Returns:
-        str: Guia gastronômico completo e traduzido com analogias brasileiras e alertas de saúde.
+        texto_cardapio (str): Dish name or description from the menu.
+        idioma_origem (str, optional): Original language ('auto', 'francês', 'inglês', etc.).
+        restricoes_alimentares (str, optional): Dietary restrictions (e.g. 'vegano', 'sem glúten').
     """
     if not texto_cardapio or not texto_cardapio.strip():
         return "Por favor, forneça o nome ou a foto/texto do prato que você deseja traduzir e entender."

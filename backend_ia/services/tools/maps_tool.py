@@ -139,13 +139,12 @@ def obter_dados_rota(origem: str, destino: str, modo: str = "driving", user_jid:
 
 def consultar_rota(origem: str, destino: str, modo: str = "driving") -> str:
     """
-    Consulta o tempo estimado de viagem com trânsito em tempo real, distância em km e vias principais.
-    Trata apelidos como 'casa' e 'trabalho'.
+    Query estimated travel time, distance, and traffic between origin and destination.
 
     Args:
-        origem (str): Endereço de partida ou apelido ('casa', 'trabalho').
-        destino (str): Endereço de chegada ou apelido ('casa', 'trabalho').
-        modo (str): Modo de transporte ('driving', 'transit', 'walking', 'bicycling'). Padrão: 'driving'.
+        origem (str): Departure address or alias ('casa', 'trabalho').
+        destino (str): Arrival address or alias ('casa', 'trabalho').
+        modo (str): Transport mode ('driving', 'transit', 'walking', 'bicycling'). Default 'driving'.
     """
     dados = obter_dados_rota(origem, destino, modo)
     
@@ -164,14 +163,13 @@ def consultar_rota(origem: str, destino: str, modo: str = "driving") -> str:
 
 def calcular_horario_saida(origem: str, destino: str, horario_chegada: str, antecedencia_minutos: int = 10) -> str:
     """
-    Calcula que horas o usuário deve sair para chegar no destino no horário desejado,
-    considerando o tempo estimado de trânsito e uma margem de antecedência.
+    Calculate departure time to reach destination by a target time, factoring in traffic.
 
     Args:
-        origem (str): Ponto de partida ou apelido ('casa', 'trabalho').
-        destino (str): Ponto de chegada ou apelido ('casa', 'trabalho').
-        horario_chegada (str): Horário limite de chegada (ex: '09:00', '15:30' ou '2026-09-04 14:00').
-        antecedencia_minutos (int): Margem de segurança de chegada em minutos (padrão: 10 min).
+        origem (str): Departure address or alias.
+        destino (str): Arrival address or alias.
+        horario_chegada (str): Target arrival time (e.g. '09:00' or 'YYYY-MM-DD HH:MM').
+        antecedencia_minutos (int): Buffer margin in minutes (default 10).
     """
     # 1. Parse do horário de chegada
     horario_limpo = horario_chegada.strip()
@@ -381,15 +379,13 @@ def otimizar_rota_multiplos_pontos(
     modo: str = "driving"
 ) -> str:
     """
-    Calcula a ordem otimizada para visitar multiplas paradas entre uma origem e um destino,
-    minimizando o tempo total de deslocamento. Usa a Google Maps Distance Matrix API.
-    Ideal para roteiros de compras, entregas, passeios com varias paradas no dia.
+    Optimize stop order between origin and destination to minimize travel time.
 
     Args:
-        origem (str): Ponto de partida (ex: 'casa', 'Av. Paulista, 1000'). Suporta apelidos.
-        paradas (str): Paradas intermediarias separadas por '|' (ex: 'Mercado|Farmacia|Padaria').
-        destino (str): Ponto de chegada final (ex: 'casa', 'Shopping Ibirapuera').
-        modo (str): Modo de transporte: 'driving' (padrao), 'walking', 'transit', 'bicycling'.
+        origem (str): Departure point.
+        paradas (str): Intermediate stops separated by '|'.
+        destino (str): Final arrival point.
+        modo (str): Transport mode: 'driving' (default), 'walking', 'transit', 'bicycling'.
     """
     if not settings.GOOGLE_MAPS_API_KEY:
         return (
@@ -462,16 +458,13 @@ def planejar_roteiro_viagem(
     cidade_base: str = ""
 ) -> str:
     """
-    Distribui pontos turisticos em dias de viagem de forma inteligente, agrupando
-    pontos proximos geograficamente e respeitando o budget de horas diarias.
-    Estima o tempo de permanencia em cada atracaoo usando a Google Places API.
-    Ideal para planejar roteiros com multiplos dias em uma cidade ou regiao.
+    Intelligently distribute tourist attractions across travel days, respecting daily hour budget.
 
     Args:
-        pontos (str): Atracoes separadas por '|' (ex: 'Museu do Ipiranga|Parque Ibirapuera|Pinacoteca').
-        dias (int): Quantidade de dias disponiveis para o roteiro.
-        horas_por_dia (int): Budget de horas uteis por dia de turismo (padrao: 8h).
-        cidade_base (str): Cidade ou regiao para contexto de busca (ex: 'Sao Paulo'). Opcional.
+        pontos (str): Attractions separated by '|'.
+        dias (int): Available travel days.
+        horas_por_dia (int): Daily touring hours budget (default 8).
+        cidade_base (str): Base city for search context. Optional.
     """
     if not settings.GOOGLE_MAPS_API_KEY:
         return (

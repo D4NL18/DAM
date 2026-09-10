@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 _MOCK_GIFT_IDEAS: List[dict] = []
 
 def _reset_mock_gift_db():
-    """Limpa a lista mock para testes unitários."""
+    """Clears the mock list for unit tests."""
     global _MOCK_GIFT_IDEAS
     _MOCK_GIFT_IDEAS.clear()
 
 def _parse_special_date(date_str: Optional[str]) -> Optional[date]:
     """
-    Tenta converter diferentes formatos de datas em um objeto date.
-    Suporta ISO (YYYY-MM-DD), brasileiro completo (DD/MM/YYYY) e dia/mês (DD/MM).
+    Attempts to convert different date formats into a date object.
+    Supports ISO, full Brazilian, and day/month formats.
     """
     if not date_str:
         return None
@@ -67,15 +67,14 @@ def salvar_ideia_presente(
     tags: Optional[List[str]] = None
 ) -> str:
     """
-    Registra uma nova ideia de presente para uma pessoa especial.
-    Salva a ideia na coleção 'gift_ideas' do Firestore ou no fallback local.
-
+    Registers a new gift idea for a special person.
+    
     Args:
-        pessoa (str): Nome da pessoa a ser presenteada (ex: 'Mariana', 'Mãe').
-        relacao (str): Grau de relação (ex: 'namorada', 'mãe', 'amigo', 'irmão').
-        ideia (str): Descrição da ideia de presente (ex: 'Kindle Paperwhite', 'Perfume Libre').
-        data_especial (str, optional): Data comemorativa associada (ex: '2026-10-12', '15/05', 'Aniversário 20/09').
-        tags (list[str], optional): Lista de tags/categorias (ex: ['tecnologia', 'leitura']).
+        pessoa (str): Name of the person to receive the gift.
+        relacao (str): Relationship degree.
+        ideia (str): Description of the gift idea.
+        data_especial (str, optional): Associated special date.
+        tags (list[str], optional): List of tags or categories.
     """
     if not pessoa or not pessoa.strip():
         return "Por favor, informe o nome da pessoa para salvar a ideia de presente."
@@ -131,12 +130,11 @@ def consultar_ideias_presente(
     relacao: Optional[str] = None
 ) -> str:
     """
-    Consulta ideias de presentes salvas com detalhes contextuais.
-    Permite filtrar por nome da pessoa ou grau de relação.
-
+    Queries saved gift ideas with contextual details.
+    
     Args:
-        pessoa (str, optional): Filtro por nome da pessoa.
-        relacao (str, optional): Filtro por grau de relação (ex: 'namorada', 'mãe').
+        pessoa (str, optional): Filter by person's name.
+        relacao (str, optional): Filter by relationship degree.
     """
     todos: List[dict] = []
     
@@ -196,11 +194,10 @@ def consultar_ideias_presente(
 
 def alertar_datas_proximas(dias_antecedencia: int = 30) -> str:
     """
-    Identifica datas comemorativas e aniversários cadastrados nos próximos X dias
-    e sugere resgatar as ideias de presentes salvas.
-
+    Identifies registered special dates and birthdays within the next few days.
+    
     Args:
-        dias_antecedencia (int): Janela de busca em dias a partir de hoje (padrão: 30 dias).
+        dias_antecedencia (int): Search window in days from today.
     """
     try:
         dias_limite = int(dias_antecedencia)

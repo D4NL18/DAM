@@ -257,10 +257,10 @@ def _buscar_partidas_api(time: Optional[str] = None) -> Optional[str]:
 
 def consultar_jogos_cs2(time: Optional[str] = None) -> str:
     """
-    Consulta os próximos jogos agendados em tempo real (Liquipedia) e os últimos resultados do cenário competitivo de Counter-Strike 2.
+    Query upcoming scheduled matches and recent results for Counter-Strike 2 teams.
 
     Args:
-        time (str, optional): Nome de qualquer time (ex: 'FURIA', 'FaZe', 'NAVI', 'Liquid', 'MIBR', 'paiN', 'Imperial', 'Spirit').
+        time (str, optional): Team name (e.g. 'FURIA', 'FaZe', 'NAVI', 'MIBR').
     """
     time_label = f"'{time}'" if time else "em Destaque"
     resp_blocos = []

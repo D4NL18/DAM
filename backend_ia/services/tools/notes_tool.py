@@ -100,12 +100,12 @@ def _formatar_tags_exibicao(tags_raw: Any) -> str:
 
 def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> str:
     """
-    Cria e salva uma anotação de conhecimento pessoal na coleção 'notes_reminders'.
+    Create and save a personal note.
 
     Args:
-        titulo (str): Título conciso da anotação.
-        conteudo (str): Conteúdo descritivo ou corpo da anotação.
-        tags (list[str] ou str, opcional): Lista ou string de etiquetas para categorização (ex: ['trabalho', 'ideias']).
+        titulo (str): Note title.
+        conteudo (str): Note body content.
+        tags (list[str] or str, optional): Tags for categorization.
     """
     tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
 
@@ -126,12 +126,12 @@ def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> st
 
 def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[Any] = None) -> str:
     """
-    Cria um lembrete com data/hora para notificação e salva na coleção 'notes_reminders' com status 'pendente'.
+    Create a reminder with date/time notification and pending status.
 
     Args:
-        titulo (str): Descrição ou assunto do lembrete.
-        data_hora_lembrete (str): Data e horário do lembrete (ex: '2026-09-04 15:00' ou 'Amanhã às 10h').
-        tags (list[str] ou str, opcional): Lista de categorias/etiquetas do lembrete.
+        titulo (str): Reminder subject.
+        data_hora_lembrete (str): Scheduled datetime (e.g. 'YYYY-MM-DD HH:MM').
+        tags (list[str] or str, optional): Categories/tags.
     """
     tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
 
@@ -158,11 +158,11 @@ def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[Any] = N
 
 def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> str:
     """
-    Busca anotações salvas por palavra-chave ou por tag de categoria.
+    Search saved notes by keyword or category tag.
 
     Args:
-        termo (str, opcional): Texto ou termo para buscar no título e no conteúdo das anotações.
-        tag (str, opcional): Nome da tag para filtrar (ex: 'saude', 'financas', 'ideias').
+        termo (str, optional): Search keyword in title or content.
+        tag (str, optional): Tag name to filter.
     """
     todos = _obter_todos_itens()
     notas = [item for item in todos if item.get("tipo") == "nota"]
@@ -245,15 +245,11 @@ def _filtrar_lembretes_por_data(lembretes: List[Dict[str, Any]], data_alvo: str)
 
 def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Optional[str] = None) -> str:
     """
-    REGRA MANDATÓRIA: SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR!
-    Lista os lembretes que ainda estão com status 'pendente', ordenados pela data/horário.
-    Por padrão rigoroso (apenas_hoje=True), lista estritamente os lembretes agendados para o dia de HOJE
-    no fuso horário de Brasília (UTC-3). Lembretes de outras datas ou datas futuras NUNCA são retornados por padrão.
-    Caso o usuário deseje explicitamente visualizar lembretes futuros ou todos os lembretes, informe apenas_hoje=False.
+    List pending reminders. Defaults to strictly TODAY's reminders in Brasilia time.
 
     Args:
-        apenas_hoje (bool, opcional): Se True (padrão absoluto), filtra estritamente para a data de hoje. Se False, lista todos.
-        data_referencia (str, opcional): Data específica no formato 'YYYY-MM-DD' para filtro.
+        apenas_hoje (bool, optional): If True (default), filter for today only. If False, list all.
+        data_referencia (str, optional): Target date 'YYYY-MM-DD' filter.
     """
     todos = _obter_todos_itens()
     lembretes = [
@@ -286,10 +282,10 @@ def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Option
 
 def concluir_lembrete(lembrete_id_ou_titulo: str) -> str:
     """
-    Marca um lembrete como 'concluido' utilizando seu ID (completo ou prefixo) ou o título.
+    Mark a reminder as completed by its ID or title.
 
     Args:
-        lembrete_id_ou_titulo (str): ID do lembrete ou parte do título para busca.
+        lembrete_id_ou_titulo (str): Reminder ID or title substring.
     """
     termo = lembrete_id_ou_titulo.strip().lower()
     todos = _obter_todos_itens()

@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     COC_CLAN_TAG: str = ""
     COC_PLAYER_TAG: str = ""
 
+    # Google Cloud Translation API (US-10)
+    GOOGLE_TRANSLATE_API_KEY: str = ""
+    TRANSLATION_FREE_TIER_MONTHLY_LIMIT: int = 500000
+
     class Config:
         env_file = ".env"
         extra = "ignore"

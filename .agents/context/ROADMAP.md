@@ -91,8 +91,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 2 (Manipulação e Fusão de PDFs):** `merge_pdfs` (fusão de múltiplos arquivos PDF em ordem preservando orientação) e `split_pdf` (fatiamento por intervalos de páginas), além de `pdf_to_text`.
   - **[x] Story 3 (Conversão Bidirecional de Documentos):** `pdf_to_docx` com preservação estrutural de tabelas/texto e `docx_to_pdf` gerando PDF com formatação limpa e `pdf_to_images` (renderização de páginas em alta resolução).
   - **[x] Story 4 (Integração WhatsApp, Tool do Assistente & API REST):** Tool `FileConverterTool` para o assistente guiar e executar conversões, endpoint `/api/files/convert`, recebimento de documentos via webhook e envio de arquivos de volta via WhatsApp.
-
-
+- **[x] US-10 (Tradutor Universal Multimodal - Google Cloud Translation API):** Motor universal de tradução de qualquer idioma para qualquer idioma para textos, imagens e áudios, integrando a Google Cloud Translation API v2 (com aproveitamento do tier gratuito mensal de 500k caracteres e salvaguardas FinOps) e orquestração multimodal no DAM, enviando SEMPRE a tradução final em formato de texto legível via WhatsApp e REST API.
+  - **[x] Story 1 (Motor de Tradução Google Cloud & Gestão FinOps de Cota Gratuita):** Implementação do serviço `TranslationService` consumindo a Google Cloud Translation API v2 com detecção automática de idioma de origem, mapeamento ISO 639-1, fallback resiliente de custo zero (em caso de ausência de chave ou limite de cota) e rastreamento local de caracteres para garantir o free tier de 500k chars/mês.
+  - **[x] Story 2 (Tool do Assistente & Orquestração Multimodal Texto/Imagem/Áudio):** Tool `traduzir_conteudo` registrada no `ai_service.py` e instruções no `PromptComposer`, com suporte para processar extração OCR de fotos/documentos e transcrição fonética de áudios para tradução, forçando estritamente o envio da resposta final como texto via WhatsApp (`deve_enviar_audio = False` para traduções).
+  - **[x] Story 3 (Endpoint RESTful `/api/translate` & Contrato de API):** Endpoint FastAPI para traduções avulsas e envio direto de textos ou mídias com validação de esquemas Pydantic, rate limit e documentação de contrato.
+  - **[x] Story 4 (Suíte de Testes TDD, Segurança SecOps & Validação E2E):** Testes unitários e de integração cobrindo fluxos de texto, imagem e áudio, testes de segurança contra injeção de prompt e caracteres maliciosos, e validação contra regressões.
 
 ---
 

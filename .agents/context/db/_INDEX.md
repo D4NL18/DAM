@@ -35,6 +35,7 @@ Nao existem migrations SQL tradicionais — o schema e flexivel e evolui com o c
 | [`conversation_cache`](./conversation_cache.md) | Plataforma Core | Cache L2 de respostas do LLM com TTL por dominio |
 | [`gcp_billing_snapshots`](./gcp_billing_snapshots.md) | Financas/FinOps | Snapshot do ultimo alerta de billing do GCP |
 | [`saved_videos`](./saved_videos.md) | Entretenimento | Repositório de vídeos salvos (TikTok, Instagram, YouTube) para assistir mais tarde |
+| [`translation_usage`](./translation_usage.md) | Utilitarios & Seguranca | Rastreamento FinOps da cota gratuita da Google Cloud Translation API (500k chars/mês) e logs de auditoria |
 
 ---
 
@@ -71,6 +72,7 @@ Nao existem migrations SQL tradicionais — o schema e flexivel e evolui com o c
 - `vault_credentials` — Cofre de senhas
 - `user_addresses` — Enderecos favoritos
 - `file_conversions` — Historico e auditoria de conversao de arquivos (US-09)
+- `translation_usage` — Telemetria de cota e auditoria de traduções (US-10)
 
 ### Plataforma Core
 - `conversation_cache` — Cache semantico do LLM

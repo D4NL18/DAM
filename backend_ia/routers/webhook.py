@@ -71,6 +71,23 @@ def is_allowed_user(remote_jid: str, allowed_phone: str = "") -> bool:
 
     return False
 
+def is_translation_content(text: str, ai_response: str) -> bool:
+    """
+    P-1003: Detecta se a requisição ou a resposta trata de tradução para forçar
+    envio estritamente em formato de texto legível via WhatsApp.
+    """
+    text_lower = (text or "").lower()
+    resp_lower = (ai_response or "").lower()
+
+    if "🌐 **tradução" in resp_lower or "**tradução" in resp_lower or "➔" in (ai_response or ""):
+        return True
+
+    keywords = ["traduza", "traduzir", "traduz", "tradução", "traducao", "translate", "translation"]
+    if any(re.search(rf"\b{kw}\b", text_lower) for kw in keywords):
+        return True
+
+    return False
+
 async def process_and_reply(
     remote_jid: str, 
     text: str, 
@@ -106,7 +123,12 @@ async def process_and_reply(
 
         # Verifica se deve responder em áudio
         deve_enviar_audio = False
-        if media_mimetype and "audio" in media_mimetype:
+        is_trans = is_translation_content(text, ai_response)
+
+        if is_trans:
+            logger.info(f"--> [BACKGROUND] Tradução detectada para {masked_jid} (P-1003): envio forçado estritamente em formato de texto.")
+            deve_enviar_audio = False
+        elif media_mimetype and "audio" in media_mimetype:
             deve_enviar_audio = True
         elif TTSService.should_reply_with_audio(text):
             deve_enviar_audio = True

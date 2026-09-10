@@ -211,5 +211,19 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 - **Resiliência e Feedback Gracioso ao Usuário (P-307.4):**
   - Caso o download da mídia falhe na Evolution API, o sistema não aciona o LLM com texto cego ("Analise esta imagem"), evitando que a IA afirme que nada foi enviado. Em vez disso, envia resposta direta e educada no WhatsApp avisando sobre a instabilidade de carregamento e solicitando o reenvio.
 
+## US-10: Tradutor Universal Multimodal (Google Cloud Translation API) [P-1001 a P-1006]
+- **Google Cloud Translation API v2 & FinOps (P-1001, P-1002, P-1006):**
+  - Motor universal `TranslationService` integrando a Google Cloud Translation API v2 com aproveitamento do Free Tier de 500.000 caracteres/mês calendário.
+  - Medidor FinOps thread-safe (`translation_usage`) com trava *Hard Cap* de 500.000 caracteres/mês para prevenir qualquer cobrança não autorizada.
+  - Fallback resiliente e de custo zero caso credencial esteja ausente ou cota seja atingida.
+- **Normalização e Suporte Any-to-Any (P-1001, P-1005):**
+  - Detecção automática de idioma de origem e mapeamento tolerante de nomes em português ('inglês', 'japonês', 'alemão') e códigos regionais ('pt-BR' -> 'pt') para ISO 639-1 com sanitização contra Path Traversal e Command Injection.
+- **Saída Estritamente em Formato Textual (P-1003):**
+  - Regra absoluta: qualquer resposta de tradução no WhatsApp é enviada **sempre em texto** (`WhatsAppService.send_text`), suprimindo conversão para voz (`deve_enviar_audio = False`), mesmo quando a solicitação foi enviada via áudio ou imagem.
+- **Orquestração Multimodal & Tool (P-1004):**
+  - Tool `traduzir_conteudo` disponível no `AVAILABLE_TOOLS` para o Gemini orquestrar textos, fotos com OCR e áudios transcritos.
+  - Endpoints RESTful `POST /api/translate` e `GET /api/translate/usage` com tipagem Pydantic, rate limit e zero vazamento de dados sensíveis (LGPD).
+
+
 
 

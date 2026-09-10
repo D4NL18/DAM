@@ -1,21 +1,21 @@
 # Estado Atual da Orquestração (STATE.md)
 
 ## Status da Feature Ativa
-- **Feature:** PC-01.1 (Correção e Resiliência na Recepção Multimodal: Imagens, Áudios e Documentos via Evolution API)
-- **Branch:** `fix/P-307-multimodal-media-download`
+- **Feature:** US-10 (Tradutor Universal Multimodal com Google Cloud Translation API)
+- **Branch:** `feature/US-10-universal-multimodal-translator`
 - **Início:** 2026-09-09
-- **Status da Feature:** Concluído (PR #8 aberto para develop)
+- **Status da Feature:** Concluído (PR aberto para develop)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [x] **1. Quebra de Escopo (Product Owner)**
 - [x] **2. Especificar (Analista)**
-- [x] **3. Projetar (Arquiteto & Designer)** - Designer: Bypass (Backend-only)
-- [x] **4. Modelagem de Dados Segura (DBA)** - DBA: Bypass (Sem banco)
+- [x] **3. Projetar (Arquiteto & Designer)** - Designer: Bypass (Backend/WhatsApp-only)
+- [x] **4. Modelagem de Dados Segura (DBA)**
 - [x] **5. Planejar as Tarefas (Arquiteto)**
 - [x] **6. Desenvolver Testes Unitários (Tester - TDD)**
 - [x] **7. Executar (Desenvolvedor)**
 - [x] **8. Code Review (Reviewer)**
-- [x] **9. UX Review (UX Reviewer)** - Bypass (Backend-only)
+- [x] **9. UX Review (UX Reviewer)** - Bypass (Backend/WhatsApp-only)
 - [x] **10. Testar e Auto-Healer (Tester)**
 - [x] **11. Auditoria de Segurança (SecOps)**
 - [x] **12. Release via Pull Request (DevOps)**

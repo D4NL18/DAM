@@ -199,4 +199,17 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Endpoint `GET /api/v1/finance/trends` em `backend_ia/routers/finance.py` com agregação cronológica mês a mês, cálculo de balanço mensal e cálculo comparativo contra o período imediatamente anterior.
   - Isolamento estrito multi-usuário (`X-User-Id`), testes automatizados de unidade e segurança com 100% de cobertura.
 
+## PC-01.1: Recepção Multimodal Resiliente no WhatsApp (Imagens, Áudios e Documentos) [P-307]
+- **Download sob Demanda na Evolution API (P-307.1):**
+  - A Evolution API não envia Base64 no payload inicial do webhook `messages.upsert`. O método `WhatsAppService.get_base64_from_media_message(message_id, data)` consome o endpoint `POST /chat/getBase64FromMediaMessage/{instance}` enviando metadados e ID da mensagem para recuperação assíncrona do binário em até 15s.
+  - O webhook `routers/webhook.py` consulta ativamente a mídia para `imageMessage`, `audioMessage` e `documentMessage` antes de despachar o processamento em segundo plano.
+- **Sanitização Defensiva de Base64 e Proteção de Logs (P-307.2):**
+  - Higienização de strings Base64 com remoção de prefixos Data URI (`data:*/*;base64,`), quebras de linha e espaços antes da decodificação em bytes.
+  - Strings Base64 são terminantemente proibidas nos logs, registrando-se apenas o MIME type e o ID da mensagem.
+- **Normalização de MIME Types para Gemini (P-307.3):**
+  - Modelos Gemini exigem MIME types estritos; parâmetros de codecs (ex.: `audio/ogg; codecs=opus`) são normalizados com `split(";")[0].strip()` para `audio/ogg`, prevenindo erros 400 de tipo inválido.
+- **Resiliência e Feedback Gracioso ao Usuário (P-307.4):**
+  - Caso o download da mídia falhe na Evolution API, o sistema não aciona o LLM com texto cego ("Analise esta imagem"), evitando que a IA afirme que nada foi enviado. Em vez disso, envia resposta direta e educada no WhatsApp avisando sobre a instabilidade de carregamento e solicitando o reenvio.
+
+
 

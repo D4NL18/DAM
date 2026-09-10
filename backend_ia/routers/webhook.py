@@ -90,6 +90,17 @@ async def process_and_reply(
     logger.info(f"--> [BACKGROUND] Processando mensagem de {user_name} ({masked_jid}): '{safe_text}'")
 
     try:
+        # Se a mensagem dependia exclusivamente da mídia e o download falhou:
+        if not media_base64 and (
+            text == "Analise esta imagem enviada pelo usuário."
+            or text == "Transcreva e responda ao que o usuário solicitou neste áudio."
+        ):
+            logger.warning(f"--> [BACKGROUND] Download da mídia falhou para {masked_jid}. Enviando aviso ao usuário.")
+            aviso = "Não consegui carregar o arquivo de mídia que você enviou no momento. Poderia tentar reenviar, por favor?"
+            WhatsAppService.send_text(remote_jid, aviso)
+            ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=aviso)
+            return
+
         ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
         logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars).")
 
@@ -195,18 +206,30 @@ async def whatsapp_webhook(
         caption = img_info.get("caption") if isinstance(img_info, dict) else None
         text = caption or text or "Analise esta imagem enviada pelo usuário."
         b64 = message.get("base64") or data.get("base64")
+        mimetype = img_info.get("mimetype", "image/jpeg") if isinstance(img_info, dict) else "image/jpeg"
+        if not b64 and message_id:
+            media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
+            if media_data:
+                b64 = media_data.get("base64")
+                mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = img_info.get("mimetype", "image/jpeg") if isinstance(img_info, dict) else "image/jpeg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "image/jpeg"
 
     # Suporte Multimodal a Áudio (US-3.6)
     elif "audioMessage" in message or message_type == "audioMessage":
         audio_info = message.get("audioMessage", {})
         text = text or "Transcreva e responda ao que o usuário solicitou neste áudio."
         b64 = message.get("base64") or data.get("base64")
+        mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
+        if not b64 and message_id:
+            media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
+            if media_data:
+                b64 = media_data.get("base64")
+                mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "audio/ogg"
 
     # Suporte a Documentos e Arquivos (US-09)
     elif "documentMessage" in message or message_type == "documentMessage":
@@ -215,9 +238,15 @@ async def whatsapp_webhook(
         caption = doc_info.get("caption") if isinstance(doc_info, dict) else None
         text = caption or text or f"Recebi o documento '{doc_filename}'. Analise ou processe a conversão solicitada."
         b64 = message.get("base64") or data.get("base64")
+        mimetype = doc_info.get("mimetype", "application/pdf") if isinstance(doc_info, dict) else "application/pdf"
+        if not b64 and message_id:
+            media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
+            if media_data:
+                b64 = media_data.get("base64")
+                mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = doc_info.get("mimetype", "application/pdf") if isinstance(doc_info, dict) else "application/pdf"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "application/pdf"
 
 
     if not text:

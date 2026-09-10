@@ -36,7 +36,7 @@ class TestFinanceDashboardV2:
             "type": "expense_variable",
             "payment_method": "Cartão de Crédito Pessoal",
             "installment": "2/3",
-            "owner": "Christian",
+            "owner": "Daniel",
             "date": "2026-04-01T10:00:00Z",
             "userId": "daniel"
         }
@@ -108,6 +108,16 @@ class TestFinanceDashboardV2:
             assert len(data_var["transactions"]) == 1
             assert data_var["transactions"][0]["description"] == "Financiamento Song"
 
+            # Aba tipo=total (todas as entradas na tabela, mas gráfico exibindo apenas o negativo/despesas)
+            resp_total = client.get("/api/v1/finance/dashboard?year=2026&month=4&type=total", headers={"X-User-Id": "daniel"})
+            assert resp_total.status_code == 200
+            data_total = resp_total.json()
+            assert len(data_total["transactions"]) == 3
+            total_cats = [c["category"] for c in data_total["expensesByCategory"]]
+            assert "Carro" in total_cats
+            assert "Casa" in total_cats
+            assert "Receitas" not in total_cats
+
     def test_transactions_crud(self):
         """P-005: Adição, edição e exclusão de transações."""
         mock_db = MagicMock()
@@ -124,7 +134,7 @@ class TestFinanceDashboardV2:
                 "type": "expense_variable",
                 "paymentMethod": "Cartão de Crédito Secundário",
                 "date": "2026-04-01",
-                "owner": "Christian"
+                "owner": "Daniel"
             }
             res_post = client.post("/api/v1/finance/transactions", json=create_payload, headers={"X-User-Id": "daniel"})
             assert res_post.status_code in [200, 201]

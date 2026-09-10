@@ -16,7 +16,6 @@ DEFAULT_CATEGORIES = [
     {"id": "cat-oliver", "name": "Oliver", "color": "#86efac"},
     {"id": "cat-casa", "name": "Casa", "color": "#15803d"},
     {"id": "cat-familia", "name": "Família", "color": "#22c55e"},
-    {"id": "cat-christian", "name": "Christian", "color": "#1e3a8a"},
     {"id": "cat-farmacia", "name": "Farmácia", "color": "#a855f7"},
     {"id": "cat-karen", "name": "Karen", "color": "#f472b6"},
     {"id": "cat-gatos", "name": "Gatos", "color": "#7e22ce"},
@@ -142,12 +141,13 @@ def get_finance_dashboard(
 
                 # Verifica se deve incluir na listagem e no gráfico da aba ativa
                 incluir = True
-                if type and tx_type != type:
+                if type and type != "total" and tx_type != type:
                     incluir = False
                 if category and cat.lower() != category.lower():
                     incluir = False
 
                 if incluir:
+                    # O gráfico deve exibir apenas o negativo (despesas)
                     if tx_type != "income":
                         category_map[cat] = category_map.get(cat, 0.0) + amount
 
@@ -161,7 +161,7 @@ def get_finance_dashboard(
                         "type": tx_type,
                         "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
                         "installment": data.get("installment"),
-                        "owner": data.get("owner") or "Christian"
+                        "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else ""
                     })
         except Exception as e:
             logger.error(f"Erro ao processar finanças no Firestore: {e}")
@@ -215,7 +215,7 @@ def create_transaction(
         "type": payload.type or "expense_variable",
         "payment_method": payload.paymentMethod or "Cartão de Crédito Pessoal",
         "installment": payload.installment,
-        "owner": payload.owner or "Christian",
+        "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
         "date": date_val,
         "timestamp": datetime.now(timezone.utc),
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -287,19 +287,52 @@ def get_categories(
 
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finance_categories").stream()
+            docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
             for doc in docs:
                 data = doc.to_dict() or {}
-                if (data.get("userId") or "daniel") == effective_user:
-                    user_cats.append({
-                        "id": doc.id,
-                        "name": data.get("name", ""),
-                        "color": data.get("color", "#64748b")
-                    })
+                # Filtrar qualquer remanescente de 'Christian'
+                if str(data.get("name", "")).strip().lower() == "christian":
+                    doc.reference.delete()
+                    continue
+                user_cats.append({
+                    "id": doc.id,
+                    "name": data.get("name", ""),
+                    "color": data.get("color", "#64748b")
+                })
         except Exception as e:
             logger.error(f"Erro ao ler categorias no Firestore: {e}")
 
-    return user_cats if user_cats else DEFAULT_CATEGORIES
+    # Se o usuário ainda não tem categorias salvas, semear defaults limpos (sem Christian)
+    if not user_cats and firebase.db is not None:
+        try:
+            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+            settings_doc = settings_ref.get()
+            is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
+            if not is_initialized:
+                batch = firebase.db.batch()
+                for def_cat in DEFAULT_CATEGORIES:
+                    if def_cat["name"].lower() == "christian":
+                        continue
+                    doc_ref = firebase.db.collection("finance_categories").document()
+                    cat_item = {
+                        "id": doc_ref.id,
+                        "userId": effective_user,
+                        "name": def_cat["name"],
+                        "color": def_cat["color"],
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    batch.set(doc_ref, cat_item)
+                    user_cats.append({
+                        "id": doc_ref.id,
+                        "name": def_cat["name"],
+                        "color": def_cat["color"]
+                    })
+                settings_ref.set({"categories_initialized": True}, merge=True)
+                batch.commit()
+        except Exception as e:
+            logger.error(f"Erro ao semear categorias padrão: {e}")
+
+    return user_cats if user_cats else [c for c in DEFAULT_CATEGORIES if c["name"].lower() != "christian"]
 
 @router.post("/categories", status_code=status.HTTP_201_CREATED)
 def create_category(
@@ -307,9 +340,7 @@ def create_category(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
     effective_user = x_user_id.strip() if x_user_id else "daniel"
-    cat_id = str(uuid.uuid4())
     doc_data = {
-        "id": cat_id,
         "userId": effective_user,
         "name": payload.name.strip(),
         "color": payload.color.strip(),
@@ -318,10 +349,15 @@ def create_category(
 
     if firebase.db is not None:
         try:
-            _, ref = firebase.db.collection("finance_categories").add(doc_data)
-            doc_data["id"] = ref.id
+            doc_ref = firebase.db.collection("finance_categories").document()
+            doc_data["id"] = doc_ref.id
+            doc_ref.set(doc_data)
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"categories_initialized": True}, merge=True
+            )
         except Exception as e:
             logger.error(f"Erro ao adicionar categoria: {e}")
+            raise HTTPException(status_code=500, detail="Erro ao adicionar categoria.")
 
     return doc_data
 
@@ -349,13 +385,45 @@ def delete_category(
     cat_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    deleted_names = []
+
     if firebase.db is not None:
         try:
-            firebase.db.collection("finance_categories").document(cat_id).delete()
+            # 1. Tentar deletar diretamente pelo ID do documento
+            doc_ref = firebase.db.collection("finance_categories").document(cat_id)
+            doc_snap = doc_ref.get()
+            if doc_snap.exists:
+                deleted_names.append(doc_snap.to_dict().get("name", ""))
+                doc_ref.delete()
+
+            # 2. Se não encontrou ou era id legado (ex: 'cat-christian'), procurar na coleção do usuário
+            clean_name = cat_id.replace("cat-", "").strip().lower()
+            query_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
+            for doc in query_docs:
+                data = doc.to_dict() or {}
+                d_id = str(data.get("id", "")).lower()
+                d_name = str(data.get("name", "")).lower()
+                if doc.id == cat_id or d_id == cat_id.lower() or d_name == clean_name or (cat_id == "cat-christian" and d_name == "christian"):
+                    deleted_names.append(data.get("name", ""))
+                    doc.reference.delete()
+
+            # 3. Garantir flag categories_initialized para não ressemear categorias deletadas
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"categories_initialized": True}, merge=True
+            )
+
+            # 4. Migrar despesas associadas para "Outros"
+            for cat_name in deleted_names:
+                if cat_name and cat_name != "Outros":
+                    tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
+                    for tx_doc in tx_docs:
+                        tx_doc.reference.update({"category": "Outros"})
         except Exception as e:
             logger.error(f"Erro ao deletar categoria {cat_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar categoria: {str(e)}")
 
-    return {"success": True, "id": cat_id}
+    return {"success": True, "id": cat_id, "deleted_names": deleted_names}
 
 # --- Gestão de Cartões ---
 
@@ -368,17 +436,44 @@ def get_cards(
 
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finance_cards").stream()
+            docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
             for doc in docs:
                 data = doc.to_dict() or {}
-                if (data.get("userId") or "daniel") == effective_user:
-                    user_cards.append({
-                        "id": doc.id,
-                        "name": data.get("name", ""),
-                        "type": data.get("type", "credito")
-                    })
+                user_cards.append({
+                    "id": doc.id,
+                    "name": data.get("name", ""),
+                    "type": data.get("type", "credito")
+                })
         except Exception as e:
             logger.error(f"Erro ao ler cartões no Firestore: {e}")
+
+    # Inicializar cartões padrão se usuário não tiver nenhum salvo
+    if not user_cards and firebase.db is not None:
+        try:
+            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+            settings_doc = settings_ref.get()
+            is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
+            if not is_initialized:
+                batch = firebase.db.batch()
+                for def_card in DEFAULT_CARDS:
+                    doc_ref = firebase.db.collection("finance_cards").document()
+                    card_item = {
+                        "id": doc_ref.id,
+                        "userId": effective_user,
+                        "name": def_card["name"],
+                        "type": def_card["type"],
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    batch.set(doc_ref, card_item)
+                    user_cards.append({
+                        "id": doc_ref.id,
+                        "name": def_card["name"],
+                        "type": def_card["type"]
+                    })
+                settings_ref.set({"cards_initialized": True}, merge=True)
+                batch.commit()
+        except Exception as e:
+            logger.error(f"Erro ao inicializar cartões padrão: {e}")
 
     return user_cards if user_cards else DEFAULT_CARDS
 
@@ -388,9 +483,7 @@ def create_card(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
     effective_user = x_user_id.strip() if x_user_id else "daniel"
-    card_id = str(uuid.uuid4())
     doc_data = {
-        "id": card_id,
         "userId": effective_user,
         "name": payload.name.strip(),
         "type": payload.type.strip(),
@@ -399,10 +492,15 @@ def create_card(
 
     if firebase.db is not None:
         try:
-            _, ref = firebase.db.collection("finance_cards").add(doc_data)
-            doc_data["id"] = ref.id
+            doc_ref = firebase.db.collection("finance_cards").document()
+            doc_data["id"] = doc_ref.id
+            doc_ref.set(doc_data)
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"cards_initialized": True}, merge=True
+            )
         except Exception as e:
             logger.error(f"Erro ao cadastrar cartão: {e}")
+            raise HTTPException(status_code=500, detail="Erro ao cadastrar cartão.")
 
     return doc_data
 
@@ -430,11 +528,28 @@ def delete_card(
     card_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
     if firebase.db is not None:
         try:
-            firebase.db.collection("finance_cards").document(card_id).delete()
+            doc_ref = firebase.db.collection("finance_cards").document(card_id)
+            if doc_ref.get().exists:
+                doc_ref.delete()
+            else:
+                clean_name = card_id.replace("card-", "").strip().lower()
+                query_docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
+                for doc in query_docs:
+                    data = doc.to_dict() or {}
+                    d_id = str(data.get("id", "")).lower()
+                    d_name = str(data.get("name", "")).lower()
+                    if doc.id == card_id or d_id == card_id.lower() or d_name == clean_name:
+                        doc.reference.delete()
+
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"cards_initialized": True}, merge=True
+            )
         except Exception as e:
             logger.error(f"Erro ao deletar cartão {card_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar cartão: {str(e)}")
 
     return {"success": True, "id": card_id}
 

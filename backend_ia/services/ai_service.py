@@ -227,9 +227,18 @@ class AIService:
             )
             
             if media_base64 and media_mimetype:
-                media_bytes = base64.b64decode(media_base64)
+                # Sanitiza Base64 (remove prefixos data URI e quebras de linha/espaços)
+                clean_b64 = media_base64
+                if "," in clean_b64:
+                    clean_b64 = clean_b64.split(",", 1)[1]
+                clean_b64 = clean_b64.strip().replace("\n", "").replace("\r", "")
+                media_bytes = base64.b64decode(clean_b64)
+
+                # Normaliza MIME type para o padrão aceito pelo Gemini (sem parâmetros extras como codecs)
+                clean_mimetype = media_mimetype.split(";")[0].strip()
+
                 part = {
-                    "mime_type": media_mimetype,
+                    "mime_type": clean_mimetype,
                     "data": media_bytes
                 }
                 response = chat.send_message([part, user_text])

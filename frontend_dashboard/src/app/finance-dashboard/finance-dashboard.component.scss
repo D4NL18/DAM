@@ -1507,3 +1507,178 @@
     transform: scale(1);
   }
 }
+
+/* ==========================================================================
+   Modal de Confirmação Personalizado & Toasts de Feedback
+   ========================================================================== */
+
+.confirm-modal-backdrop {
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.confirm-modal-card {
+  max-width: 440px;
+  width: 90%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 28px;
+  gap: 16px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.2);
+  border: 1px solid #e2e8f0;
+
+  .confirm-icon-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+
+    span {
+      font-size: 30px;
+    }
+
+    &.danger {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    &.warning {
+      background: #fef3c7;
+      color: #d97706;
+    }
+  }
+
+  .confirm-modal-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .confirm-modal-message {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #64748b;
+    margin: 0;
+  }
+
+  .confirm-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 10px;
+
+    .dam-btn {
+      flex: 1;
+      justify-content: center;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 12px;
+
+      &.danger-btn {
+        background: #dc2626;
+        color: #ffffff;
+        border: 1px solid #dc2626;
+
+        &:hover {
+          background: #b91c1c;
+          border-color: #b91c1c;
+        }
+      }
+    }
+  }
+}
+
+/* --- Toast Notifications Flutuantes --- */
+.dam-toast-wrapper {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 120;
+  animation: slideToastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  .dam-toast-pill {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: #ffffff;
+    border-radius: 9999px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #e2e8f0;
+    min-width: 280px;
+    max-width: 460px;
+
+    .toast-icon {
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .toast-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1e293b;
+      flex: 1;
+    }
+
+    .toast-dismiss-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      transition: color 0.15s;
+
+      &:hover {
+        color: #0f172a;
+      }
+    }
+
+    &.success {
+      border-left: 5px solid #16a34a;
+
+      .toast-icon {
+        color: #16a34a;
+      }
+    }
+
+    &.error {
+      border-left: 5px solid #dc2626;
+
+      .toast-icon {
+        color: #dc2626;
+      }
+    }
+
+    &.warning, &.info {
+      border-left: 5px solid #eab308;
+
+      .toast-icon {
+        color: #d97706;
+      }
+    }
+  }
+}
+
+@keyframes slideToastUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

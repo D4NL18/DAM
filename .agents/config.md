@@ -22,5 +22,5 @@ Para manter a performance de raciocínio da IA impecável e evitar o limite da J
    - **Reviewer (7):** Audita o Clean Code e complexidade. Reprova lixo.
    - **Tester - Pós (8):** Validação de comportamento (QA).
    - **SecOps (9):** Auditoria contra LGPD, Injections e falhas arquiteturais.
-   - **DevOps (10):** Limpa o ambiente mandando as tasks para `.archive/` e abre o Pull Request da branch para a `develop` (FinOps e CI/CD).
+   - **DevOps (10):** Limpa o ambiente mandando as tasks para `.archive/` e abre o Pull Request da branch diretamente para a `main` (FinOps e CI/CD).
 4. **Regra de Ouro:** NUNCA pule de uma etapa para outra. O ciclo das 10 etapas é sequencial e inquebrável.

@@ -42,7 +42,7 @@ Todo prompt ou nova requisição deve obrigatoriamente seguir as seguintes etapa
     - O **Especialista de Segurança** varre o código aprovado atrás de vulnerabilidades e bloqueia se houver brechas (ex: Injections, LGPD).
 
 12. **Release via Pull Request (DevOps)**
-    - O **Engenheiro DevOps** configura os pipelines automáticos (CI/CD) e gera o PR da feature para a branch `develop`, com a descrição pré-preenchida. Commits diretos nas branches base são proibidos.
+    - O **Engenheiro DevOps** configura os pipelines automáticos (CI/CD) e gera o PR da feature diretamente para a branch de produção `main`, com a descrição pré-preenchida. Commits diretos na `main` sem PR são proibidos.
 
 ---
 

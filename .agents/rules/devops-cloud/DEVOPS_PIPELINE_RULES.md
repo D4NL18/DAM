@@ -11,7 +11,7 @@ A esteira de integração contínua (CI) é a barreira final antes da produção
   - Em produção (GCP/AWS/Azure), os valores devem ser providos pelo "Secret Manager" oficial da plataforma na nuvem.
 
 ## 2. Qualidade Mínima de Pipeline (CI)
-- ❌ **Deploy Direto/Cego:** Nenhuma branch pode ser mesclada (*merged*) na `main` ou `develop` sem passar pela esteira CI/CD (GitHub Actions, GitLab CI, etc).
+- ❌ **Deploy Direto/Cego:** Nenhuma branch pode ser mesclada (*merged*) na `main` sem passar pela esteira CI/CD (GitHub Actions, GitLab CI, etc).
 - ✅ **A Solução:** Todo *Pull Request* exige a criação de um arquivo de Workflow (`.github/workflows/ci.yml`) que contenha os 3 passos obrigatórios:
   1. Instalar as dependências e executar o linter (`npm run lint` ou similar).
   2. Executar a suíte de Testes Unitários de forma automatizada (se falhar, bloqueia o PR).

@@ -8,10 +8,10 @@ description: Habilidade responsável por aplicar o Padrão de Commits, controle 
 Garantir o controle de versão rigoroso e rastreabilidade no projeto. Evita commits genéricos e protege o código de produção contra quebras acidentais.
 
 ## 1. Proteção de Branches (Bloqueio)
-**É EXPRESSAMENTE PROIBIDO** realizar commits diretos nas branches base: `develop`, `qa`, e `main`/`master`. Todo o desenvolvimento DEVE ocorrer isoladamente em novas branches criadas especificamente para a tarefa.
+**É EXPRESSAMENTE PROIBIDO** realizar commits diretos na branch base de produção `main`/`master` sem Pull Request. As branches intermediárias `develop` e `qa` foram descontinuadas do projeto. Todo o desenvolvimento DEVE ocorrer isoladamente em novas branches criadas especificamente para a tarefa.
 
 ## 2. Padrão de Branches (Desenvolvedor)
-Para toda nova tarefa, crie uma branch isolada a partir da `develop`.
+Para toda nova tarefa, crie uma branch isolada a partir da `main`.
 - **Formato:** `tipo/P-XXX-descrição-curta` (Onde P-XXX é a regra de negócio principal que está sendo atendida).
 - **Exemplo Válido:** `feature/P-001-valida-maioridade`, `fix/P-002-corrige-token`
 
@@ -29,7 +29,7 @@ O formato obrigatório para commits é: `<tipo>: [<referência P-XXX>] <descriç
 
 ## 4. Padrão de Pull Requests (DevOps)
 Quando a tarefa estiver concluída e validada por toda a pipeline (Code Review, QA, SecOps), o Pull Request DEVE ser aberto.
-- **Regra de Ouro do PR:** O Pull Request deve ser gerado **sempre contra a branch `develop`**. Nunca aponte um PR de feature direto para a `main`.
+- **Regra de Ouro do PR:** O Pull Request deve ser gerado **diretamente contra a branch de produção `main`**.
 - **Template Obrigatório:** O corpo do Pull Request DEVE obrigatoriamente seguir a seguinte estrutura em Markdown:
 ```markdown
 ## O que mudou?

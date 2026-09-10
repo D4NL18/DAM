@@ -2,9 +2,9 @@
 
 ## Status da Feature Ativa
 - **Feature:** Nenhuma (Aguardando nova demanda)
-- **Branch:** develop
+- **Branch:** main
 - **Início:** -
-- **Status da Feature:** Concluída (PC-11 pronta para merge em develop)
+- **Status da Feature:** Concluída (PC-11 pronta para deploy em produção / main)
 
 ## Esteira de Desenvolvimento (12 Passos)
 - [ ] **1. Quebra de Escopo (Product Owner)**

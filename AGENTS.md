@@ -20,7 +20,7 @@ Todo prompt ou nova requisição deve obrigatoriamente seguir as seguintes etapa
    - O **DBA** traduz o design em arquivos de *Migrations* seguras, aplicando travas contra perda de dados.
 
 5. **Planejar as Tarefas (Task Planning)**
-   - O **Arquiteto** decompõe a solução no checklist da Tarefa (em `docs/tasks/`).
+   - O **Arquiteto** decompõe a solução no checklist da Tarefa (em `.agents/docs/tasks/`).
 
 6. **Desenvolver Testes Unitários (TDD)**
    - O **Tester** cria a suíte de testes (em código) antes de qualquer lógica produtiva.

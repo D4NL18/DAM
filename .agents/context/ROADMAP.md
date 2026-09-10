@@ -99,6 +99,10 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 ## 6. Domínio: Plataforma, Segurança & Core
 
 - **[x] PC-01 (Motor de IA Multimodal):** Orquestração com Google Gemini 1.5/3.6 Flash, suporte a processamento de imagens e transcrição/resposta a áudios do WhatsApp.
+  - **[x] PC-01.1 (Correção e Resiliência na Recepção Multimodal: Imagens, Áudios e Documentos via Evolution API):**
+    - **[x] Story 1 (Download de Mídias sob Demanda na Evolution API):** Consumo do endpoint `/chat/getBase64FromMediaMessage/{instance}` na `WhatsAppService` para recuperação assíncrona de fotos, áudios e documentos quando a mídia não vier embutida no webhook.
+    - **[x] Story 2 (Sanitização de Base64 e Normalização de MIME Types):** Limpeza defensiva de prefixos Data URI e normalização de MIME types de áudio (`audio/ogg; codecs=opus` para `audio/ogg`) e imagem antes do envio ao Gemini.
+    - **[x] Story 3 (Resiliência, Feedback ao Usuário e TDD):** Tratamento de falhas de download com mensagem amigável de instabilidade ao usuário e suíte de testes de integração multimodal.
 - **[x] PC-02 (Gateway WhatsApp & Isolamento):** Integração Evolution API com isolamento inviolável para o número pessoal do usuário (`ALLOWED_PHONE_NUMBER`).
 - **[x] PC-03 (Guardrails contra Prompt Injection):** `GuardrailsService` com interceptação de jailbreaks, delimitação semântica de mensagens (`<user_message>`) e sanitização de caracteres invisíveis.
 - **[x] PC-04 (Rate Limiter & Security Headers Middleware):** Middleware de Sliding Window por IP (100 req/min e 200 req/min para webhooks) e injeção de headers defensivos HTTP (`nosniff`, `DENY`, `HSTS`).

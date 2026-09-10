@@ -93,4 +93,60 @@ class WhatsAppService:
             logger.error(f"Erro ao enviar documento via WhatsApp: {e}")
             return None
 
+    @staticmethod
+    def get_base64_from_media_message(
+        message_id: str, 
+        message_data: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, str]]:
+        """
+        Recupera o Base64 e metadados de uma mídia recebida via Evolution API.
+        Usa o endpoint /chat/getBase64FromMediaMessage/{instance}.
+        """
+        url = f"{settings.EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{settings.EVOLUTION_INSTANCE_NAME}"
+        
+        headers = {
+            "apikey": settings.EVOLUTION_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        # Payload aceito pela Evolution API:
+        msg_payload: Dict[str, Any] = {"key": {"id": message_id}}
+        if message_data and isinstance(message_data, dict):
+            if "key" in message_data and isinstance(message_data["key"], dict):
+                msg_payload["key"] = message_data["key"]
+            if "message" in message_data:
+                msg_payload["message"] = message_data["message"]
+
+        payload = {
+            "message": msg_payload,
+            "convertToMp4": False
+        }
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, dict):
+                return None
+            
+            b64 = data.get("base64")
+            mimetype = data.get("mimetype")
+            if not b64 and isinstance(data.get("data"), dict):
+                b64 = data["data"].get("base64")
+                mimetype = mimetype or data["data"].get("mimetype")
+
+            if b64:
+                return {
+                    "base64": b64,
+                    "mimetype": mimetype or "application/octet-stream"
+                }
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Não foi possível obter mídia da Evolution API (ID {message_id}): {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Erro inesperado ao buscar mídia da Evolution API (ID {message_id}): {e}")
+            return None
+
+
 

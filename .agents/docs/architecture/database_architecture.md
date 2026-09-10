@@ -99,7 +99,7 @@ Armazenamento seguro com chaves e senhas criptografadas via algoritmo Fernet (AE
 ```json
 {
   "servico": "GitHub",
-  "usuario": "danielmarinho",
+  "usuario": "admin_user",
   "senha_criptografada": "gAAAAABl...",
   "notas": "Chave SSH principal vinculada",
   "updated_at": "2026-09-02T11:00:00Z"
@@ -170,7 +170,7 @@ Garante envio único diário às 08:00 mesmo em caso de reinicialização de ins
   "data": "2026-09-03",
   "enviado": true,
   "enviado_as": "2026-09-03T08:00:05Z",
-  "destinatario": "5571****9995@s.whatsapp.net"
+  "destinatario": "5511****9999@s.whatsapp.net"
 }
 ```
 
@@ -178,7 +178,7 @@ Garante envio único diário às 08:00 mesmo em caso de reinicialização de ins
 Armazena os últimos diálogos trocados com o assistente no WhatsApp para alimentar a janela de contexto de 10 turnos do Gemini.
 ```json
 {
-  "remoteJid": "5571991269995@s.whatsapp.net",
+  "remoteJid": "5511999999999@s.whatsapp.net",
   "fromMe": false,
   "text": "Quanto gastei com mercado este mês?",
   "message_id": "3EB0...",

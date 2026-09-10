@@ -143,7 +143,7 @@ def _buscar_agenda_liquipedia(team_name: Optional[str] = None) -> list[dict]:
 
     url = f"https://liquipedia.net/counterstrike/api.php?action=parse&page={urllib.parse.quote(page_name)}&format=json"
     headers = {
-        "User-Agent": "DAMBot/1.0 (https://github.com/D4NL18/DAM; danielmarinho@gmail.com)",
+        "User-Agent": "DAMBot/1.0 (https://github.com/D4NL18/DAM; contact@dambot.local)",
         "Accept-Encoding": "gzip"
     }
     

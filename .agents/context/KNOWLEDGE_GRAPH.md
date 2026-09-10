@@ -115,13 +115,13 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
 - **FinOps & Resiliência:** Cache L1 de áudios idênticos com chave SHA-256 e fallback automático e transparente para mensagem de texto caso a síntese de voz falhe.
 
 ## PC-10: Migração para WhatsApp Business Dedicado & Isolamento Inviolável
-- **Conta Dedicada de Bot (+55 71 98171-8497):** Desacoplamento entre a conta pessoal do usuário e a conta do assistente. A instância `dam_bot` da Evolution API agora conecta com o WhatsApp Business do bot via QR Code gerado pelo script `conectar_whatsapp.py`.
-- **Isolamento Inviolável (P-0601 / `ALLOWED_PHONE_NUMBER=5571991269995`):** O webhook FastAPI descarta sumariamente qualquer mensagem cujo remetente não coincida com os 8 dígitos e DDD do número pessoal do Daniel (`71 99126-9995`), blindando o bot contra mensagens acidentais, terceiros ou spams que entrem em contato com o WhatsApp Business.
+- **Conta Dedicada de Bot (+55 11 77777-7777):** Desacoplamento entre a conta pessoal do usuário e a conta do assistente. A instância `dam_bot` da Evolution API agora conecta com o WhatsApp Business do bot via QR Code gerado pelo script `conectar_whatsapp.py`.
+- **Isolamento Inviolável (P-0601 / `ALLOWED_PHONE_NUMBER=5511999999999`):** O webhook FastAPI descarta sumariamente qualquer mensagem cujo remetente não coincida com os dígitos e DDD do número autorizado (`11 99999-9999`), blindando o bot contra mensagens acidentais, terceiros ou spams que entrem em contato com o WhatsApp Business.
 - **Anti-Loop Abrangente (`fromMe: true`):** Em uma conta dedicada, qualquer evento de mensagem gerado com `key.fromMe == True` representa um envio realizado pela própria instância do bot (seja texto com `\u200b`, áudio PTT ou imagem). A guard clause no webhook intercepta e ignora essas mensagens imediatamente, eliminando riscos de eco e loops recursivos infinitos.
 - **Automação de Conexão (`conectar_whatsapp.py`):** Script aprimorado com reset de chaves anteriores (`logout`), configuração automática do webhook (`/api/whatsapp/webhook`), aplicação de flags de privacidade (`groupsIgnore`, `readMessages=false`, `alwaysOnline=false`) e renderização de HTML com QR Code no navegador.
 
 ## EL-07: Repositório de Vídeos Salvos (TikTok, Instagram, YouTube) [P-0701]
-- **Persistência Firestore (`saved_videos`):** Coleção dedicada com schema enriquecido (`url`, `plataforma`, `titulo`, `descricao`, `categoria`, `tags`, `status`, `assistido_em`, `created_at`, `updated_at`) e isolamento estrito por `userId` (Daniel e Lari).
+- **Persistência Firestore (`saved_videos`):** Coleção dedicada com schema enriquecido (`url`, `plataforma`, `titulo`, `descricao`, `categoria`, `tags`, `status`, `assistido_em`, `created_at`, `updated_at`) e isolamento estrito por `userId` entre perfis.
 - **Repositório (`saved_videos_repository.py`):** Singleton thread-safe com `threading.RLock`, persistência Firestore e fallback em memória. Algoritmo de busca tolerante a acentos (`unicodedata`) com priorização de correspondência de todos os tokens sobre correspondências parciais.
 - **Ferramentas de IA (`saved_videos_tool.py`):**
   - `salvar_video`: Detecção automática da plataforma a partir da URL (TikTok, Instagram, YouTube, Outro), validação rigorosa de esquema http/https com sanitização de injeções (javascript/data), inferência de título sintético caso o usuário forneça apenas descrição ou link, e normalização de tags.
@@ -159,8 +159,8 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Trata o comportamento da API Supercell onde o array `members` de `capitalraidseasons` omite jogadores que ainda não atacaram. Quando `membro is None` em temporada `ongoing`, gera alerta com 5 ataques disponíveis.
   - Alertas de Guerra Regular/CWL e Raid Weekend coexistem no briefing matinal quando ambos estiverem ativos e com ataques pendentes.
 - **Disparo Multi-Usuário & Isolamento de Contexto (P-0417, P-0418):**
-  - Scheduler roda minuto a minuto avaliando as preferências de cada usuário ativo (`daniel`, `lari`, etc.) via `verificar_e_disparar_briefings_agendados`, disparando os briefings no horário exato configurado por cada um.
-  - `montar_resumo_matinal` e `enviar_briefing_matinal` chaveiam o `UserContext.set_user(target_user_id)` com bloco seguro `try/finally`, assegurando que agenda, lembretes e dados de saúde de Daniel e Lari permaneçam 100% isolados sem vazamentos cruzados.
+  - Scheduler roda minuto a minuto avaliando as preferências de cada usuário ativo (`admin`, `user`, etc.) via `verificar_e_disparar_briefings_agendados`, disparando os briefings no horário exato configurado por cada um.
+  - `montar_resumo_matinal` e `enviar_briefing_matinal` chaveiam o `UserContext.set_user(target_user_id)` com bloco seguro `try/finally`, assegurando que agenda, lembretes e dados de saúde de diferentes perfis de usuários permaneçam 100% isolados sem vazamentos cruzados.
 
 ## GP-04.2: Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real [P-0419 a P-0421]
 - **Lembretes Diários por Padrão (P-0419):**
@@ -176,7 +176,7 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Dashboard Angular reproduz com precisão o design moderno: saudação personalizada, título "Orçamento" com botão de olho para alternar visibilidade (ocultando com `••••••` para privacidade), seletor de mês `< Mês de Ano >` e abas em estilo pílula arredondada (`Receita`, `Despesa fixa`, `Despesa variável`).
   - Layout dividido em: tabela de lançamentos com badges de categoria coloridos e Donut Chart ECharts com raio customizado e legenda lateral em grid de 2 colunas com percentuais e cores consistentes. Barra inferior fixa com saldo do período em vermelho vibrante.
 - **Granularidade e Filtro de Categorias (P-003, P-007, P-008):**
-  - Paleta com mais de 12 categorias padrão de alta granularidade (Mercado, Carro, Oliver, Casa, Família, Christian, Farmácia, Karen, Gatos, Lazer, Mercadinho, iFood, etc.), com códigos hexadecimais unificados entre tabela e gráfico.
+  - Paleta com categorias padrão de alta granularidade (Mercado, Transporte, Moradia, Família, Saúde, Educação, Pet, Lazer, Restaurante, iFood, etc.), com códigos hexadecimais unificados entre tabela e gráfico.
   - Filtro interativo por categoria via dropdown e clique direto nas fatias do Donut chart.
 - **Gestão Completa de Categorias e Cartões (P-009 a P-012):**
   - Modal integrado permitindo adicionar novas categorias (com seletor/paleta de cores), renomear e excluir categorias com migração automática para 'Outros'.

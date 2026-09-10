@@ -30,7 +30,7 @@ def extrair_ddd_e_numero(digits: str) -> tuple[str, str]:
 
 def is_allowed_user(remote_jid: str, allowed_phone: str = "") -> bool:
     """
-    Valida estritamente se o JID remoto pertence a um dos usuários autorizados (Daniel ou Lari).
+    Valida estritamente se o JID remoto pertence a um dos usuários autorizados configurados.
     Tolera a oscilação do 9º dígito no Brasil.
     """
     if not remote_jid:

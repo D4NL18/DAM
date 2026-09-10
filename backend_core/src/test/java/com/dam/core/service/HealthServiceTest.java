@@ -27,27 +27,27 @@ public class HealthServiceTest {
     @Test
     public void testGetHealthSummary() throws Exception {
         List<HealthMetric> mockMetrics = Arrays.asList(
-                HealthMetric.builder().steps(5000).activeCalories(300.0).userId("daniel").build(),
-                HealthMetric.builder().steps(3000).activeCalories(150.0).userId("daniel").build()
+                HealthMetric.builder().steps(5000).activeCalories(300.0).userId("admin").build(),
+                HealthMetric.builder().steps(3000).activeCalories(150.0).userId("admin").build()
         );
         
-        when(repository.findAll("daniel")).thenReturn(mockMetrics);
+        when(repository.findAll("admin")).thenReturn(mockMetrics);
 
-        HealthSummaryDTO result = healthService.getHealthSummary("daniel");
+        HealthSummaryDTO result = healthService.getHealthSummary("admin");
 
         assertEquals(8000, result.getTotalSteps());
         assertEquals(450.0, result.getTotalActiveCalories());
     }
 
     @Test
-    public void testGetHealthSummaryLari() throws Exception {
+    public void testGetHealthSummaryUser() throws Exception {
         List<HealthMetric> mockMetrics = Arrays.asList(
-                HealthMetric.builder().steps(7000).activeCalories(400.0).userId("lari").build()
+                HealthMetric.builder().steps(7000).activeCalories(400.0).userId("user").build()
         );
         
-        when(repository.findAll("lari")).thenReturn(mockMetrics);
+        when(repository.findAll("user")).thenReturn(mockMetrics);
 
-        HealthSummaryDTO result = healthService.getHealthSummary("lari");
+        HealthSummaryDTO result = healthService.getHealthSummary("user");
 
         assertEquals(7000, result.getTotalSteps());
         assertEquals(400.0, result.getTotalActiveCalories());

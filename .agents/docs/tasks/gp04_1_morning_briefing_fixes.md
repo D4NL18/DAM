@@ -5,7 +5,7 @@ Correção e aprimoramento dos 4 pilares do Morning Briefing:
 1. Filtro temporal estrito para lembretes pendentes (apenas do dia corrente) e sanitização de tags.
 2. Filtro estrito de animes (episódios apenas `assistindo`, temporadas/continuações apenas `assistindo` ou `concluido` excluindo `pausado`/`dropado`, e watchlist "o que assistir" com `planejo_assistir` ou `assistindo` com 0 eps).
 3. Coexistência de alertas de Guerra/CWL e Raid Weekend no Clash of Clans com suporte a membros com 0 ataques feitos na Capital.
-4. Envio multi-usuário do briefing respeitando horários individuais configurados e isolamento estrito de `UserContext` para Lari.
+4. Envio multi-usuário do briefing respeitando horários individuais configurados e isolamento estrito de `UserContext` para cada perfil.
 
 ---
 
@@ -17,7 +17,7 @@ Correção e aprimoramento dos 4 pilares do Morning Briefing:
 - [x] Consulta de animes para assistir traz apenas plan to watch ou watching com 0 eps.
 - [x] Alerta de Raid Weekend é gerado mesmo se o jogador ainda não realizou ataques na season ativa.
 - [x] Alertas de Raid e Guerra/CWL aparecem conjuntamente quando ambos estiverem ativos.
-- [x] Briefing de Lari é gerado no contexto isolado de Lari e enviado para seu WhatsApp.
+- [x] Briefing de cada usuário é gerado no contexto isolado do respectivo perfil e enviado para seu WhatsApp.
 - [x] Scheduler verifica os horários personalizados de cada usuário ativo minuto a minuto.
 
 ---
@@ -44,7 +44,7 @@ Correção e aprimoramento dos 4 pilares do Morning Briefing:
 - [x] Rodar suíte completa de testes (377+ novos) com 100% de sucesso.
 
 ### Passo 11: Auditoria de Segurança
-- [x] Verificar ausência de vazamento de dados entre Daniel e Lari.
+- [x] Verificar ausência de vazamento de dados entre os perfis multi-tenant.
 
 ### Passo 12: DevOps & Release
 - [x] Preparar commit semântico e documentação de release para PR contra `develop`.

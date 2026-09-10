@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from main import app
@@ -15,35 +15,35 @@ class TestMultiuserIsolation(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         settings.WEBHOOK_TOKEN = "TEST_KEY"
-        settings.ALLOWED_PHONE_NUMBERS = ["5571991269995", "5571983278254"]
-        settings.CALENDAR_ID_DANIEL = "danielmarinho1705@gmail.com"
-        settings.CALENDAR_ID_LARI = "lari_agenda@gmail.com"
+        settings.ALLOWED_PHONE_NUMBERS = ["5511999999999", "5511888888888"]
+        settings.CALENDAR_ID_DANIEL = "admin_calendar@example.com"
+        settings.CALENDAR_ID_LARI = "user_calendar@example.com"
         _reset_mock_storage()
         _reset_vault()
         _reset_items()
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
 
     def test_user_context_resolution(self):
         # 1. Daniel com e sem nono dígito
-        u1 = UserContext.resolve_user_from_phone("5571991269995@s.whatsapp.net")
+        u1 = UserContext.resolve_user_from_phone("5511999999999@s.whatsapp.net")
         self.assertIsNotNone(u1)
         self.assertEqual(u1["id"], "daniel")
 
-        u1_sem9 = UserContext.resolve_user_from_phone("557191269995@s.whatsapp.net")
+        u1_sem9 = UserContext.resolve_user_from_phone("551199999999@s.whatsapp.net")
         self.assertIsNotNone(u1_sem9)
         self.assertEqual(u1_sem9["id"], "daniel")
 
         # 2. Lari com e sem nono dígito
-        u2 = UserContext.resolve_user_from_phone("5571983278254@s.whatsapp.net")
+        u2 = UserContext.resolve_user_from_phone("5511888888888@s.whatsapp.net")
         self.assertIsNotNone(u2)
         self.assertEqual(u2["id"], "lari")
 
-        u2_sem9 = UserContext.resolve_user_from_phone("557183278254@s.whatsapp.net")
+        u2_sem9 = UserContext.resolve_user_from_phone("551188888888@s.whatsapp.net")
         self.assertIsNotNone(u2_sem9)
         self.assertEqual(u2_sem9["id"], "lari")
 
         # 3. Número desconhecido
-        u3 = UserContext.resolve_user_from_phone("5571988887777@s.whatsapp.net")
+        u3 = UserContext.resolve_user_from_phone("5511777777777@s.whatsapp.net")
         self.assertIsNone(u3)
 
     @patch("routers.webhook.process_and_reply")
@@ -53,7 +53,7 @@ class TestMultiuserIsolation(unittest.TestCase):
         payload_daniel = {
             "event": "messages.upsert",
             "data": {
-                "key": {"remoteJid": "5571991269995@s.whatsapp.net", "fromMe": False, "id": "1"},
+                "key": {"remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False, "id": "1"},
                 "message": {"conversation": "Oi bot, sou o Daniel"}
             }
         }
@@ -65,7 +65,7 @@ class TestMultiuserIsolation(unittest.TestCase):
         payload_lari = {
             "event": "messages.upsert",
             "data": {
-                "key": {"remoteJid": "5571983278254@s.whatsapp.net", "fromMe": False, "id": "2"},
+                "key": {"remoteJid": "5511888888888@s.whatsapp.net", "fromMe": False, "id": "2"},
                 "message": {"conversation": "Oi bot, sou a Lari"}
             }
         }
@@ -77,7 +77,7 @@ class TestMultiuserIsolation(unittest.TestCase):
         payload_estranho = {
             "event": "messages.upsert",
             "data": {
-                "key": {"remoteJid": "5571999991111@s.whatsapp.net", "fromMe": False, "id": "3"},
+                "key": {"remoteJid": "5511999991111@s.whatsapp.net", "fromMe": False, "id": "3"},
                 "message": {"conversation": "Mensagem invasora"}
             }
         }
@@ -98,7 +98,7 @@ class TestMultiuserIsolation(unittest.TestCase):
         resp1 = consultar_agenda(dias=1, usuario="auto")
         self.assertIn("Sua agenda está livre", resp1)
         mock_service.events().list.assert_called_with(
-            calendarId="danielmarinho1705@gmail.com",
+            calendarId="admin_calendar@example.com",
             maxResults=10,
             orderBy="startTime",
             singleEvents=True,
@@ -108,9 +108,9 @@ class TestMultiuserIsolation(unittest.TestCase):
 
         # 2. Daniel consulta a agenda de Lari (PERMITIDO)
         resp2 = consultar_agenda(dias=1, usuario="lari")
-        self.assertIn("A agenda de Lari está livre", resp2)
+        self.assertIn("está livre", resp2)
         mock_service.events().list.assert_called_with(
-            calendarId="lari_agenda@gmail.com",
+            calendarId="user_calendar@example.com",
             maxResults=10,
             orderBy="startTime",
             singleEvents=True,
@@ -127,7 +127,7 @@ class TestMultiuserIsolation(unittest.TestCase):
         resp4 = consultar_agenda(dias=1, usuario="auto")
         self.assertIn("Sua agenda está livre", resp4)
         mock_service.events().list.assert_called_with(
-            calendarId="lari_agenda@gmail.com",
+            calendarId="user_calendar@example.com",
             maxResults=10,
             orderBy="startTime",
             singleEvents=True,
@@ -158,7 +158,7 @@ class TestMultiuserIsolation(unittest.TestCase):
     def test_vault_isolation(self):
         # Daniel salva senha do GitHub
         UserContext.set_user("daniel")
-        salvar_credencial("GitHub", "daniel_marinho", "SenhaForte123!")
+        salvar_credencial("GitHub", "admin_user", "SenhaForte123!")
 
         # Lari tenta consultar a senha do GitHub
         UserContext.set_user("lari")

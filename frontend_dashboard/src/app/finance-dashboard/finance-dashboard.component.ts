@@ -137,7 +137,7 @@ export class FinanceDashboardComponent implements OnInit {
 
   get userDisplayName(): string {
     const user = this.authService.getCurrentUser();
-    return user?.name || 'Daniel';
+    return user?.name || 'Admin';
   }
 
   get currentMonthLabel(): string {

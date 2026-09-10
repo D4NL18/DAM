@@ -20,7 +20,7 @@ public class FinanceTransactionRepository {
     private static final String COLLECTION_NAME = "finances";
 
     public List<FinanceTransaction> findAll() throws ExecutionException, InterruptedException {
-        return findAll("daniel");
+        return findAll("admin");
     }
 
     public List<FinanceTransaction> findAll(String targetUserId) throws ExecutionException, InterruptedException {
@@ -28,7 +28,12 @@ public class FinanceTransactionRepository {
         List<QueryDocumentSnapshot> documents = future.get().getDocuments();
         
         List<FinanceTransaction> transactions = new ArrayList<>();
-        String normalizedTarget = (targetUserId == null || targetUserId.isBlank()) ? "daniel" : targetUserId.trim().toLowerCase();
+        String normalizedTarget = (targetUserId == null || targetUserId.isBlank()) ? "admin" : targetUserId.trim().toLowerCase();
+        if ("daniel".equals(normalizedTarget)) {
+            normalizedTarget = "admin";
+        } else if ("lari".equals(normalizedTarget)) {
+            normalizedTarget = "user";
+        }
 
         for (QueryDocumentSnapshot document : documents) {
             FinanceTransaction transaction = document.toObject(FinanceTransaction.class);
@@ -36,8 +41,10 @@ public class FinanceTransactionRepository {
             if (docUserId == null || docUserId.isBlank()) {
                 docUserId = document.getString("user_id");
             }
-            if (docUserId == null || docUserId.isBlank()) {
-                docUserId = "daniel";
+            if (docUserId == null || docUserId.isBlank() || "daniel".equalsIgnoreCase(docUserId)) {
+                docUserId = "admin";
+            } else if ("lari".equalsIgnoreCase(docUserId)) {
+                docUserId = "user";
             }
             if (docUserId.equalsIgnoreCase(normalizedTarget)) {
                 transaction.setUserId(docUserId);

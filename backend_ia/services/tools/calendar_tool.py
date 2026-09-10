@@ -42,23 +42,26 @@ def _resolve_calendar_target(target_user: str = "auto") -> Tuple[Optional[str], 
     else:
         target = caller_id
 
-    # Permissão: Lari não pode acessar a agenda do Daniel
+    target_info = UserContext.get_user_info(target)
+    target_name = target_info.get("name", target.capitalize())
+
+    # Permissão: Usuário secundário não pode acessar a agenda do admin
     if caller_id == "lari" and target == "daniel":
-        return None, "Daniel", "Acesso restrito: Você só possui permissão para consultar sua própria agenda."
+        return None, target_name, "Acesso restrito: Você só possui permissão para consultar sua própria agenda."
 
     # Resolução dos IDs
     if target == "daniel":
         cal_id = getattr(settings, "CALENDAR_ID_DANIEL", None) or settings.CALENDAR_ID or "primary"
-        return cal_id, "Daniel", None
+        return cal_id, target_name, None
     elif target == "lari":
         cal_id = getattr(settings, "CALENDAR_ID_LARI", None)
         if not cal_id:
-            return None, "Lari", (
-                "A agenda Google da Lari ainda não foi vinculada. "
-                "Para ativar, compartilhe o Google Calendar dela com a Service Account do DAM "
+            return None, target_name, (
+                "A agenda Google secundária ainda não foi vinculada. "
+                "Para ativar, compartilhe o Google Calendar com a Service Account do DAM "
                 "e preencha a variável CALENDAR_ID_LARI nas configurações."
             )
-        return cal_id, "Lari", None
+        return cal_id, target_name, None
 
     cal_fallback = settings.CALENDAR_ID or "primary"
     return cal_fallback, UserContext.get_user_name(), None

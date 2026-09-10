@@ -31,12 +31,12 @@ def clean_env():
     _reset_briefing_memory()
     _reset_briefing_preferences()
     _reset_mock_storage()
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
     yield
     _reset_briefing_memory()
     _reset_briefing_preferences()
     _reset_mock_storage()
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
 
 
 class TestSecOpsMorningBriefing:
@@ -116,7 +116,7 @@ class TestSecOpsMorningBriefing:
         Garante que informações confidenciais do usuário A nunca apareçam para o usuário B.
         """
         # Cria dados sensíveis para Daniel
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
         criar_lembrete(
             titulo="Senha do Cofre Bancário: 987654",
             data_hora_lembrete="2026-09-08 09:00",
@@ -124,7 +124,7 @@ class TestSecOpsMorningBriefing:
         )
 
         # Cria dados sensíveis para Lari
-        UserContext.set_user("lari", "5571983278254")
+        UserContext.set_user("lari", "5511888888888")
         criar_lembrete(
             titulo="Exame Confidencial Ginecológico",
             data_hora_lembrete="2026-09-08 10:00",
@@ -154,7 +154,7 @@ class TestSecOpsMorningBriefing:
         o contexto de thread/async local DEVE ser restaurado para o caller original,
         evitando contaminação cruzada para requisições subsequentes.
         """
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
 
         with patch("services.briefing_service.obter_preferencias_briefing", side_effect=RuntimeError("Falha simulada no Firestore")):
             with pytest.raises(RuntimeError):
@@ -162,4 +162,4 @@ class TestSecOpsMorningBriefing:
 
         # Após o crash, o contexto deve ter voltado imediatamente para Daniel
         assert UserContext.get_user_id() == "daniel"
-        assert UserContext.get_user_phone() == "5571991269995"
+        assert UserContext.get_user_phone() == "5511999999999"

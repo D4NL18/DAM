@@ -11,7 +11,7 @@ Este contrato define os endpoints REST expostos pelo Backend IA (`backend_ia`) c
 **Objetivo:** Retorna o resumo consolidado mensal com transações filtradas e agrupamento de categorias para o gráfico Donut.
 
 **Headers:**
-- `X-User-Id` (string, opcional): ID do usuário autenticado (padrão: `'daniel'`).
+- `X-User-Id` (string, opcional): ID do usuário autenticado (padrão: `'admin'`).
 
 **Query Params:**
 - `year` (int, default: ano corrente)

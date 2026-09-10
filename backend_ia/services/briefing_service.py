@@ -25,14 +25,14 @@ _MEMORY_BRIEFING_LOGS = set()
 _DEFAULT_PREFERENCES: Dict[str, Dict[str, Any]] = {
     "daniel": {
         "userId": "daniel",
-        "userName": "Daniel",
+        "userName": "Admin",
         "horario": "08:00",
         "topicos": ["agenda", "lembretes", "furia", "animes", "clash"],
         "ativo": True
     },
     "lari": {
         "userId": "lari",
-        "userName": "Lari",
+        "userName": "User",
         "horario": "08:00",
         "topicos": ["agenda", "lembretes", "saude"],
         "ativo": True
@@ -453,7 +453,7 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
         data_alvo = None
 
     target_user_id = (user_id or UserContext.get_user_id() or "daniel").lower().strip()
-    target_user_name = "Daniel" if target_user_id == "daniel" else ("Lari" if target_user_id == "lari" else target_user_id.capitalize())
+    target_user_name = "Admin" if target_user_id in ("daniel", "admin") else ("User" if target_user_id in ("lari", "user") else target_user_id.capitalize())
 
     antigo_user_id = UserContext.get_user_id()
     antigo_user_phone = UserContext.get_user_phone()
@@ -573,10 +573,9 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
 def _obter_telefone_usuario(user_id: str) -> str:
     """Resolve o número de telefone do usuário para envio de WhatsApp."""
     uid = user_id.lower().strip()
-    if uid == "daniel":
-        return "5571991269995"
-    elif uid == "lari":
-        return "5571983278254"
+    user_info = UserContext.get_user_info(uid)
+    if user_info and user_info.get("phone"):
+        return user_info["phone"]
 
     for phone in settings.allowed_numbers_list:
         info = resolve_user_from_phone(phone)
@@ -700,7 +699,7 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
         user_id (str, opcional): Usuário alvo ('daniel' ou 'lari'). Se omitido, usa UserContext.
     """
     target_user_id = (user_id or UserContext.get_user_id() or "daniel").lower().strip()
-    target_user_name = "Daniel" if target_user_id == "daniel" else ("Lari" if target_user_id == "lari" else target_user_id.capitalize())
+    target_user_name = "Admin" if target_user_id in ("daniel", "admin") else ("User" if target_user_id in ("lari", "user") else target_user_id.capitalize())
 
     hoje = _obter_data_brasilia()
     chave_dia_user = f"{hoje.strftime('%Y-%m-%d')}_{target_user_id}"

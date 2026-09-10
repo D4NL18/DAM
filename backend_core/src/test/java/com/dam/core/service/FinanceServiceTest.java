@@ -27,14 +27,14 @@ public class FinanceServiceTest {
     @Test
     public void testGetFinanceSummary() throws Exception {
         List<FinanceTransaction> mockTransactions = Arrays.asList(
-                FinanceTransaction.builder().amount(100.0).category("Food").userId("daniel").build(),
-                FinanceTransaction.builder().amount(50.0).category("Food").userId("daniel").build(),
-                FinanceTransaction.builder().amount(200.0).category("Transport").userId("daniel").build()
+                FinanceTransaction.builder().amount(100.0).category("Food").userId("admin").build(),
+                FinanceTransaction.builder().amount(50.0).category("Food").userId("admin").build(),
+                FinanceTransaction.builder().amount(200.0).category("Transport").userId("admin").build()
         );
         
-        when(repository.findAll("daniel")).thenReturn(mockTransactions);
+        when(repository.findAll("admin")).thenReturn(mockTransactions);
 
-        FinanceSummaryDTO result = financeService.getFinanceSummary("daniel");
+        FinanceSummaryDTO result = financeService.getFinanceSummary("admin");
 
         assertEquals(350.0, result.getTotalAmount());
         assertEquals(150.0, result.getExpensesByCategory().get("Food"));
@@ -42,15 +42,15 @@ public class FinanceServiceTest {
     }
 
     @Test
-    public void testGetFinanceSummaryLari() throws Exception {
+    public void testGetFinanceSummaryUser() throws Exception {
         List<FinanceTransaction> mockTransactions = Arrays.asList(
-                FinanceTransaction.builder().amount(80.0).category("Saúde").userId("lari").build(),
-                FinanceTransaction.builder().amount(120.0).category("Educação").userId("lari").build()
+                FinanceTransaction.builder().amount(80.0).category("Saúde").userId("user").build(),
+                FinanceTransaction.builder().amount(120.0).category("Educação").userId("user").build()
         );
         
-        when(repository.findAll("lari")).thenReturn(mockTransactions);
+        when(repository.findAll("user")).thenReturn(mockTransactions);
 
-        FinanceSummaryDTO result = financeService.getFinanceSummary("lari");
+        FinanceSummaryDTO result = financeService.getFinanceSummary("user");
 
         assertEquals(200.0, result.getTotalAmount());
         assertEquals(80.0, result.getExpensesByCategory().get("Saúde"));

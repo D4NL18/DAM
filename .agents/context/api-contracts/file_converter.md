@@ -12,7 +12,7 @@ Define as interfaces RESTful do FastAPI e as ferramentas de Function Calling (Ge
 
 - **Headers:**
   - `Authorization: Bearer <token>` ou chave de usuário
-  - `X-User-Id: daniel` (opcional, default extraído do token/contexto)
+  - `X-User-Id: admin` (opcional, default extraído do token/contexto)
 - **Form Data (Multipart):**
   - `file`: UploadFile (arquivo principal - binário)
   - `additional_files`: List[UploadFile] (opcional, usado em `merge_pdfs` ou `images_to_pdf`)

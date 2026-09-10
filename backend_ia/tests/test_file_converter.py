@@ -221,7 +221,7 @@ class TestWhatsAppServiceDocument:
 
         monkeypatch.setattr(requests, "post", lambda *args, **kwargs: MockResponse())
         resp = WhatsAppService.send_document(
-            remote_jid="5571991269995@s.whatsapp.net",
+            remote_jid="5511999999999@s.whatsapp.net",
             file_bytes=b"%PDF-sample",
             filename="teste.pdf",
             mime_type="application/pdf",

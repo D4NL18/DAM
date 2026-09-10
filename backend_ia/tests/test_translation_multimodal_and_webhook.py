@@ -63,7 +63,7 @@ class TestTranslationMultimodalAndWebhook:
 
         # Simula recebimento de áudio com comando de tradução
         asyncio.run(process_and_reply(
-            remote_jid="5571991269995@s.whatsapp.net",
+            remote_jid="5511999999999@s.whatsapp.net",
             text="Traduza o que eu disse neste áudio para o português",
             media_base64="dGVzdGU=",
             media_mimetype="audio/ogg"
@@ -72,7 +72,7 @@ class TestTranslationMultimodalAndWebhook:
         # Garante que send_text foi chamado com a tradução
         mock_send_text.assert_called_once()
         args, _ = mock_send_text.call_args
-        assert args[0] == "5571991269995@s.whatsapp.net"
+        assert args[0] == "5511999999999@s.whatsapp.net"
         assert "Tradução" in args[1]
 
         # Garante que send_voice_note NÃO foi chamado!

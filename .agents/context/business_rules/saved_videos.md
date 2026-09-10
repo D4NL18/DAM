@@ -40,7 +40,7 @@ A consulta de vídeos DEVE ser inteligente e tolerante a termos parciais:
 ### P-0705: Isolamento Inviolável Multi-Usuário (Multi-Tenant)
 1. Todos os documentos de vídeos salvos na coleção `saved_videos` do Firestore DEVEM conter obrigatoriamente o atributo `userId` ou `user_id`.
 2. Apenas o usuário autenticado na sessão (`UserContext.get_user_id()`) tem permissão de leitura, gravação, atualização e exclusão dos seus próprios vídeos.
-3. Sob NENHUMA hipótese Daniel terá acesso aos vídeos salvos por Lari ou vice-versa.
+3. Sob NENHUMA hipótese um usuário terá acesso aos vídeos salvos por outro usuário.
 
 ### P-0706: Validação e Sanitização de URLs
 1. O sistema DEVE validar rigorosamente que a URL enviada possui esquema `http://` ou `https://`.

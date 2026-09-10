@@ -1,4 +1,4 @@
-﻿# Tarefa: GP-01.1 – CRUD Completo: Edição In-Place e Exclusão Segura no Google Calendar
+# Tarefa: GP-01.1 – CRUD Completo: Edição In-Place e Exclusão Segura no Google Calendar
 
 ## 📋 Contexto
 Identificado que o assistente DAM possuía apenas gendar_evento e consultar_agenda. Ao solicitar a exclusão de uma reunião, o bot confirmava a remoção sem executar ação na API do Google Calendar. Ao solicitar a alteração/remarcação de uma reunião, chamava gendar_evento criando um evento duplicado.
@@ -13,8 +13,8 @@ Identificado que o assistente DAM possuía apenas gendar_evento e consultar_age
   - [x] Teste de exclusão com múltiplos eventos ambíguos (retorno de lista para desambiguação).
   - [x] Teste de edição bem-sucedida (editar_evento) com events().patch() alterando horário.
   - [x] Teste de edição bem-sucedida alterando título, descrição e localização.
-  - [x] Teste de matriz de permissões: Lari bloqueada de excluir ou editar evento na agenda de Daniel.
-  - [x] Teste de Daniel com permissão para gerenciar agenda própria e agenda da Lari (usuario="lari").
+  - [x] Teste de matriz de permissões: Usuário convidado bloqueado de excluir ou editar evento na agenda do Administrador.
+  - [x] Teste de Administrador com permissão para gerenciar agenda própria e agenda compartilhada (usuario="user").
 
 - [x] **2. Implementação das Tools (services/tools/calendar_tool.py):**
   - [x] Função auxiliar _localizar_eventos_por_termo(service, calendar_id, termo, data_referencia) para busca inteligente de eventos.

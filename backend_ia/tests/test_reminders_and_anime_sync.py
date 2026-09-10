@@ -25,7 +25,7 @@ from services.briefing_service import (
 def setup_teardown():
     _reset_mock_storage()
     _reset_memory_watchlist()
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
     yield
     _reset_mock_storage()
     _reset_memory_watchlist()

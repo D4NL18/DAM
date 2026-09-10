@@ -5,10 +5,10 @@ from services.user_context import UserContext
 class TestCalendarCrud(unittest.TestCase):
 
     def setUp(self):
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
 
     def tearDown(self):
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
 
     @patch("services.tools.calendar_tool._get_calendar_service")
     def test_excluir_evento_sucesso(self, mock_get_service):
@@ -193,7 +193,7 @@ class TestCalendarCrud(unittest.TestCase):
         from services.tools.calendar_tool import excluir_evento, editar_evento
 
         # Simula chamada feita por Lari
-        UserContext.set_user("lari", "5571983278254")
+        UserContext.set_user("lari", "5511888888888")
 
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service

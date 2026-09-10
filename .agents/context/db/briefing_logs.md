@@ -16,16 +16,16 @@ Garante a **idempotência do Morning Briefing** diário. Cada documento registra
 
 ## 📑 Estrutura do Documento
 
-**Path no Firestore:** `/briefing_logs/briefing_{YYYY-MM-DD}_{userId}` (com retrocompatibilidade para `briefing_{YYYY-MM-DD}` para Daniel).
+**Path no Firestore:** `/briefing_logs/briefing_{YYYY-MM-DD}_{userId}` (com retrocompatibilidade para `briefing_{YYYY-MM-DD}` para o usuário principal).
 
-Document ID determinístico: `"briefing_"` + data em `YYYY-MM-DD` + `"_"` + `userId` (ex: `"briefing_2026-09-08_daniel"`, `"briefing_2026-09-08_lari"`).
+Document ID determinístico: `"briefing_"` + data em `YYYY-MM-DD` + `"_"` + `userId` (ex: `"briefing_2026-09-08_admin"`, `"briefing_2026-09-08_user"`).
 
 ### Campos
 
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
 | `data` | `String` | Sim | Data do briefing no formato `YYYY-MM-DD` (fuso Brasília) |
-| `userId` | `String` | Sim | Identificador do usuário (`daniel` ou `lari`) |
+| `userId` | `String` | Sim | Identificador do usuário (`admin` ou `user`) |
 | `enviado_em` | `String (ISO 8601)` | Sim | Data/hora UTC em que o briefing foi enviado |
 | `destinatario` | `String` | Sim | Número de telefone do destinatário correspondente |
 | `status` | `String (Enum)` | Sim | Status do envio: `"sucesso"` |

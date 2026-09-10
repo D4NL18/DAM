@@ -13,10 +13,10 @@ public class AuthControllerTest {
     private final AuthController authController = new AuthController();
 
     @Test
-    public void testLoginDanielSuccess() {
+    public void testLoginAdminSuccess() {
         LoginRequest request = LoginRequest.builder()
-                .username("Daniel")
-                .password("Dm12031994@@")
+                .username("admin")
+                .password("Admin@123")
                 .build();
 
         ResponseEntity<LoginResponse> response = authController.login(request);
@@ -24,17 +24,17 @@ public class AuthControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertTrue(response.getBody().isAuthenticated());
-        assertEquals("daniel", response.getBody().getUserId());
-        assertEquals("Daniel", response.getBody().getName());
+        assertEquals("admin", response.getBody().getUserId());
+        assertEquals("Admin", response.getBody().getName());
         assertEquals("admin", response.getBody().getRole());
         assertNotNull(response.getBody().getToken());
     }
 
     @Test
-    public void testLoginLariSuccess() {
+    public void testLoginUserSuccess() {
         LoginRequest request = LoginRequest.builder()
-                .username("Lari")
-                .password("Lilalink10")
+                .username("user")
+                .password("User@123")
                 .build();
 
         ResponseEntity<LoginResponse> response = authController.login(request);
@@ -42,8 +42,8 @@ public class AuthControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertTrue(response.getBody().isAuthenticated());
-        assertEquals("lari", response.getBody().getUserId());
-        assertEquals("Lari", response.getBody().getName());
+        assertEquals("user", response.getBody().getUserId());
+        assertEquals("User", response.getBody().getName());
         assertEquals("user", response.getBody().getRole());
         assertNotNull(response.getBody().getToken());
     }
@@ -51,7 +51,7 @@ public class AuthControllerTest {
     @Test
     public void testLoginInvalidCredentials() {
         LoginRequest request = LoginRequest.builder()
-                .username("Daniel")
+                .username("admin")
                 .password("WrongPassword")
                 .build();
 

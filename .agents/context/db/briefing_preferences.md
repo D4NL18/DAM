@@ -9,13 +9,13 @@ Armazena as configurações e preferências personalizadas de cada usuário para
 
 ## 📑 Estrutura do Documento
 **Path no Firestore:** `/briefing_preferences/{userId}`
-Document ID determinístico: `userId` (ex: `"daniel"`, `"lari"`).
+Document ID determinístico: `userId` (ex: `"admin"`, `"user"`).
 
 ### Campos
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
-| `userId` | `String` | Sim | Identificador único do usuário (`daniel` ou `lari`) |
-| `userName` | `String` | Sim | Nome de exibição (`Daniel`, `Lari`) |
+| `userId` | `String` | Sim | Identificador único do usuário (`admin` ou `user`) |
+| `userName` | `String` | Sim | Nome de exibição (`Admin`, `User`) |
 | `horario` | `String` | Sim | Horário de envio no fuso de Brasília (formato `HH:MM`, ex: `"07:30"`, `"08:00"`) |
 | `topicos` | `Array<String>` | Sim | Lista de tópicos ativos (`agenda`, `lembretes`, `saude`, `furia`, `animes`, `clash`, `veiculo`) |
 | `ativo` | `Boolean` | Sim | Indica se o envio diário automático está ativado |

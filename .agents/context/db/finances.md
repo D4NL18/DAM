@@ -31,7 +31,7 @@ Document ID gerado automaticamente via `.add()`.
 | `type` | `String (Enum)` | Opcional (Default: expense_variable) | Tipo: `'expense_variable'`, `'expense_fixed'`, `'income'` |
 | `payment_method` | `String` | Sim | Método de pagamento ou Cartão |
 | `installment` | `String` | Opcional | Identificador de parcela (ex: `"2/3"`, `"2/9"`) |
-| `owner` | `String` | Opcional | Titular ou responsável do lançamento (ex: `"Christian"`, `"Daniel"`) |
+| `owner` | `String` | Opcional | Titular ou responsável do lançamento (ex: `"Titular"`, `"Dependente"`) |
 | `date` | `String (ISO 8601)` | Sim | Data em formato ISO string (legível por humanos) |
 | `timestamp` | `Timestamp` | Sim | Timestamp Firestore nativo para range queries |
 | `userId` / `user_id` | `String` | Sim | Isolamento multi-tenant do usuário |

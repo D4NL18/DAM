@@ -98,12 +98,12 @@ export class FinanceApiService {
   constructor(private http: HttpClient, private authService: AuthService) {}
 
   private getHeaders(): HttpHeaders {
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     return new HttpHeaders({ 'X-User-Id': userId });
   }
 
   getDashboard(year: number, month: number, type?: string, category?: string): Observable<FinanceDashboardData> {
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     let url = `${this.apiUrl}/dashboard?year=${year}&month=${month}&userId=${userId}`;
     if (type) {
       url += `&type=${encodeURIComponent(type)}`;
@@ -115,7 +115,7 @@ export class FinanceApiService {
   }
 
   getMonthlySummary(year: number, month: number): Observable<FinanceSummary> {
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     return this.http.get<FinanceSummary>(`${this.apiUrl}/monthly-summary?year=${year}&month=${month}&userId=${userId}`, { headers: this.getHeaders() });
   }
 
@@ -164,7 +164,7 @@ export class FinanceApiService {
   }
 
   getTrends(period: string = '12m', startDate?: string, endDate?: string): Observable<FinanceTrendData> {
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     let url = `${this.apiUrl}/trends?period=${period}&userId=${userId}`;
     if (startDate) url += `&startDate=${startDate}`;
     if (endDate) url += `&endDate=${endDate}`;

@@ -85,7 +85,7 @@ class TestWebhookIsolation(unittest.TestCase):
     def test_webhook_ignores_from_me_messages(self, mock_save_log, mock_process):
         """Garante que mensagens com fromMe=True (enviadas pelo próprio bot) sejam ignoradas (anti-loop)."""
         payload = self._build_payload(
-            remote_jid="5571991269995@s.whatsapp.net",
+            remote_jid="5511999999999@s.whatsapp.net",
             text="Resposta enviada pelo bot",
             from_me=True
         )
@@ -99,12 +99,12 @@ class TestWebhookIsolation(unittest.TestCase):
     @patch("routers.webhook.process_and_reply")
     @patch("routers.webhook.ChatRepository.save_log")
     def test_webhook_accepts_allowed_user_with_and_without_ninth_digit(self, mock_save_log, mock_process):
-        """Valida que o número pessoal do Daniel (71 99126-9995) é aceito com e sem o 9º dígito."""
-        settings.ALLOWED_PHONE_NUMBER = "5571991269995"
+        """Valida que o número autorizado é aceito com e sem o 9º dígito."""
+        settings.ALLOWED_PHONE_NUMBER = "5511999999999"
 
-        # 1. Com o 9º dígito (5571991269995)
+        # 1. Com o 9º dígito (5511999999999)
         payload1 = self._build_payload(
-            remote_jid="5571991269995@s.whatsapp.net",
+            remote_jid="5511999999999@s.whatsapp.net",
             text="Oi bot com nono digito",
             from_me=False
         )
@@ -112,9 +112,9 @@ class TestWebhookIsolation(unittest.TestCase):
         self.assertEqual(res1.status_code, 200)
         self.assertEqual(res1.json().get("status"), "processing")
 
-        # 2. Sem o 9º dígito (557191269995 - padrão antigo do Baileys/WhatsApp)
+        # 2. Sem o 9º dígito (551199999999 - padrão antigo de 8 dígitos)
         payload2 = self._build_payload(
-            remote_jid="557191269995@s.whatsapp.net",
+            remote_jid="551199999999@s.whatsapp.net",
             text="Oi bot sem nono digito",
             from_me=False
         )
@@ -126,11 +126,11 @@ class TestWebhookIsolation(unittest.TestCase):
     @patch("routers.webhook.ChatRepository.save_log")
     def test_webhook_rejects_third_party_or_bot_number(self, mock_save_log, mock_process):
         """Garante que estranhos ou o próprio número do bot sejam sumariamente rejeitados."""
-        settings.ALLOWED_PHONE_NUMBER = "5571991269995"
+        settings.ALLOWED_PHONE_NUMBER = "5511999999999"
 
-        # Tentativa de mensagem vinda do número do bot (+55 71 98171-8497) ou terceiro
+        # Tentativa de mensagem vinda do número do bot ou terceiro
         payload_estranho = self._build_payload(
-            remote_jid="5571981718497@s.whatsapp.net",
+            remote_jid="5511777777777@s.whatsapp.net",
             text="Olá, gostaria de saber preços",
             from_me=False
         )

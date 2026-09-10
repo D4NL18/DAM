@@ -49,7 +49,7 @@ def trigger_morning_briefing(
     authorization: Optional[str] = Header(None),
     apikey: Optional[str] = Header(None),
     force: bool = Query(False, description="Forçar envio mesmo que já tenha sido enviado hoje"),
-    user_id: Optional[str] = Query(None, description="Usuário alvo ('daniel', 'lari' ou todos se omitido)")
+    user_id: Optional[str] = Query(None, description="ID do usuário alvo ou todos se omitido")
 ):
     """
     Dispara o Morning Briefing matinal para o WhatsApp dos usuários.

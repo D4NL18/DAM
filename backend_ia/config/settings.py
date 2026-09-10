@@ -10,12 +10,12 @@ class Settings(BaseSettings):
     WEBHOOK_TOKEN: str = ""
     # Google Calendar IDs por usuário
     CALENDAR_ID: str = ""
-    CALENDAR_ID_DANIEL: str = "danielmarinho1705@gmail.com"
+    CALENDAR_ID_DANIEL: str = ""
     CALENDAR_ID_LARI: str = ""
 
     # Números permitidos para interagir (Security & Privacy)
-    ALLOWED_PHONE_NUMBER: str = "5571991269995"
-    ALLOWED_PHONE_NUMBERS: str = "5571991269995,5571983278254"
+    ALLOWED_PHONE_NUMBER: str = "5511999999999"
+    ALLOWED_PHONE_NUMBERS: str = "5511999999999,5511888888888"
 
     @property
     def allowed_numbers_list(self) -> list[str]:
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
 
     # Número do WhatsApp Business do Bot (DAM)
-    BOT_PHONE_NUMBER: str = "5571981718497"
+    BOT_PHONE_NUMBER: str = "5511777777777"
 
     # Automação Residencial (Alexa / Voice Monkey)
     VOICE_MONKEY_API_TOKEN: str = ""

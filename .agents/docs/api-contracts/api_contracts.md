@@ -18,7 +18,7 @@ Recebe payloads de eventos e mensagens vindos da instância Evolution API.
     "event": "messages.upsert",
     "data": {
       "key": {
-        "remoteJid": "5571991269995@s.whatsapp.net",
+        "remoteJid": "5511999999999@s.whatsapp.net",
         "fromMe": false,
         "id": "3EB0ABC123"
       },
@@ -101,7 +101,7 @@ Disparo manual ou via Cloud Scheduler do resumo matinal das 08:00.
     ```json
     {
       "status": "success",
-      "message": "Briefing matinal enviado com sucesso para 5571****9995",
+      "message": "Briefing matinal enviado com sucesso para 5511****9999",
       "data": "2026-09-03"
     }
     ```

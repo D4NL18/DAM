@@ -31,4 +31,4 @@
   - Tooltip interativo com exibição precisa do mês, valor de receita, valor de gastos e saldo líquido ao passar o mouse ou tocar na tela.
 
 ### Segurança e Governança
-- **P-020 (Isolamento Multi-Tenant):** O endpoint e a agregação DEVEM respeitar o header `X-User-Id` (Daniel e Lari), garantindo que um usuário nunca acesse dados ou históricos financeiros do outro.
+- **P-020 (Isolamento Multi-Tenant):** O endpoint e a agregação DEVEM respeitar o header `X-User-Id` (Admin e User), garantindo que um usuário nunca acesse dados ou históricos financeiros do outro.

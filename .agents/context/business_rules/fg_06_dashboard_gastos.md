@@ -27,7 +27,7 @@
   - `category`: Nome da categoria associada.
   - `payment_method`: Nome do cartão ou forma de pagamento (ex: `Cartão de Crédito Pessoal`, `Débito/Pix`).
   - `installment` (opcional): Indicador de parcelamento (ex: `2/3`, `2/9`).
-  - `owner` / `user_tag` (opcional): Identificador do titular ou responsável (ex: `Christian`, `Daniel`).
+  - `owner` / `user_tag` (opcional): Identificador do titular ou responsável (ex: `Titular`, `Dependente`).
 
 ### Granularidade e Filtros de Categorias
 - **P-006 (Granularidade e Cores Consistentes):** Cada categoria DEVE possuir uma cor hexadecimal associada. A cor utilizada no bullet da tabela (`● Categoria`) DEVE ser rigorosamente idêntica à cor utilizada no arco correspondente do gráfico Donut e na legenda lateral.

@@ -13,7 +13,7 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] GP-01.1 (CRUD Completo: Edição In-Place e Exclusão Segura no Google Calendar):**
     - **[x] Story 1 (Exclusão Segura de Eventos):** Localização do evento por título/termo e execução de `service.events().delete()` com tratamento de desambiguação e retorno confirmatório.
     - **[x] Story 2 (Edição e Remarcação de Eventos sem Duplicação):** Localização do evento e execução de `service.events().patch()` alterando horários, títulos, locais e descrições sem criar novos eventos.
-    - **[x] Story 3 (Permissões Multi-Usuário em Edição/Exclusão):** Governança estrita onde Lari só pode alterar/excluir seus próprios eventos, e Daniel gerencia sua própria agenda.
+    - **[x] Story 3 (Permissões Multi-Usuário em Edição/Exclusão):** Governança estrita onde usuários convidados só podem alterar/excluir seus próprios eventos, e o Administrador gerencia sua própria agenda.
 - **[x] GP-02 (Notas e Lembretes Rápidos):** Modelagem Firestore da coleção `notes_reminders`, criação e busca semântica de notas e lembretes com controle de pendências via WhatsApp.
 - **[x] GP-03 (Memória Espacial / Onde Guardei Isso?):** Registro de localizações de objetos físicos e documentos na coleção `item_locations`, mantendo histórico de movimentações.
 - **[x] GP-04 (Morning Briefing Proativo das 08:00):** Consolidação matinal automatizada às 08h trazendo Agenda, Tarefas pendentes de hoje, Partidas da FURIA (com regras temporais) e Lançamentos de Animes do dia com idempotência no Firestore (`briefing_logs`).
@@ -21,7 +21,7 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 1 (Filtro Temporal de Lembretes & Correção de Tags):** Restringir exibição no Morning Briefing exclusivamente a lembretes agendados para a data do dia corrente e limpar a formatação de tags sem listas aninhadas.
   - **[x] Story 2 (Filtros de Status de Animes):** Restringir episódios ao status `assistindo`, temporadas e continuações exclusivamente a `assistindo` ou `concluido` (banindo `pausado` e `dropado`), e lista de animes para assistir exclusivamente a `planejo_assistir` ou `assistindo` com 0 episódios vistos.
   - **[x] Story 3 (Alertas Concorrentes de Clash of Clans):** Garantir que Guerra/CWL e Raid Weekend coexistam no resumo matinal e corrigir a verificação para membros com 0 ataques realizados na Capital do Clã.
-  - **[x] Story 4 (Motor Multi-Usuário do Briefing & Isolamento para Lari):** Executar disparos individuais baseados no horário configurado de cada usuário (`daniel` e `lari`) com isolamento estrito de `UserContext` e envio para o JID correspondente.
+  - **[x] Story 4 (Motor Multi-Usuário do Briefing & Isolamento de Dados):** Executar disparos individuais baseados no horário configurado de cada usuário (`admin` e `user`) com isolamento estrito de `UserContext` e envio para o JID correspondente.
 - **[x] GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real):**
   - **[x] Story 1 (Lembretes Filtrados por Padrão para o Dia Corrente & Higienização Defensiva de Tags):** Tornar `apenas_hoje=True` o comportamento padrão de `listar_lembretes_pendentes`, atualizar documentação/prompts do assistente e aplicar extração determinística de tags por tokens regex na criação de notas e lembretes, higienizando também registros corrompidos no Firestore.
   - **[x] Story 2 (Renovação Dinâmica do Próximo Episódio via AniList & Exibição Correta do Anime de Domingo):** Renovação autônoma de `nextAiringEpisode` no Firestore/memória quando a data prevista expirar, garantindo que o briefing matinal e consultas semanais exibam o próximo episódio real (lançamentos de domingo como Seihantai e Mushoku Tensei) e nunca animes futuros de meses adiante.
@@ -69,7 +69,7 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[x] Story 1 (Detecção de Plataforma e Salvamento Estruturado):** `salvar_video` com extração e detecção automática de plataforma (TikTok, Instagram, YouTube), validação e sanitização de URLs, captura de título, descrição/assunto contextual, categoria e tags.
   - **[x] Story 2 (Consulta Inteligente e Busca Semântica Flexível):** `consultar_videos_salvos` permitindo encontrar vídeos salvos buscando por palavras-chave sobre o que era o vídeo, título, plataforma ou categoria, com filtros e formatação limpa no WhatsApp.
   - **[x] Story 3 (Ciclo de Vida: Marcação de Assistido e Remoção Segura):** `marcar_video_assistido` para atualizar status e `remover_video_salvo` com suporte a desambiguação segura e confirmação.
-  - **[x] Story 4 (Persistência Resiliente e Isolamento Multi-Usuário):** Camada de repositório `SavedVideosRepository` com isolamento estrito por `userId` (Daniel e Lari) no Firestore, fallback em memória thread-safe e integração com o orquestrador do DAM.
+  - **[x] Story 4 (Persistência Resiliente e Isolamento Multi-Usuário):** Camada de repositório `SavedVideosRepository` com isolamento estrito por `userId` (Admin e User) no Firestore, fallback em memória thread-safe e integração com o orquestrador do DAM.
 
 ---
 

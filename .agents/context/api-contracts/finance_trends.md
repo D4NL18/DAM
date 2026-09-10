@@ -9,7 +9,7 @@ Este contrato define o endpoint REST para obtenção de séries históricas de r
 
 ### Parâmetros de Requisição
 **Headers:**
-- `X-User-Id` (string, opcional): Identificador do usuário (default: `'daniel'`).
+- `X-User-Id` (string, opcional): Identificador do usuário (default: `'admin'`).
 
 **Query Params:**
 - `period` (string, opcional, default: `'12m'`): Valores possíveis: `'current_month'`, `'3m'`, `'6m'`, `'12m'`, `'custom'`.

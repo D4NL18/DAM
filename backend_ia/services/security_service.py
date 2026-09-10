@@ -65,7 +65,7 @@ class SecurityService:
     def mask_phone(cls, phone_or_jid: str) -> str:
         """
         Mascara números de telefone e JIDs para auditoria segura sem vazamento de dados pessoais (LGPD).
-        Ex: 5571991269995@s.whatsapp.net -> 5571****9995@s.whatsapp.net
+        Ex: 5511999999999@s.whatsapp.net -> 5511****9999@s.whatsapp.net
         """
         if not phone_or_jid:
             return ""

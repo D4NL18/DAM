@@ -26,7 +26,7 @@ Permitir que o usuário envie links de vídeos das redes sociais (TikTok, Instag
    - Se encontrar múltiplos vídeos, retorna lista de candidatos pedindo para o usuário especificar o ID ou termo exato.
    - Se não encontrar nenhum vídeo, avisa educadamente.
 4. **CA-04 (Isolamento Multi-Usuário e Resiliência):**
-   - Usuário Daniel não enxerga vídeos da Lari e vice-versa.
+   - Cada usuário só enxerga seus próprios vídeos cadastrados, garantindo isolamento total.
    - Fallback thread-safe em memória opera perfeitamente quando Firestore não estiver conectado.
 
 ---

@@ -101,7 +101,7 @@ O `backend_ia` é o coração cognitivo do assistente DAM. É um serviço FastAP
 ### 4.1 Ciclo de Vida da Mensagem (Webhook Ingress)
 1. **Recepção:** O endpoint `POST /webhook` recebe o payload da Evolution API (`messages.upsert`).
 2. **Validação de Segurança em Tempo Constante:** `SecurityService.validate_webhook_token` valida o header de autenticação via comparação de tempo constante (`hmac.compare_digest`) para prevenir *timing attacks*.
-3. **Identificação e Isolamento do Usuário:** O JID remetente (`remoteJid`) é extraído e injetado no `UserContext`. Apenas números autorizados (Daniel e Lari) têm acesso.
+3. **Identificação e Isolamento do Usuário:** O JID remetente (`remoteJid`) é extraído e injetado no `UserContext`. Apenas números autorizados e configurados no ambiente têm acesso.
 4. **Fast ACK:** O endpoint enfileira a execução no `BackgroundTasks` e responde `{"status": "processing"}` em menos de **50 milissegundos**, evitando que a Evolution API reenvie a mensagem por timeout.
 5. **Execução em Background (`process_and_reply`):**
    - Sanitização do texto contra Prompt Injection (`GuardrailsService`).
@@ -152,14 +152,14 @@ O código do DAM segue princípios sólidos de engenharia de software e Clean Co
 ## 6. Regras de Negócio e Restrições de Domínio
 
 1. **Isolamento de Dados Multi-Tenant:**
-   - O DAM atende dois usuários: **Daniel** (Admin, `+5571991269995`) e **Lari** (Usuária, `+5571983278254`).
+   - O DAM opera com isolamento multi-tenant estrito entre perfis: **Usuário Administrador** (Admin) e **Usuário Convidado** (Convidado), controlados via variáveis de ambiente (`ALLOWED_PHONE_NUMBERS`).
    - Todas as coleções do Firestore particionam dados por chave composta: `{userId}__{documentId}`.
-   - Lari **nunca** tem acesso a finanças, senhas, anotações ou agenda do Daniel.
-   - Daniel possui acesso unicamente de visualização à agenda da Lari (`usuario='lari'`), mas seus dados pessoais permanecem privados.
+   - Usuários convidados **nunca** têm acesso a finanças, senhas, anotações ou agenda do Administrador.
+   - O Administrador possui acesso unicamente de visualização à agenda compartilhada autorizada, mantendo os dados pessoais de cada perfil estritamente privados e segregados.
 2. **Regra Absoluta de Lembretes:**
    - `SE NÃO FOR PRA HOJE, NÃO É PRA MOSTRAR`: Ao listar lembretes no dia a dia ou no briefing matinal, o DAM **nunca** exibe lembretes de datas futuras, a menos que o usuário solicite explicitamente (`apenas_hoje=False`).
 3. **Regra de Nutrição Dietbox:**
-   - O DAM opera como conselheiro nutricional baseado estritamente na Lista de Substituição Oficial (prescrita pelo nutricionista Samuel Meller Silva).
+   - O DAM opera como conselheiro nutricional baseado estritamente na Lista de Substituição Oficial (prescrita pelo nutricionista responsável).
    - Se o usuário perguntar sobre um alimento que **não** consta na lista (ex: pizza, sorvete, chocolate), o assistente **obrigatoriamente** exibe o aviso com alerta, apresenta a comparação de densidade calórica e orienta a consultar o nutricionista.
 4. **Pilares Rígidos do Morning Briefing:**
    - O resumo diário matinal é composto estritamente por 4 pilares:

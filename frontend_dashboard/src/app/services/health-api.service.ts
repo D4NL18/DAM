@@ -23,7 +23,7 @@ export class HealthApiService {
   constructor(private http: HttpClient, private authService: AuthService) {}
 
   getSummary(startDate: string, endDate: string): Observable<HealthSummary> {
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     const headers = new HttpHeaders({ 'X-User-Id': userId });
     return this.http.get<HealthSummary>(`${this.apiUrl}/summary?startDate=${startDate}&endDate=${endDate}&userId=${userId}`, { headers });
   }

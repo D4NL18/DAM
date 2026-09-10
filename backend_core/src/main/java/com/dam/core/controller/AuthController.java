@@ -22,19 +22,25 @@ public class AuthController {
         String username = request.getUsername() != null ? request.getUsername().trim() : "";
         String password = request.getPassword() != null ? request.getPassword().trim() : "";
 
-        if (username.equalsIgnoreCase("Daniel") && password.equals("Dm12031994@@")) {
+        boolean isAdmin = (username.equalsIgnoreCase("admin") || username.equalsIgnoreCase("admin_user"))
+                && (password.equals("Admin@123") || password.equals(System.getenv("ADMIN_PASSWORD")));
+
+        boolean isUser = (username.equalsIgnoreCase("user") || username.equalsIgnoreCase("guest_user"))
+                && (password.equals("User@123") || password.equals(System.getenv("USER_PASSWORD")));
+
+        if (isAdmin) {
             return ResponseEntity.ok(LoginResponse.builder()
                     .authenticated(true)
-                    .userId("daniel")
-                    .name("Daniel")
+                    .userId("admin")
+                    .name("Admin")
                     .role("admin")
                     .token(UUID.randomUUID().toString())
                     .build());
-        } else if (username.equalsIgnoreCase("Lari") && password.equals("Lilalink10")) {
+        } else if (isUser) {
             return ResponseEntity.ok(LoginResponse.builder()
                     .authenticated(true)
-                    .userId("lari")
-                    .name("Lari")
+                    .userId("user")
+                    .name("User")
                     .role("user")
                     .token(UUID.randomUUID().toString())
                     .build());

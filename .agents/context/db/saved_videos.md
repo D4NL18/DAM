@@ -22,7 +22,7 @@ Document ID é o UUID v4 gerado pelo backend.
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
 | `id` | `String (UUID)` | Sim | Identificador único (UUID v4) |
-| `userId` / `user_id` | `String` | Sim | Identificador do usuário proprietário (`"daniel"` ou `"lari"`) |
+| `userId` / `user_id` | `String` | Sim | Identificador do usuário proprietário (`"admin"` ou `"user"`) |
 | `url` | `String` | Sim | URL completa do vídeo (validada com esquema http/https) |
 | `plataforma` | `String (Enum)` | Sim | Plataforma detectada: `"TikTok"`, `"Instagram"`, `"YouTube"`, `"Outro"` |
 | `titulo` | `String` | Sim | Título do vídeo ou resumo inicial do conteúdo |

@@ -45,7 +45,7 @@ Todas as respostas HTTP do FastAPI recebem cabeçalhos defensivos:
 - **Prevenção de Fugas:** O modelo é estritamente instruído a tratar o conteúdo entre as tags como **dados** e jamais como comandos imperativos de sistema.
 
 ### 2.6. Sanitização de Logs & Zero Leaks (`SensitiveDataFilter`)
-- **Mascara de Telefone e JID:** Números de telefone e identificadores remotos são mascarados nos logs (ex: `5571****9995@s.whatsapp.net`).
+- **Mascara de Telefone e JID:** Números de telefone e identificadores remotos são mascarados nos logs (ex: `5511****9999@s.whatsapp.net`).
 - **Mascara de Tokens e Senhas:** Padrões Bearer, chaves de API, senhas e CPFs são substituídos por `[REDACTED_SENSITIVE]`.
 - **Erradicação de Fallbacks Inseguros:** Nenhuma credencial ou endereço físico é fixado no código-fonte como valor padrão (`settings.py`).
 

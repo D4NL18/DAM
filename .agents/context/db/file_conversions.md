@@ -22,7 +22,7 @@ Document ID é o UUID v4 gerado pelo backend.
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
 | `id` | `String (UUID)` | Sim | Identificador único da conversão (UUID v4) |
-| `userId` / `user_id` | `String` | Sim | Identificador do usuário proprietário (`"daniel"` ou `"lari"`) |
+| `userId` / `user_id` | `String` | Sim | Identificador do usuário proprietário (`"admin"` ou `"user"`) |
 | `conversion_type` | `String (Enum)` | Sim | Tipo da conversão (`pdf_to_docx`, `docx_to_pdf`, `img_to_pdf`, `merge_pdfs`, `split_pdf`, `pdf_to_images`, `image_convert`, `pdf_to_text`) |
 | `source_format` | `String` | Sim | Extensão/formato do arquivo original (ex: `"pdf"`, `"jpg"`, `"docx"`) |
 | `target_format` | `String` | Sim | Extensão/formato resultante (ex: `"docx"`, `"pdf"`, `"png"`, `"txt"`) |

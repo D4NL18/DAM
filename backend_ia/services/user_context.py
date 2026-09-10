@@ -4,8 +4,8 @@ from typing import Optional, Dict, Any
 
 # Variáveis de contexto para rastrear o usuário ativo no ciclo de vida da requisição
 _current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_id", default="daniel")
-_current_user_name: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_name", default="Daniel")
-_current_user_phone: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_phone", default="5571991269995")
+_current_user_name: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_name", default="Admin")
+_current_user_phone: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_phone", default="5511999999999")
 
 
 class UserContext:
@@ -15,15 +15,15 @@ class UserContext:
     USERS = {
         "daniel": {
             "id": "daniel",
-            "name": "Daniel",
-            "phone": "5571991269995",
+            "name": "Admin",
+            "phone": "5511999999999",
             "calendar_env_key": "CALENDAR_ID_DANIEL",
             "can_access_other_calendars": True,
         },
         "lari": {
             "id": "lari",
-            "name": "Lari",
-            "phone": "5571983278254",
+            "name": "User",
+            "phone": "5511888888888",
             "calendar_env_key": "CALENDAR_ID_LARI",
             "can_access_other_calendars": False,
         }
@@ -32,6 +32,10 @@ class UserContext:
     @classmethod
     def set_user(cls, user_id: str, phone: str = "") -> None:
         u_id = user_id.lower().strip()
+        if u_id == "admin":
+            u_id = "daniel"
+        elif u_id == "user":
+            u_id = "lari"
         user_info = cls.USERS.get(u_id, cls.USERS["daniel"])
         _current_user_id.set(user_info["id"])
         _current_user_name.set(user_info["name"])
@@ -52,6 +56,10 @@ class UserContext:
     @classmethod
     def get_user_info(cls, user_id: Optional[str] = None) -> Dict[str, Any]:
         target_id = (user_id or cls.get_user_id()).lower().strip()
+        if target_id == "admin":
+            target_id = "daniel"
+        elif target_id == "user":
+            target_id = "lari"
         return cls.USERS.get(target_id, cls.USERS["daniel"])
 
     @classmethod

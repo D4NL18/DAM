@@ -42,13 +42,13 @@ def setup_teardown():
     _reset_briefing_preferences()
     _reset_mock_storage()
     _reset_memory_watchlist()
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
     yield
     _reset_briefing_memory()
     _reset_briefing_preferences()
     _reset_mock_storage()
     _reset_memory_watchlist()
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
 
 
 # ==============================================================================
@@ -307,7 +307,7 @@ class TestStory4MultiUserBriefing:
         mock_send.assert_called_once()
         args, _ = mock_send.call_args
         remote_jid, texto_mensagem = args
-        assert "5571983278254" in remote_jid
+        assert "5511888888888" in remote_jid
         # O briefing de Lari não deve ter animes nem clash por padrão
         assert "Clash of Clans" not in texto_mensagem
         assert "FURIA" not in texto_mensagem
@@ -315,10 +315,10 @@ class TestStory4MultiUserBriefing:
     def test_montar_resumo_matinal_isola_user_context(self):
         """P-0418: Durante a montagem do resumo de Lari, dados de Daniel não vazam."""
         # Cria lembrete exclusivo para Daniel e outro para Lari
-        UserContext.set_user("daniel", "5571991269995")
+        UserContext.set_user("daniel", "5511999999999")
         criar_lembrete(titulo="Lembrete Exclusivo Daniel", data_hora_lembrete="2026-09-08 10:00")
 
-        UserContext.set_user("lari", "5571983278254")
+        UserContext.set_user("lari", "5511888888888")
         criar_lembrete(titulo="Lembrete Exclusivo Lari", data_hora_lembrete="2026-09-08 11:00")
 
         # Gera o resumo para Lari

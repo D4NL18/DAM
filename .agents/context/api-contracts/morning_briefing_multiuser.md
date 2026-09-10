@@ -14,7 +14,7 @@ Dispara o Morning Briefing para os usuários ativos no WhatsApp.
   - `apikey: string` ou `Authorization: Bearer <token>` (Obrigatório)
 - **Query Parameters:**
   - `force: boolean` (Opcional, default: `false`) — Força o reenvio mesmo que já tenha sido disparado hoje.
-  - `user_id: string` (Opcional, default: `None`) — Se informado (`daniel` ou `lari`), dispara unicamente para aquele usuário. Se omitido, dispara para todos os usuários que tiverem o briefing ativo.
+  - `user_id: string` (Opcional, default: `None`) — Se informado (`admin` ou `user`), dispara unicamente para aquele usuário. Se omitido, dispara para todos os usuários que tiverem o briefing ativo.
 - **Responses:**
   - `200 OK`:
     ```json
@@ -22,8 +22,8 @@ Dispara o Morning Briefing para os usuários ativos no WhatsApp.
       "status": "ok",
       "mensagem": "Briefing matinal processado para todos os usuários ativos.",
       "detalhes": [
-        {"userId": "daniel", "status": "sucesso", "destinatario": "5571991269995"},
-        {"userId": "lari", "status": "sucesso", "destinatario": "5571983278254"}
+        {"userId": "admin", "status": "sucesso", "destinatario": "5511999999999"},
+        {"userId": "user", "status": "sucesso", "destinatario": "5511888888888"}
       ]
     }
     ```
@@ -33,9 +33,9 @@ Dispara o Morning Briefing para os usuários ativos no WhatsApp.
 Pré-visualização do texto do briefing de um usuário sem disparar pelo WhatsApp.
 - **Headers:** `apikey` ou `Authorization`
 - **Query Parameters:**
-  - `user_id: string` (Opcional, default: `None` -> usuário ativo ou `daniel`)
+  - `user_id: string` (Opcional, default: `None` -> usuário ativo ou `admin`)
 - **Responses:**
-  - `200 OK`: `{"status": "ok", "userId": "lari", "preview": "..."}`
+  - `200 OK`: `{"status": "ok", "userId": "user", "preview": "..."}`
 
 ---
 

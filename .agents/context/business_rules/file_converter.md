@@ -27,7 +27,7 @@ Este documento define as regras de negócio canônicas que regem o comportamento
 
 ### P-0905: Auditoria, Métricas e Rastreabilidade Multi-Usuário
 - Cada solicitação de conversão **DEVE** registrar um evento na coleção `file_conversions` no Firestore contendo:
-  - `user_id`: Identificador do usuário solicitante (`daniel` ou `lari`).
+  - `user_id`: Identificador do usuário solicitante (`admin` ou `user`).
   - `conversion_type`: Identificador do tipo de conversão (ex: `pdf_to_docx`, `images_to_pdf`, `merge_pdfs`, `split_pdf`, `image_convert`, `pdf_to_text`, `docx_to_pdf`).
   - `file_size_bytes`: Tamanho do arquivo original.
   - `status`: `success` ou `failed`.

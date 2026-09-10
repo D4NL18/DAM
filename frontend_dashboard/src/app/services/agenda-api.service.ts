@@ -53,7 +53,7 @@ export class AgendaApiService {
       reminders: []
     };
 
-    const userId = this.authService.getCurrentUser()?.userId || 'daniel';
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
     const headers = new HttpHeaders({ 'X-User-Id': userId });
 
     return this.http.get<AgendaSummary>(`${this.apiUrl}/summary?period=${period}&userId=${userId}`, { headers }).pipe(

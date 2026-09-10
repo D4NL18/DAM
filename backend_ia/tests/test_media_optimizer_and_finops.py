@@ -10,7 +10,7 @@ from services.user_context import UserContext
 
 @pytest.fixture(autouse=True)
 def setup_user():
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
     ConversationCacheService.clear_cache()
 
 
@@ -63,7 +63,7 @@ class TestMultimodalCache:
     def test_cache_hit_with_identical_media(self):
         """CA-04 & P-1106: Mídia com mesmo conteúdo e texto deve retornar Cache Hit."""
         fake_media_b64 = base64.b64encode(b"fake_image_content_12345").decode("utf-8")
-        user_jid = "5571991269995@s.whatsapp.net"
+        user_jid = "5511999999999@s.whatsapp.net"
         query = "Onde assistir este filme do pôster?"
 
         saved = ConversationCacheService.save_response(

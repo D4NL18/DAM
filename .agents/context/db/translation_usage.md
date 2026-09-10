@@ -37,7 +37,7 @@ Armazena a **telemetria FinOps de consumo da cota gratuita da Google Cloud Trans
 | Campo | Tipo Firestore | Obrigatório | Descrição |
 |---|---|---|---|
 | `id` | `String (UUID)` | Sim | Identificador único da requisição (UUID v4) |
-| `userId` / `user_id` | `String` | Sim | Identificador do usuário solicitante (`"daniel"` ou `"lari"`) |
+| `userId` / `user_id` | `String` | Sim | Identificador do usuário solicitante (`"admin"` ou `"user"`) |
 | `input_type` | `String (Enum)` | Sim | Tipo da entrada: `"text"`, `"image"` ou `"audio"` |
 | `source_language` | `String` | Sim | Código ISO do idioma de origem detectado ou informado (ex: `"en"`, `"es"`, `"ja"`) |
 | `target_language` | `String` | Sim | Código ISO do idioma de destino (ex: `"pt"`, `"en"`) |
@@ -74,7 +74,7 @@ Armazena a **telemetria FinOps de consumo da cota gratuita da Google Cloud Trans
     "_collection": "translation_logs",
     "_id": "e8a931c5-8f4b-4a57-b18c-32b0a1d49e1a",
     "id": "e8a931c5-8f4b-4a57-b18c-32b0a1d49e1a",
-    "user_id": "daniel",
+    "user_id": "admin",
     "input_type": "text",
     "source_language": "en",
     "target_language": "pt",

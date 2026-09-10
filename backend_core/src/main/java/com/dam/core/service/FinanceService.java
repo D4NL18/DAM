@@ -17,7 +17,7 @@ public class FinanceService {
     private final FinanceTransactionRepository repository;
 
     public FinanceSummaryDTO getFinanceSummary() throws Exception {
-        return getFinanceSummary("daniel");
+        return getFinanceSummary("admin");
     }
 
     public FinanceSummaryDTO getFinanceSummary(String userId) throws Exception {

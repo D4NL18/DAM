@@ -15,7 +15,7 @@ public class HealthService {
     private final HealthMetricRepository repository;
 
     public HealthSummaryDTO getHealthSummary() throws Exception {
-        return getHealthSummary("daniel");
+        return getHealthSummary("admin");
     }
 
     public HealthSummaryDTO getHealthSummary(String userId) throws Exception {

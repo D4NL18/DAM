@@ -24,6 +24,6 @@
 
 ## Status Global do Sistema
 - **Arquitetura:** Microsserviços e Serverless (FastAPI + Evolution API + Angular 17 + Firestore + Cloud Run)
-- **Multi-Tenant / Usuários:** Daniel (`+55 71 99126-9995`, admin) e Lari (`+55 71 98327-8254`, user).
+- **Multi-Tenant / Usuários:** Administrador (`+55 11 99999-9999`, admin) e Usuário Convidado (`+55 11 88888-8888`, user).
 - **Segurança & Defesa:** Isolamento de dados estrito por `userId`, Guardrails contra Prompt Injection, Sanitização de logs, Criptografia AES-256 no Cofre.
 - **FinOps Score GCP Atual:** 4.84 / 5.00 (Top-Tier FinOps).

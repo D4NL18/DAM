@@ -6,7 +6,7 @@ from services.user_context import UserContext
 
 @pytest.fixture(autouse=True)
 def setup_user():
-    UserContext.set_user("daniel", "5571991269995")
+    UserContext.set_user("daniel", "5511999999999")
 
 
 class TestToolsDispatcher:

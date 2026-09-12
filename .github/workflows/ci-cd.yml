@@ -102,9 +102,9 @@ jobs:
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          tar --exclude="venv" --exclude="__pycache__" --exclude=".pytest_cache" -czf backend_ia.tar.gz -C backend_ia .
-          gcloud compute scp backend_ia.tar.gz docker-compose.yml dam-server:/home/PC/ --zone=us-central1-a --project=bot-dam
-          gcloud compute ssh dam-server --zone=us-central1-a --project=bot-dam --command="tar -xzf /home/PC/backend_ia.tar.gz -C /home/PC/backend_ia/ && sudo docker compose up -d --build"
+          tar --exclude="venv" --exclude="__pycache__" --exclude=".pytest_cache" --exclude=".env*" --exclude="firebase-adminsdk.json" -czf backend_ia.tar.gz -C backend_ia .
+          gcloud compute scp --quiet backend_ia.tar.gz docker-compose.yml dam-server:/home/PC/ --zone=us-central1-a --project=bot-dam
+          gcloud compute ssh dam-server --zone=us-central1-a --project=bot-dam --quiet --command="tar -xzf /home/PC/backend_ia.tar.gz -C /home/PC/backend_ia/ && cd /home/PC && sudo docker compose up -d --build backend_ia"
 
       - name: Deploy Frontend Dashboard to Firebase Hosting
         if: "${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}"

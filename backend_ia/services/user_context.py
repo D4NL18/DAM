@@ -30,13 +30,38 @@ class UserContext:
     }
 
     @classmethod
+    def get_user_phone_by_id(cls, user_id: str) -> str:
+        """Recupera o telefone configurado do usuário dinamicamente das configurações ou fallback dos USERS."""
+        u_id = user_id.lower().strip()
+        if u_id == "admin":
+            u_id = "daniel"
+        elif u_id == "user":
+            u_id = "lari"
+
+        try:
+            from config.settings import settings
+            nums = settings.allowed_numbers_list
+            if u_id == "daniel":
+                if nums:
+                    return nums[0]
+                return settings.ALLOWED_PHONE_NUMBER or cls.USERS.get("daniel", {}).get("phone", "5511999999999")
+            elif u_id == "lari":
+                if len(nums) > 1:
+                    return nums[1]
+                return cls.USERS.get("lari", {}).get("phone", "5511888888888")
+        except Exception:
+            pass
+
+        return cls.USERS.get(u_id, {}).get("phone", "")
+
+    @classmethod
     def set_user(cls, user_id: str, phone: str = "") -> None:
         u_id = user_id.lower().strip()
         if u_id == "admin":
             u_id = "daniel"
         elif u_id == "user":
             u_id = "lari"
-        user_info = cls.USERS.get(u_id, cls.USERS["daniel"])
+        user_info = cls.get_user_info(u_id)
         _current_user_id.set(user_info["id"])
         _current_user_name.set(user_info["name"])
         _current_user_phone.set(phone or user_info["phone"])
@@ -60,7 +85,11 @@ class UserContext:
             target_id = "daniel"
         elif target_id == "user":
             target_id = "lari"
-        return cls.USERS.get(target_id, cls.USERS["daniel"])
+        info = dict(cls.USERS.get(target_id, cls.USERS["daniel"]))
+        dynamic_phone = cls.get_user_phone_by_id(target_id)
+        if dynamic_phone:
+            info["phone"] = dynamic_phone
+        return info
 
     @classmethod
     def resolve_user_from_phone(cls, phone_or_jid: str) -> Optional[Dict[str, Any]]:
@@ -74,9 +103,16 @@ class UserContext:
 
         num8 = digits[-8:]
         for user_id, info in cls.USERS.items():
-            u_digits = re.sub(r"\D", "", info["phone"])
+            user_phone = cls.get_user_phone_by_id(user_id) or info.get("phone", "")
+            u_digits = re.sub(r"\D", "", user_phone)
             if u_digits[-8:] == num8:
-                return info
+                resolved = dict(info)
+                resolved["phone"] = user_phone
+                return resolved
+            # Fallback para o phone estático no USERS
+            static_digits = re.sub(r"\D", "", info.get("phone", ""))
+            if static_digits[-8:] == num8:
+                return dict(info)
         return None
 
 def resolve_user_from_phone(phone_or_jid: str) -> Optional[Dict[str, Any]]:

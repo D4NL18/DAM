@@ -307,7 +307,8 @@ class TestStory4MultiUserBriefing:
         mock_send.assert_called_once()
         args, _ = mock_send.call_args
         remote_jid, texto_mensagem = args
-        assert "5511888888888" in remote_jid
+        expected_phone = UserContext.get_user_phone_by_id("lari")
+        assert expected_phone in remote_jid
         # O briefing de Lari não deve ter animes nem clash por padrão
         assert "Clash of Clans" not in texto_mensagem
         assert "FURIA" not in texto_mensagem
@@ -391,4 +392,29 @@ class TestStory4MultiUserBriefing:
         res = enviar_briefing_matinal(force=True, user_id="lari")
         assert "Erro" in res
         assert not any("lari" in k for k in _MEMORY_BRIEFING_LOGS)
+
+    def test_whatsapp_service_format_destination_number(self):
+        """Valida a normalização do destino para prevenir erros 400 por divergência do nono dígito no WhatsApp."""
+        from services.whatsapp_service import WhatsAppService
+        # 1. Individual com @s.whatsapp.net -> deve extrair apenas os dígitos
+        assert WhatsAppService._format_destination_number("5571983278254@s.whatsapp.net") == "5571983278254"
+        assert WhatsAppService._format_destination_number("557183278254@s.whatsapp.net") == "557183278254"
+        assert WhatsAppService._format_destination_number("5511999999999@s.whatsapp.net") == "5511999999999"
+
+        # 2. Grupo com @g.us -> deve manter JID do grupo intacto
+        assert WhatsAppService._format_destination_number("1203630248293@g.us") == "1203630248293@g.us"
+
+        # 3. Apenas dígitos -> mantém dígitos
+        assert WhatsAppService._format_destination_number("5571983278254") == "5571983278254"
+
+        # 4. Vazio -> retorna vazio
+        assert WhatsAppService._format_destination_number("") == ""
+
+    def test_user_context_dynamic_phone_resolution(self):
+        """Valida que UserContext resolve dinamicamente telefones das configurações e preserva isolamento."""
+        phone_daniel = UserContext.get_user_phone_by_id("daniel")
+        phone_lari = UserContext.get_user_phone_by_id("lari")
+        assert phone_daniel != ""
+        assert phone_lari != ""
+        assert phone_daniel != phone_lari
 

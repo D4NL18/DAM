@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 import requests
 from typing import Optional, Dict, Any
 from config.settings import settings
@@ -7,6 +8,24 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 class WhatsAppService:
+    @staticmethod
+    def _format_destination_number(remote_jid: str) -> str:
+        """
+        Normaliza o número/JID de destino para a Evolution API.
+        - Se for grupo (@g.us), mantém intacto o JID do grupo.
+        - Se for número de usuário individual (@s.whatsapp.net ou dígitos), extrai apenas os dígitos numéricos.
+          Isso permite que a Evolution API consulte e resolva nativamente a variação do 9º dígito no WhatsApp,
+          evitando erros 400 (Bad Request / exists: false) em contas registradas sem o 9 (ex: DDD 71 da Lari).
+        """
+        if not remote_jid:
+            return ""
+        dest = str(remote_jid).strip()
+        if dest.endswith("@g.us"):
+            return dest
+        if "@s.whatsapp.net" in dest:
+            return re.sub(r"\D", "", dest.split("@")[0])
+        return dest
+
     @staticmethod
     def send_text(remote_jid: str, text: str) -> Optional[Dict[str, Any]]:
         url = f"{settings.EVOLUTION_API_URL}/message/sendText/{settings.EVOLUTION_INSTANCE_NAME}"
@@ -16,9 +35,9 @@ class WhatsAppService:
             "Content-Type": "application/json"
         }
         
-        # O Evolution espera apenas o número ou JID (ex: 5511999999999@s.whatsapp.net)
+        target_number = WhatsAppService._format_destination_number(remote_jid)
         payload = {
-            "number": remote_jid,
+            "number": target_number,
             "text": text + "\u200b"
         }
         

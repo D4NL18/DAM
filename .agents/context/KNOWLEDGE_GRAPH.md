@@ -171,6 +171,12 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - `anime_tracker_tool.py` implementa `_renovar_proximos_episodios_expirados()` que detecta animes em exibição (`assistindo`) com `airing_at` vencido no passado e reconsulta autonomamente o endpoint GraphQL do AniList.
   - O Morning Briefing (`_obter_info_animes_briefing`) e a grade semanal (`grade_semanal_animes`) acionam a renovação dinâmica, selecionando com precisão os lançamentos reais de domingo (como `Seihantai na Kimi to Boku 2nd Season` às 05:00 e `Mushoku Tensei III` às 12:00) e eliminando qualquer exibição errônea de animes de meses posteriores (`Seishun Buta Yarou` em 15/10).
 
+## GP-04.3: Correção de Idempotência Multi-Usuário do Morning Briefing [P-0422]
+- **Isolamento Estrito de Idempotência Multi-Usuário (P-0422):**
+  - O registro em memória (`_MEMORY_BRIEFING_LOGS`) e a verificação do scheduler/catch-up operam exclusivamente com a chave segregada `{data}_{userId}` (ex: `2026-09-14_daniel` e `2026-09-14_lari`).
+  - Eliminada a gravação de `chave_dia_legada` pura (`YYYY-MM-DD`) no cache de memória durante o sucesso do envio de qualquer usuário.
+  - Evita falso positivo onde o envio com sucesso do briefing para `lari` (ex: às 07:30) bloqueava o disparo subsequente para `daniel` (às 08:00).
+
 ## FG-06: Dashboard Avançado de Gastos & Gestão de Categorias e Cartões [P-001 a P-013]
 - **Design & Experiência Visual (P-001, P-002, P-006):**
   - Dashboard Angular reproduz com precisão o design moderno: saudação personalizada, título "Orçamento" com botão de olho para alternar visibilidade (ocultando com `••••••` para privacidade), seletor de mês `< Mês de Ano >` e abas em estilo pílula arredondada (`Receita`, `Despesa fixa`, `Despesa variável`).

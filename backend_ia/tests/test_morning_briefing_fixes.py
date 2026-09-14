@@ -418,3 +418,78 @@ class TestStory4MultiUserBriefing:
         assert phone_lari != ""
         assert phone_daniel != phone_lari
 
+
+class TestStory5MultiUserIdempotency:
+    """P-0422: Testes TDD de Isolamento Estrito de Idempotência Multi-Usuário."""
+
+    @patch("services.briefing_service.montar_resumo_matinal")
+    @patch("services.briefing_service.WhatsAppService.send_text")
+    def test_envio_lari_nao_bloqueia_envio_subsequente_daniel(self, mock_send, mock_resumo):
+        """P-0422: O envio para Lari às 07:30 NÃO deve marcar Daniel como já enviado."""
+        from services.briefing_service import enviar_briefing_matinal, _MEMORY_BRIEFING_LOGS
+        _MEMORY_BRIEFING_LOGS.clear()
+        mock_resumo.return_value = "Briefing Matinal de Teste"
+        mock_send.return_value = {"status": "ok"}
+
+        # 1. Envio matinal para Lari (07:30)
+        res_lari = enviar_briefing_matinal(force=False, user_id="lari")
+        assert "✅" in res_lari or "sucesso" in res_lari.lower()
+        assert mock_send.call_count == 1
+
+        # 2. Envio matinal para Daniel (08:00) no mesmo dia, sem force
+        res_daniel = enviar_briefing_matinal(force=False, user_id="daniel")
+        assert "✅" in res_daniel or "sucesso" in res_daniel.lower(), f"Daniel foi indevidamente bloqueado: {res_daniel}"
+        assert mock_send.call_count == 2
+
+    @patch("services.briefing_service.montar_resumo_matinal")
+    @patch("services.briefing_service.WhatsAppService.send_text")
+    def test_scheduler_disparo_sequencial_lari_e_depois_daniel(self, mock_send, mock_resumo):
+        """P-0419: O scheduler deve disparar Lari no horário dela e Daniel no horário dele com envio real."""
+        from services.briefing_service import (
+            verificar_e_disparar_briefings_agendados,
+            salvar_preferencias_briefing,
+            _MEMORY_BRIEFING_LOGS
+        )
+        _MEMORY_BRIEFING_LOGS.clear()
+        mock_resumo.return_value = "Briefing Matinal"
+        mock_send.return_value = {"status": "ok"}
+
+        salvar_preferencias_briefing("lari", {
+            "userId": "lari",
+            "horario": "07:30",
+            "ativo": True
+        })
+        salvar_preferencias_briefing("daniel", {
+            "userId": "daniel",
+            "horario": "08:00",
+            "ativo": True
+        })
+
+        # Disparo das 07:30 aciona Lari
+        enviados_0730 = verificar_e_disparar_briefings_agendados(hora_minuto="07:30")
+        assert "lari" in enviados_0730
+        assert mock_send.call_count == 1
+
+        # Disparo das 08:00 DEVE acionar Daniel e NÃO ser suprimido
+        enviados_0800 = verificar_e_disparar_briefings_agendados(hora_minuto="08:00")
+        assert "daniel" in enviados_0800
+        assert mock_send.call_count == 2
+
+    @patch("services.briefing_service.montar_resumo_matinal")
+    @patch("services.briefing_service.WhatsAppService.send_text")
+    def test_memory_logs_contem_apenas_chaves_segregadas_por_usuario(self, mock_send, mock_resumo):
+        """P-0419: _MEMORY_BRIEFING_LOGS não deve armazenar data pura sem userId."""
+        from services.briefing_service import enviar_briefing_matinal, _MEMORY_BRIEFING_LOGS, _obter_data_brasilia
+        _MEMORY_BRIEFING_LOGS.clear()
+        mock_resumo.return_value = "Briefing Matinal"
+        mock_send.return_value = {"status": "ok"}
+
+        hoje_str = _obter_data_brasilia().strftime("%Y-%m-%d")
+
+        enviar_briefing_matinal(force=False, user_id="lari")
+
+        # Chave pura da data sem userId não deve existir na memória
+        assert hoje_str not in _MEMORY_BRIEFING_LOGS
+        assert f"{hoje_str}_lari" in _MEMORY_BRIEFING_LOGS
+
+

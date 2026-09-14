@@ -197,7 +197,8 @@ class TestAnimeTrackerDynamicSync:
             }
         }
 
-        with patch("services.briefing_service.firebase.db", None):
+        with patch("services.briefing_service.firebase.db", None), \
+             patch("services.briefing_service._renovar_proximos_episodios_expirados"):
             resumo = _obter_info_animes_briefing(dt_quarta)
 
         assert "Nenhum episódio novo dos seus animes hoje" in resumo

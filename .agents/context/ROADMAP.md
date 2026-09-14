@@ -25,6 +25,8 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
 - **[x] GP-04.2 (Lembretes Restritos ao Dia por Padrão e Próximo Anime em Tempo Real):**
   - **[x] Story 1 (Lembretes Filtrados por Padrão para o Dia Corrente & Higienização Defensiva de Tags):** Tornar `apenas_hoje=True` o comportamento padrão de `listar_lembretes_pendentes`, atualizar documentação/prompts do assistente e aplicar extração determinística de tags por tokens regex na criação de notas e lembretes, higienizando também registros corrompidos no Firestore.
   - **[x] Story 2 (Renovação Dinâmica do Próximo Episódio via AniList & Exibição Correta do Anime de Domingo):** Renovação autônoma de `nextAiringEpisode` no Firestore/memória quando a data prevista expirar, garantindo que o briefing matinal e consultas semanais exibam o próximo episódio real (lançamentos de domingo como Seihantai e Mushoku Tensei) e nunca animes futuros de meses adiante.
+- **[x] GP-04.3 (Correção de Idempotência Multi-Usuário do Morning Briefing):**
+  - **[x] Story 1 (Desacoplamento e Isolamento de Idempotência por Usuário):** Remover o registro da chave diária legada global em memória (`_MEMORY_BRIEFING_LOGS`) e assegurar que a verificação e persistência de envio ocorram estritamente por chave individual `{data}_{userId}`, impedindo que o disparo matinal de um usuário silencie ou bloqueie os demais.
 
 ---
 

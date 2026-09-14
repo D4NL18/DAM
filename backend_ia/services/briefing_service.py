@@ -638,7 +638,7 @@ def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: boo
             hoje_str = hoje.strftime("%Y-%m-%d")
             chave_user = f"{hoje_str}_{uid}"
 
-            ja_enviado = (chave_user in _MEMORY_BRIEFING_LOGS) or (uid == "daniel" and hoje_str in _MEMORY_BRIEFING_LOGS)
+            ja_enviado = chave_user in _MEMORY_BRIEFING_LOGS
             if not ja_enviado and firebase.db is not None:
                 try:
                     doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
@@ -648,7 +648,7 @@ def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: boo
                     elif uid == "daniel":
                         doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
                         if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
-                            _MEMORY_BRIEFING_LOGS.add(hoje_str)
+                            _MEMORY_BRIEFING_LOGS.add(chave_user)
                             ja_enviado = True
                 except Exception:
                     pass
@@ -705,9 +705,9 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
     chave_dia_user = f"{hoje.strftime('%Y-%m-%d')}_{target_user_id}"
     chave_dia_legada = hoje.strftime("%Y-%m-%d")
 
-    # Idempotência em memória
+    # Idempotência em memória (P-0422: estritamente segregada por usuário)
     if not force:
-        if chave_dia_user in _MEMORY_BRIEFING_LOGS or (target_user_id == "daniel" and chave_dia_legada in _MEMORY_BRIEFING_LOGS):
+        if chave_dia_user in _MEMORY_BRIEFING_LOGS:
             return f"ℹ️ O briefing matinal de hoje ({chave_dia_legada}) já foi enviado para {target_user_name}."
 
     # Idempotência no Firestore
@@ -720,7 +720,7 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
             if target_user_id == "daniel":
                 doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{chave_dia_legada}").get()
                 if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
-                    _MEMORY_BRIEFING_LOGS.add(chave_dia_legada)
+                    _MEMORY_BRIEFING_LOGS.add(chave_dia_user)
                     return f"ℹ️ O briefing matinal de hoje ({chave_dia_legada}) já foi enviado para {target_user_name}."
         except Exception as e:
             logger.warning(f"Falha ao checar idempotência do briefing no Firestore: {e}")
@@ -741,9 +741,8 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
 
         logger.info(f"Briefing matinal enviado com sucesso para {remote_jid} ({target_user_name}).")
 
-        # Registra sucesso
+        # Registra sucesso isolado por usuário (P-0422)
         _MEMORY_BRIEFING_LOGS.add(chave_dia_user)
-        _MEMORY_BRIEFING_LOGS.add(chave_dia_legada)
 
         if firebase.db is not None:
             try:

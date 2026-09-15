@@ -214,9 +214,46 @@ class AIService:
             else:
                 response = chat.send_message(safe_prompt)
 
-            final_text = response.text
+            # 7. Resiliência e Auto-Healing contra MALFORMED_FUNCTION_CALL (P-1108)
+            final_text = None
+            is_malformed_call = False
 
-            # 7. Salva no cache se elegível (PC-08 / P-1106)
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                finish_reason = getattr(candidate, "finish_reason", None)
+                if finish_reason == 10 or str(finish_reason).upper().endswith("MALFORMED_FUNCTION_CALL"):
+                    is_malformed_call = True
+
+            if not is_malformed_call:
+                try:
+                    final_text = response.text
+                except (ValueError, AttributeError) as ve:
+                    logger.warning(f"[AI SERVICE] response.text indisponível (possível chamada com tools ausentes): {ve}")
+                    is_malformed_call = True
+
+            if is_malformed_call:
+                logger.warning(
+                    f"[AI SERVICE AUTO-HEALING] Chamada com tools={len(selected_tools) if selected_tools else 0} falhou para '{user_text[:50]}...'. "
+                    "Retentando automaticamente com catálogo completo de ferramentas e prompt irrestrito..."
+                )
+                fallback_tools = ToolsDispatcher.get_all_tools()
+                fallback_instruction = PromptComposer.compose_system_instruction(agora, domains=None)
+                fallback_model = genai.GenerativeModel(
+                    model_name='gemini-3.6-flash',
+                    tools=fallback_tools,
+                    system_instruction=fallback_instruction
+                )
+                fallback_chat = fallback_model.start_chat(
+                    history=history,
+                    enable_automatic_function_calling=True
+                )
+                if media_base64 and media_mimetype:
+                    retry_resp = fallback_chat.send_message([part, user_text])
+                else:
+                    retry_resp = fallback_chat.send_message(safe_prompt)
+                final_text = retry_resp.text
+
+            # 8. Salva no cache se elegível (PC-08 / P-1106)
             if final_text:
                 ConversationCacheService.save_response(
                     remote_jid=remote_jid, 

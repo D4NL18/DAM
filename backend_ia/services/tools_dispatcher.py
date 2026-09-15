@@ -144,7 +144,10 @@ class ToolsDispatcher:
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(
-            r"\b(agenda|agendar|agendad[oa]|compromisso|evento|lembrete|lembretes|anotacao|anotar|nota|notas|tarefa|tarefas|pendente|pendentes|o que tenho hoje|minha agenda|reuniao|programad[oa])\b",
+            r"\b(agenda|agendar|agendad[oa]|compromisso|compromissos|evento|eventos|lembrete|lembretes|anotacao|anotacoes|anotar|nota|notas|tarefa|tarefas|pendente|pendentes|minha agenda|reuniao|reunioes|programad[oa]|consulta|consultas|medico|dentista|treino|aniversario|festa|almoco|jantar|encontro|show)\b|"
+            r"\b(marcar|marque|anota|anote|salva|salve|lembra|lembre|agende)\b|"
+            r"\b(tenho|vou ter|vamos ter|vou)\b.*?\b(as\s+\d{1,2}|\d{1,2}h|\d{1,2}:\d{2}|horas?|hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b|"
+            r"\b(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b.*?\b(tenho|vou|as\s+\d{1,2}|\d{1,2}h|\d{1,2}:\d{2})\b",
             re.IGNORECASE
         ),
         "mobility": re.compile(
@@ -273,3 +276,14 @@ class ToolsDispatcher:
 
         logger.info(f"[TOOLS DISPATCHER] Domínios {domains} ativados. {len(tools_list)} ferramentas carregadas.")
         return tools_list if tools_list else None
+
+    @classmethod
+    def get_all_tools(cls) -> List[Callable]:
+        """Retorna todas as ferramentas disponíveis registradas para recuperação/fallback/auto-healing."""
+        all_tools = []
+        for tools in cls.DOMAIN_TOOLS.values():
+            for t in tools:
+                if t not in all_tools:
+                    all_tools.append(t)
+        return all_tools
+

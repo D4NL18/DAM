@@ -9,6 +9,9 @@ from services.prompts.briefing_rules import get_briefing_prompt
 from services.prompts.billing_rules import get_billing_prompt
 from services.prompts.nutrition_rules import get_nutrition_prompt
 from services.prompts.translation_rules import get_translation_rules_prompt
+from services.prompts.calendar_notes_rules import get_calendar_notes_prompt
+from services.prompts.saved_videos_rules import get_saved_videos_prompt
+from services.prompts.file_converter_rules import get_file_converter_prompt
 
 class PromptComposer:
     """
@@ -41,7 +44,10 @@ class PromptComposer:
                 get_briefing_prompt(),
                 get_billing_prompt(),
                 get_nutrition_prompt(),
-                get_translation_rules_prompt()
+                get_translation_rules_prompt(),
+                get_calendar_notes_prompt(),
+                get_saved_videos_prompt(),
+                get_file_converter_prompt()
             ])
         else:
             # Injeção seletiva sob demanda (P-1102)
@@ -60,6 +66,12 @@ class PromptComposer:
                 secoes.append(get_nutrition_prompt())
             if "translation" in dom_set:
                 secoes.append(get_translation_rules_prompt())
+            if "calendar_notes" in dom_set:
+                secoes.append(get_calendar_notes_prompt())
+            if "saved_videos" in dom_set:
+                secoes.append(get_saved_videos_prompt())
+            if "media_files" in dom_set:
+                secoes.append(get_file_converter_prompt())
 
         return "\n".join(secoes)
 

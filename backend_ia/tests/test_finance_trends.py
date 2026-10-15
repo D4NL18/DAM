@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from main import app
@@ -100,12 +101,13 @@ class TestFinanceTrends:
     def test_get_finance_trends_user_isolation(self):
         """P-020: Isolamento estrito de dados entre usuários."""
         mock_db = MagicMock()
+        hoje_iso = datetime.now(timezone.utc).strftime("%Y-%m-01T10:00:00Z")
         doc_daniel = MagicMock()
         doc_daniel.to_dict.return_value = {
             "description": "Receita Daniel",
             "amount": 75000.0,
             "type": "income",
-            "date": "2026-04-01T10:00:00Z",
+            "date": hoje_iso,
             "userId": "daniel"
         }
 
@@ -114,7 +116,7 @@ class TestFinanceTrends:
             "description": "Receita Lari",
             "amount": 40000.0,
             "type": "income",
-            "date": "2026-04-01T10:00:00Z",
+            "date": hoje_iso,
             "userId": "lari"
         }
 

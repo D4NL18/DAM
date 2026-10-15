@@ -80,13 +80,50 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         logger.error(f"Erro ao registrar finanças: {e}")
         return "Desculpe, ocorreu um erro ao salvar seu gasto. Tente novamente mais tarde."
 
-def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None, dias_retroativos: Optional[int] = None) -> str:
+def _normalize_str(s: str) -> str:
+    """Normaliza string para comparação sem acentos e em minúsculas."""
+    import unicodedata
+    if not s:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
+
+def _match_category(item_cat: str, target_cat: str) -> bool:
+    """Compara categorias tratando variações de escrita e sinônimos comuns."""
+    i_norm = _normalize_str(item_cat)
+    t_norm = _normalize_str(target_cat)
+    if not i_norm or not t_norm:
+        return False
+    if t_norm in i_norm or i_norm in t_norm:
+        return True
+    
+    # Aliases semânticos usuais
+    aliases = {
+        "moradia": ["casa", "habitacao", "aluguel", "condominio", "contas fixas"],
+        "casa": ["moradia", "habitacao", "contas fixas"],
+        "alimentacao": ["mercado", "supermercado", "mercadinho", "restaurante", "ifood", "comida", "padaria"],
+        "mercado": ["alimentacao", "supermercado", "mercadinho", "comida"],
+        "transporte": ["carro", "combustivel", "uber", "veiculo", "gasolina"],
+        "saude": ["farmacia", "medico", "consulta", "exame", "hospital"]
+    }
+    for alias in aliases.get(t_norm, []):
+        if alias in i_norm:
+            return True
+    return False
+
+def consultar_resumo_gastos(
+    mes: Optional[int] = None, 
+    ano: Optional[int] = None, 
+    categoria: Optional[str] = None,
+    dias_retroativos: Optional[int] = None
+) -> str:
     """
-    Query expense summary grouped by payment method and category.
+    Query expense summary or detailed expenses for a category from the database.
 
     Args:
         mes (int, optional): Month (1-12). Defaults to current month.
         ano (int, optional): Year (e.g. 2026). Defaults to current year.
+        categoria (str, optional): Specific category to detail (e.g. 'Moradia', 'Alimentação', 'Mercado'). If provided, lists each individual expense in that category.
         dias_retroativos (int, optional): Days back to summarize instead of calendar month.
     """
     if firebase.db is None:
@@ -100,7 +137,6 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
         if dias_retroativos and dias_retroativos > 0:
             inicio = agora - timedelta(days=dias_retroativos)
             titulo_periodo = f"últimos {dias_retroativos} dias"
-            docs_query = firebase.db.collection("finances").where("timestamp", ">=", inicio)
         else:
             ano_alvo = ano if ano else agora.year
             mes_alvo = mes if mes else agora.month
@@ -117,17 +153,31 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
             ]
             nome_mes = meses_nomes[mes_alvo] if 1 <= mes_alvo <= 12 else f"Mês {mes_alvo}"
             titulo_periodo = f"{nome_mes}/{ano_alvo}"
-            
-            docs_query = firebase.db.collection("finances").where("timestamp", ">=", inicio).where("timestamp", "<", fim)
 
-        docs = list(docs_query.stream())
+        col = firebase.db.collection("finances")
+        docs = []
 
-        # Filtra estritamente pelo usuário ativo (retrocompatibilidade: se sem user_id, pertence ao daniel)
-        docs = [d for d in docs if (d.to_dict().get("userId") or d.to_dict().get("user_id") or "daniel") == user_id]
+        # Tenta consulta via .where (suporte a mocks estruturados e índices Firestore)
+        if hasattr(col, "where"):
+            try:
+                if dias_retroativos and dias_retroativos > 0:
+                    stream_obj = col.where("timestamp", ">=", inicio).stream()
+                else:
+                    stream_obj = col.where("timestamp", ">=", inicio).where("timestamp", "<", fim).stream()
+                candidate_where = list(stream_obj)
+                if candidate_where and any(hasattr(d, "to_dict") and isinstance(d.to_dict(), dict) and "amount" in d.to_dict() for d in candidate_where):
+                    docs = candidate_where
+            except Exception:
+                pass
 
-        if not docs:
-            return f"ℹ️ Não encontrei registros de gastos para {titulo_periodo}."
-
+        # Se não obteve via .where, faz streaming direto da coleção (Firestore real ou mock de coleção direta)
+        if not docs and hasattr(col, "stream"):
+            try:
+                candidate_stream = list(col.stream())
+                if candidate_stream and any(hasattr(d, "to_dict") and isinstance(d.to_dict(), dict) and "amount" in d.to_dict() for d in candidate_stream):
+                    docs = candidate_stream
+            except Exception:
+                pass
 
         total_geral = 0.0
         por_cartao = {}
@@ -135,7 +185,42 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
         todos_gastos = []
 
         for doc in docs:
-            data = doc.to_dict()
+            if not hasattr(doc, "to_dict"):
+                continue
+            data = doc.to_dict() or {}
+            
+            # Isolamento estrito por usuário
+            doc_user = data.get("userId") or data.get("user_id") or "daniel"
+            if doc_user != user_id:
+                continue
+
+            # Exclui receitas (income), processa apenas despesas
+            tx_type = data.get("type") or "expense_variable"
+            if tx_type == "income":
+                continue
+
+            # Parsing e validação temporal da transação
+            dt_raw = data.get("date") or data.get("created_at") or data.get("timestamp")
+            dt = None
+            if isinstance(dt_raw, datetime):
+                dt = dt_raw
+            elif isinstance(dt_raw, str) and dt_raw:
+                try:
+                    clean_dt = dt_raw.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(clean_dt)
+                except Exception:
+                    pass
+
+            if dt:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dias_retroativos and dias_retroativos > 0:
+                    if dt < inicio:
+                        continue
+                else:
+                    if dt.year != ano_alvo or dt.month != mes_alvo:
+                        continue
+
             try:
                 valor = float(data.get("amount", 0.0))
             except (ValueError, TypeError):
@@ -146,23 +231,47 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
 
             total_geral += valor
             
-            metodo = data.get("payment_method") or "Outros"
+            metodo = data.get("payment_method") or data.get("paymentMethod") or "Outros"
             metodo_norm = normalizar_metodo_pagamento(metodo) or metodo
             por_cartao[metodo_norm] = por_cartao.get(metodo_norm, 0.0) + valor
             
             cat_raw = data.get("category") or "Geral"
-            categoria = cat_raw.strip().title()
-            por_categoria[categoria] = por_categoria.get(categoria, 0.0) + valor
+            cat_formatada = cat_raw.strip().title()
+            por_categoria[cat_formatada] = por_categoria.get(cat_formatada, 0.0) + valor
             
             todos_gastos.append({
                 "description": data.get("description", "Sem descrição"),
                 "amount": valor,
-                "category": categoria,
-                "payment_method": metodo_norm
+                "category": cat_formatada,
+                "payment_method": metodo_norm,
+                "date": dt.strftime("%d/%m/%Y") if dt else ""
             })
 
-        if total_geral == 0:
-            return f"ℹ️ Não encontrei registros de gastos válidos para {titulo_periodo}."
+        def _fmt_moeda(v: float) -> str:
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        # Se foi solicitado detalhamento de uma categoria específica
+        if categoria:
+            target_cat = categoria.strip()
+            gastos_categoria = [g for g in todos_gastos if _match_category(g["category"], target_cat)]
+            if not gastos_categoria:
+                return f"ℹ️ Não encontrei registros de gastos na categoria '{target_cat}' para {titulo_periodo} no seu banco de dados."
+
+            total_cat = sum(g["amount"] for g in gastos_categoria)
+            linhas = [
+                f"🏷️ **Gastos em {target_cat.title()} - {titulo_periodo}**",
+                f"💰 **Total:** {_fmt_moeda(total_cat)} ({len(gastos_categoria)} lançamento{'s' if len(gastos_categoria) > 1 else ''})\n",
+                "📋 **Detalhamento:**"
+            ]
+            for g in sorted(gastos_categoria, key=lambda x: x["amount"], reverse=True):
+                data_info = f" ({g['date']})" if g.get("date") else ""
+                linhas.append(f"• **{g['description']}:** {_fmt_moeda(g['amount'])}{data_info} [{g['payment_method']}]")
+
+            return "\n".join(linhas)
+
+        # Se for o resumo geral de gastos
+        if not todos_gastos or total_geral == 0:
+            return f"ℹ️ Não encontrei registros de gastos para {titulo_periodo}."
 
         # Ordenar categorias do maior para o menor
         categorias_ordenadas = sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)
@@ -170,9 +279,6 @@ def consultar_resumo_gastos(mes: Optional[int] = None, ano: Optional[int] = None
         cartoes_ordenados = sorted(por_cartao.items(), key=lambda x: x[1], reverse=True)
         # Ordenar maiores despesas
         maiores_gastos = sorted(todos_gastos, key=lambda x: x["amount"], reverse=True)[:3]
-
-        def _fmt_moeda(v: float) -> str:
-            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         linhas = [
             f"📊 **Resumo Financeiro - {titulo_periodo}**\n",

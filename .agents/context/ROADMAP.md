@@ -47,6 +47,11 @@ Todas as entregas e capacidades do sistema estão organizadas por **Domínios Fu
   - **[ ] Story 2 (Backend & Firestore - Agregação de Séries Temporais por Período):** Endpoint `/api/v1/finance/trends` consolidando séries temporais mensais de receitas e despesas com período comparativo e isolamento de usuário.
   - **[ ] Story 3 (Frontend & Backend - Comparativo de Período Anterior e Filtro Customizado):** Cálculo automático de variação percentual vs período anterior e modal de intervalo customizado de datas.
   - **[ ] Story 4 (Testes TDD, Segurança e QA):** Suíte de testes pytest para tendências históricas, validação de segurança SecOps e compilação do frontend.
+- **[x] FG-08 (Governança Anti-Alucinação & Consulta Confiável de Gastos do Dashboard no WhatsApp):**
+  - **[x] Story 1 (Diretriz Estrita Anti-Alucinação e Factualidade Absoluta nos Prompts):** Inclusão de regra mestra inegociável em `system_base.py` e `financial_rules.py` proibindo terminantemente a criação, estimativa, simulação ou invenção de dados ou exemplos numéricos fictícios. Quando dados não forem encontrados ou a ferramenta retornar vazio, o assistente deve declarar com exatidão que não há registros no banco de dados.
+  - **[x] Story 2 (Roteamento Abrangente de Intenção Financeira no ToolsDispatcher):** Expansão do regex semântico de finanças para capturar variações naturais de perguntas como "resumo dos valores de gastos por categoria", "gastos em [mês]", "quais gastos entraram como [categoria]", assegurando que as ferramentas de finanças e prompts sejam sempre despachados.
+  - **[x] Story 3 (Consulta de Gastos e Filtro por Categoria Alinhado ao Dashboard):** Aprimoramento da ferramenta `consultar_resumo_gastos` no `finance_tool.py` para consultar a coleção `finances` respeitando a mesma lógica do dashboard (`date`, `created_at`, `timestamp`, exclusão de `income`), fornecendo tanto o resumo consolidado por categorias/cartões quanto o detalhamento de gastos quando uma categoria for especificada (ex: "moradia").
+  - **[x] Story 4 (Suíte de Testes TDD, Validação E2E e SecOps):** Testes unitários para validar a detecção de intenção do dispatcher, a regra anti-alucinação nos prompts, e a resposta precisa da ferramenta de consulta de gastos com e sem categoria.
 
 ---
 

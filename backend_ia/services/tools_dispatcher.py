@@ -140,7 +140,7 @@ class ToolsDispatcher:
     # Regex de detecção de intenções com normalização sem acentos
     INTENT_REGEXES = {
         "finance": re.compile(
-            r"\b(gastei|comprei|paguei|compra|debito|credito|pix|despesa|despesas|fatura|saldo|resumo financeiro|resumo de despesas|quanto gastei)\b",
+            r"\b(gastei|comprei|paguei|pagamento|pagamentos?|compra|compras?|gastos?|gastando|debito|credito|pix|despesa|despesas|fatura|faturas?|saldo|resumo financeiro|resumo de despesas|resumo de gastos|resumo dos valores|quanto gastei|valores de gastos|categoria|categorias|financas|financeiro)\b",
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(

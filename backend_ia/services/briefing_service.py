@@ -84,12 +84,6 @@ def salvar_preferencias_briefing(user_id: str, prefs: Dict[str, Any]) -> None:
             firebase.db.collection("briefing_preferences").document(uid).set(prefs)
         except Exception as e:
             logger.error(f"Erro ao salvar preferências de briefing no Firestore: {e}")
-    # Notifica o scheduler para recalcular os horários com as novas preferências
-    try:
-        from main import notificar_mudanca_briefing
-        notificar_mudanca_briefing()
-    except Exception:
-        pass
 
 def configurar_preferencias_briefing(
     horario: Optional[str] = None,

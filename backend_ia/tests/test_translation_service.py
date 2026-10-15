@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from services.translation_service import TranslationService
 
@@ -127,7 +128,8 @@ class TestTranslationService:
 
     def test_free_tier_character_limit_hard_cap(self):
         """P-1002: Trava de segurança FinOps para não exceder 500k caracteres/mês."""
-        TranslationService.set_monthly_usage_for_test(month="2026-09", chars=500000)
+        mes_atual = datetime.now(timezone.utc).strftime("%Y-%m")
+        TranslationService.set_monthly_usage_for_test(month=mes_atual, chars=500000)
         
         # Tentativa de chamada deve acionar o fallback ou rejeitar chamadas pagas
         usage = TranslationService.get_monthly_usage()

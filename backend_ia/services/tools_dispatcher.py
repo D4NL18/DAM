@@ -7,9 +7,8 @@ import re
 import logging
 from typing import List, Callable, Optional
 
-# Ferramentas importadas individualmente por domínio
 from services.tools.health_tool import consultar_saude
-from services.tools.finance_tool import registrar_gasto, consultar_resumo_gastos
+from services.tools.finance_tool import registrar_gasto, registrar_receita, consultar_resumo_gastos
 from services.tools.calendar_tool import agendar_evento, consultar_agenda, editar_evento, excluir_evento
 from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo, cadastrar_ou_atualizar_veiculo
 from services.tools.esports_tool import consultar_jogos_cs2
@@ -104,7 +103,7 @@ class ToolsDispatcher:
 
     # Agrupamentos de ferramentas por domínio
     DOMAIN_TOOLS = {
-        "finance": [registrar_gasto, consultar_resumo_gastos, dividir_conta_restaurante],
+        "finance": [registrar_gasto, registrar_receita, consultar_resumo_gastos, dividir_conta_restaurante],
         "calendar_notes": [
             agendar_evento, consultar_agenda, editar_evento, excluir_evento,
             criar_anotacao, criar_lembrete, buscar_anotacoes,
@@ -140,7 +139,8 @@ class ToolsDispatcher:
     # Regex de detecção de intenções com normalização sem acentos
     INTENT_REGEXES = {
         "finance": re.compile(
-            r"\b(gast(ei|os?|ando)|compr(ei|as?)|paguei|pagamentos?|debito|credito|pix|despesas?|faturas?|saldo|financas|financeiro|categorias?|quanto gastei|resumo (financeiro|de (despesas|gastos)|dos valores)|valores de gastos)\b",
+            r"\b(gast(ei|os?|ando)|compr(ei|as?)|paguei|pagamentos?|debito|credito|pix|despesas?|faturas?|saldo|financas|financeiro|categorias?|quanto gastei|resumo (financeiro|de (despesas|gastos)|dos valores)|valores de gastos|"
+            r"reembolso|reembolsos|recebi|receita|receitas|estorno|estornos|salario|salário|renda|devolucao|devolução|entrada)\b",
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(

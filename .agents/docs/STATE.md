@@ -1,24 +1,24 @@
 # Estado Atual da Orquestração (STATE.md)
 
 ## Status da Feature Ativa
-- **Feature:** FG-08 (Governança Anti-Alucinação & Consulta Confiável de Gastos do Dashboard no WhatsApp)
-- **Branch:** feature/P-0801-anti-alucinacao-gastos-dashboard
-- **Início:** 2026-10-15
-- **Status da Feature:** Concluída com Sucesso (100% dos testes aprovados)
+- **Feature:** FG-09 (Governança de Categorias, Registro de Receitas/Reembolsos e Recorrência Automática de Despesas Fixas)
+- **Branch:** feature/FG-09-reembolso-categorias-despesas-fixas
+- **Início:** 2026-10-16
+- **Status da Feature:** Concluída (Merge & Release Ready)
 
-## Esteira de Desenvolvimento (12 Passos)
-- [x] **1. Quebra de Escopo (Product Owner)** - *Mapeado FG-08 no ROADMAP.md com 4 User Stories*
-- [x] **2. Especificar (Analista)** - *Regras P-0801, P-0802 e P-0803 registradas*
-- [x] **3. Projetar (Arquiteto & Designer)** - *Designer bypass aprovado (backend/prompts-only)*
-- [x] **4. Modelagem de Dados Segura (DBA)** - *Bypass aprovado (sem alterações DDL de schema no Firestore)*
-- [x] **5. Planejar as Tarefas (Arquiteto)** - *Checklist detalhado em fg08_anti_hallucination_finance.md*
-- [x] **6. Desenvolver Testes Unitários (Tester - TDD)** - *Suíte criada com 8 testes cobrindo prompts, regex e query*
-- [x] **7. Executar (Desenvolvedor)** - *Implementadas salvaguardas nos prompts, regex expandido e consulta alinhada ao dashboard*
-- [x] **8. Code Review (Reviewer)** - *Aprovado (Guard clauses, tipagem, docstrings e isolamento de usuário)*
-- [x] **9. UX Review (UX Reviewer)** - *Bypass aprovado (sem frontend/UI)*
-- [x] **10. Testar e Auto-Healer (Tester)** - *Todos os 29 testes de finanças e anti-alucinação aprovados com 100% de sucesso*
-- [x] **11. Auditoria de Segurança (SecOps)** - *Aprovado (Isolamento total multi-tenant sem vazamento, anti-injection e zero-hallucination)*
-- [x] **12. Release via Pull Request (DevOps)** - *Pronto para merge/deploy*
+## Esteira de Desenvolvimento (5 Macro-Etapas / 12 Passos)
+- [x] **1. Quebra de Escopo (Product Owner)** - *Mapeado FG-09 no ROADMAP.md com 4 User Stories INVEST*
+- [x] **2. Especificar (Analista)** - *Regras P-0901 a P-0904 documentadas em business_rules/fg_09_finance_categories_and_fixed_expenses.md*
+- [x] **3. Projetar (Arquiteto & Designer)** - *ADR-009 e Contrato de API gerados; Designer bypass (UI existente)*
+- [x] **4. Modelagem de Dados Segura (DBA)** - *Bypass DDL (Firestore NoSQL); planejado saneamento idempotente*
+- [x] **5. Planejar as Tarefas (Arquiteto)** - *Checklist atômico em .agents/docs/tasks/fg09_finance_categories_and_fixed_expenses.md*
+- [x] **6. Desenvolver Testes Unitários (Tester - TDD)** - *Suíte de 21 testes unitários em backend_ia/tests/test_finance_categories_and_fixed_expenses.py*
+- [x] **7. Executar (Desenvolvedor)** - *Implementado finance_tool.py, finance_migration_service.py, routers/finance.py, tools_dispatcher.py e financial_rules.py*
+- [x] **8. Code Review (Reviewer)** - *Quality Gate 360 aprovado com recomendação de hardening em logs*
+- [x] **9. UX Review (UX Reviewer)** - *Bypass (funcionalidade de backend e contratos de API alinhados ao frontend)*
+- [x] **10. Testar e Auto-Healer (Tester)** - *Suíte completa executada com 100% de sucesso (489 passed, 0 failed)*
+- [x] **11. Auditoria de Segurança (SecOps & Privacy)** - *Aprovado por SecOps (OWASP) e Privacy Officer (LGPD & isolamento multi-tenant)*
+- [x] **12. Release via Pull Request (DevOps)** - *Pull Request aprovado com Scorecard FinOps 4.92/5.00*
 
 ---
 

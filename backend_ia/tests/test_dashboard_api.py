@@ -109,3 +109,33 @@ class TestDashboardAPI:
             assert data["totalMeetingHours"] == 0.0
             assert data["nextEvent"] is None
             assert data["upcomingEvents"] == []
+
+    def test_agenda_summary_with_real_reminders(self):
+        """P-DASH-03: Retorna lembretes reais mapeando titulo e data_hora_lembrete do Firestore."""
+        mock_itens = [
+            {
+                "id": "rem-1",
+                "titulo": "Aniversário de namoro",
+                "data_hora_lembrete": "2026-09-25 00:00",
+                "status": "pendente"
+            },
+            {
+                "id": "rem-2",
+                "title": "Pagar fatura",
+                "due_date": "2026-10-20T10:00:00Z",
+                "status": "concluido"
+            }
+        ]
+        with patch("services.tools.calendar_tool._get_calendar_service", return_value=None), \
+             patch("routers.dashboard._obter_todos_itens", return_value=mock_itens):
+            response = client.get("/api/v1/agenda/summary")
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["reminders"]) == 2
+            assert data["reminders"][0]["text"] == "Aniversário de namoro"
+            assert data["reminders"][0]["dueTime"] == "25/09 00:00"
+            assert data["reminders"][0]["completed"] is False
+            assert data["reminders"][1]["text"] == "Pagar fatura"
+            assert data["reminders"][1]["dueTime"] == "20/10 10:00"
+            assert data["reminders"][1]["completed"] is True
+

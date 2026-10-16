@@ -103,7 +103,7 @@
           </div>
           <div class="kpi-info">
             <span class="kpi-val">{{ summary.reminders.length }}</span>
-            <span class="kpi-lbl">Lembretes no Firestore</span>
+            <span class="kpi-lbl">Lembretes cadastrados</span>
           </div>
         </div>
       </div>
@@ -183,7 +183,7 @@
     <!-- 4. Lembretes & Tarefas do Dia (Span 5) -->
     <div class="bento-card bento-reminders">
       <div class="card-header">
-        <h3 class="card-title">Lembretes (Firestore)</h3>
+        <h3 class="card-title">Lembretes</h3>
         <span class="material-symbols-outlined header-icon">checklist</span>
       </div>
 
@@ -199,15 +199,15 @@
             </span>
           </div>
           <div class="reminder-text-area">
-            <p class="reminder-text">{{ rem.text }}</p>
-            <span class="reminder-due">{{ rem.dueTime }}</span>
+            <p class="reminder-text">{{ rem.text || 'Lembrete sem título' }}</p>
+            <span class="reminder-due" *ngIf="rem.dueTime">{{ rem.dueTime }}</span>
           </div>
         </div>
       </div>
       <ng-template #noReminders>
         <div class="empty-state-content" style="padding: 2rem; text-align: center;">
           <span class="material-symbols-outlined" style="font-size: 2.5rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">task_alt</span>
-          <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete pendente na coleção 'notes_reminders'.</p>
+          <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete pendente cadastrado.</p>
         </div>
       </ng-template>
 

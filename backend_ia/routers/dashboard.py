@@ -213,11 +213,44 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
     try:
         todos_itens = _obter_todos_itens()
         for item in todos_itens:
+            # Captura o texto do lembrete (compatível com 'titulo', 'title', 'conteudo' ou 'description')
+            texto = (
+                item.get("titulo")
+                or item.get("title")
+                or item.get("conteudo")
+                or item.get("description")
+                or ""
+            ).strip()
+
+            if not texto:
+                continue
+
+            # Captura e formata data/hora do lembrete
+            data_hora_raw = str(
+                item.get("data_hora_lembrete")
+                or item.get("due_date")
+                or item.get("dueTime")
+                or ""
+            ).strip()
+
+            due_time_fmt = data_hora_raw
+            if data_hora_raw:
+                try:
+                    if "T" in data_hora_raw:
+                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                    elif len(data_hora_raw) >= 16 and data_hora_raw[4] == '-' and data_hora_raw[7] == '-':
+                        dt = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
+                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                except Exception:
+                    due_time_fmt = data_hora_raw
+
+            status = str(item.get("status", "")).lower()
             lembretes_reais.append({
-                "id": item.get("id", ""),
-                "text": item.get("title", ""),
-                "dueTime": item.get("due_date", ""),
-                "completed": item.get("status") == "completed"
+                "id": str(item.get("id", "")),
+                "text": texto,
+                "dueTime": due_time_fmt,
+                "completed": status in ["completed", "concluido"]
             })
     except Exception as e:
         logger.warning(f"Erro ao ler lembretes para a agenda: {e}")
@@ -230,5 +263,5 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
         "nextEvent": next_event,
         "upcomingEvents": upcoming_events,
         "insights": [],
-        "reminders": lembretes_reais[:5]
+        "reminders": lembretes_reais[:10]
     }

@@ -16,6 +16,15 @@ export interface CalendarEvent {
   status: 'confirmed' | 'in_progress' | 'pending';
 }
 
+export interface ReminderItem {
+  id: string;
+  text: string;
+  dueTime: string;
+  completed: boolean;
+  isPast?: boolean;
+  recorrencia?: string;
+}
+
 export interface AgendaSummary {
   todayTotalEvents: number;
   totalMeetingHours: number;
@@ -27,12 +36,8 @@ export interface AgendaSummary {
     title: string;
     text: string;
   }>;
-  reminders: Array<{
-    id: string;
-    text: string;
-    dueTime: string;
-    completed: boolean;
-  }>;
+  reminders: ReminderItem[];
+  reminderHistory: ReminderItem[];
 }
 
 @Injectable({
@@ -50,7 +55,8 @@ export class AgendaApiService {
       nextEvent: null as any,
       upcomingEvents: [],
       insights: [],
-      reminders: []
+      reminders: [],
+      reminderHistory: []
     };
 
     const userId = this.authService.getCurrentUser()?.userId || 'admin';
@@ -60,6 +66,17 @@ export class AgendaApiService {
       catchError(err => {
         console.warn('Erro ao consultar API de agenda, retornando estado real zerado:', err);
         return of(emptyState);
+      })
+    );
+  }
+
+  toggleReminder(id: string): Observable<any> {
+    const userId = this.authService.getCurrentUser()?.userId || 'admin';
+    const headers = new HttpHeaders({ 'X-User-Id': userId });
+    return this.http.post(`${this.apiUrl}/reminders/${id}/toggle`, {}, { headers }).pipe(
+      catchError(err => {
+        console.warn('Erro ao alternar status do lembrete:', err);
+        return of(null);
       })
     );
   }

@@ -20,36 +20,49 @@ def _reset_mock_storage() -> None:
 
 from services.user_context import UserContext
 
-def _obter_todos_itens() -> List[Dict[str, Any]]:
-    """Recupera todos os itens da coleção 'notes_reminders' ou do mock filtrados pelo usuário ativo."""
+def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Recupera todos os itens da coleção indicada ou de ambas se None, ou do mock, filtrados pelo usuário ativo."""
     user_id = UserContext.get_user_id()
     todos = []
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("notes_reminders").stream()
-            todos = [doc.to_dict() for doc in docs]
+            if colecao:
+                docs = firebase.db.collection(colecao).stream()
+                todos = [doc.to_dict() for doc in docs]
+            else:
+                docs_rem = firebase.db.collection("notes_reminders").stream()
+                todos = [doc.to_dict() for doc in docs_rem]
+                docs_notes = firebase.db.collection("information_notes").stream()
+                todos.extend([doc.to_dict() for doc in docs_notes])
         except Exception as e:
-            logger.error(f"Erro ao ler Firestore notes_reminders: {e}. Usando mock.")
-            todos = list(_mock_storage)
+            logger.error(f"Erro ao ler Firestore: {e}. Usando mock.")
+            if colecao:
+                todos = [i for i in _mock_storage if i.get("_colecao") == colecao]
+            else:
+                todos = list(_mock_storage)
     else:
-        todos = list(_mock_storage)
+        if colecao:
+            todos = [i for i in _mock_storage if i.get("_colecao") == colecao]
+        else:
+            todos = list(_mock_storage)
 
     # Filtra estritamente pelo usuário ativo (retrocompatibilidade: se sem user_id, pertence ao daniel)
     return [i for i in todos if (i.get("userId") or i.get("user_id") or "daniel") == user_id]
 
-def _salvar_item(item: Dict[str, Any]) -> None:
-    """Salva um item no Firestore ou no armazenamento em memória vinculado ao usuário ativo."""
+def _salvar_item(item: Dict[str, Any], colecao: str = "notes_reminders") -> None:
+    """Salva um item no Firestore na coleção indicada ou no armazenamento em memória vinculado ao usuário ativo."""
     user_id = UserContext.get_user_id()
     item["userId"] = user_id
     item["user_id"] = user_id
+    item["_colecao"] = colecao
     _mock_storage.append(item)
     if firebase.db is not None:
         try:
-            firebase.db.collection("notes_reminders").document(item["id"]).set(item)
+            firebase.db.collection(colecao).document(item["id"]).set(item)
         except Exception as e:
-            logger.error(f"Erro ao salvar no Firestore: {e}. Mantido em mock.")
+            logger.error(f"Erro ao salvar no Firestore ({colecao}): {e}. Mantido em mock.")
 
-def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
+def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes_reminders") -> bool:
     """Atualiza um item no Firestore e no mock, garantindo que pertença ao usuário ativo."""
     user_id = UserContext.get_user_id()
     atualizado = False
@@ -61,7 +74,7 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
             
     if firebase.db is not None:
         try:
-            doc_ref = firebase.db.collection("notes_reminders").document(item_id)
+            doc_ref = firebase.db.collection(colecao).document(item_id)
             doc = doc_ref.get()
             if doc.exists:
                 doc_data = doc.to_dict()
@@ -71,9 +84,50 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any]) -> bool:
                 else:
                     logger.warning(f"Tentativa de atualização de item de outro usuário: {item_id}")
         except Exception as e:
-            logger.error(f"Erro ao atualizar Firestore doc {item_id}: {e}")
+            logger.error(f"Erro ao atualizar Firestore doc {item_id} em {colecao}: {e}")
 
     return atualizado
+
+
+def calcular_proxima_ocorrencia(data_hora_str: str, recorrencia: Optional[str], data_base: Optional[datetime] = None) -> str:
+    """Calcula a próxima data/hora válida se a data informada já tiver expirado e houver recorrência."""
+    if not recorrencia or not data_hora_str:
+        return data_hora_str
+
+    rec = str(recorrencia).lower().strip()
+    if rec not in ["diaria", "diario", "semanal", "mensal", "anual"]:
+        return data_hora_str
+
+    tz_br = timezone(timedelta(hours=-3))
+    base = data_base or datetime.now(tz_br)
+
+    dt = None
+    try:
+        if "T" in data_hora_str:
+            dt = datetime.fromisoformat(data_hora_str.replace("Z", "+00:00"))
+        else:
+            dt = datetime.strptime(data_hora_str[:16], "%Y-%m-%d %H:%M")
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz_br)
+    except Exception:
+        return data_hora_str
+
+    import calendar
+    while dt < base:
+        if rec in ["diaria", "diario"]:
+            dt += timedelta(days=1)
+        elif rec == "semanal":
+            dt += timedelta(weeks=1)
+        elif rec == "mensal":
+            ano = dt.year + (1 if dt.month == 12 else 0)
+            mes = 1 if dt.month == 12 else dt.month + 1
+            max_dias = calendar.monthrange(ano, mes)[1]
+            dia = min(dt.day, max_dias)
+            dt = dt.replace(year=ano, month=mes, day=dia)
+        elif rec == "anual":
+            dt = dt.replace(year=dt.year + 1)
+
+    return dt.strftime("%Y-%m-%d %H:%M")
 
 
 
@@ -100,11 +154,12 @@ def _formatar_tags_exibicao(tags_raw: Any) -> str:
 
 def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> str:
     """
-    Create and save a personal note.
+    Save personal note, quote, or information in the dedicated information database.
+    Does NOT create a reminder.
 
     Args:
-        titulo (str): Note title.
-        conteudo (str): Note body content.
+        titulo (str): Note or topic title (e.g. 'Orçamento PC EUA', 'Anotação de reunião').
+        conteudo (str): Detailed text, numbers, or information to remember.
         tags (list[str] or str, optional): Tags for categorization.
     """
     tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
@@ -119,53 +174,93 @@ def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> st
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    _salvar_item(item)
+    _salvar_item(item, colecao="information_notes")
     tags_str = _formatar_tags_exibicao(tags_limpas)
-    return f"📝 Anotação '{item['titulo']}' salva com sucesso!{tags_str} (ID: {item['id'][:8]})"
+    return f"📝 Anotação '{item['titulo']}' salva com sucesso no banco de informações!{tags_str} (ID: {item['id'][:8]})"
 
 
-def criar_lembrete(titulo: str, data_hora_lembrete: str, tags: Optional[Any] = None) -> str:
+def criar_lembrete(
+    titulo: str, 
+    data_hora_lembrete: str, 
+    tags: Optional[Any] = None,
+    recorrencia: Optional[str] = None
+) -> str:
     """
-    Create a reminder with date/time notification and pending status.
+    Create a reminder with date/time notification, pending status and optional recurrence.
 
     Args:
-        titulo (str): Reminder subject.
-        data_hora_lembrete (str): Scheduled datetime (e.g. 'YYYY-MM-DD HH:MM').
+        titulo (str): Reminder subject (e.g. 'Aniversário de namoro', 'Pagar pré-pago Claro'). Never include '(Recorrente:...)' in the title.
+        data_hora_lembrete (str): Scheduled datetime (e.g. 'YYYY-MM-DD HH:MM'). For recurring reminders, specify the first occurrence.
         tags (list[str] or str, optional): Categories/tags.
+        recorrencia (str, optional): Recurrence frequency if recurring: 'diaria', 'semanal', 'mensal', 'anual'. Leave None for one-time reminders.
     """
     tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
+
+    rec_detectada = recorrencia
+    tit_limpo = titulo.strip()
+
+    padroes_rec = [
+        (r"\(Recorrente:\s*todo\s+dia\s+(\d+)[^)]*\)", "mensal"),
+        (r"\(Recorrente:\s*di[aá]ri[^)]*\)", "diaria"),
+        (r"\(Recorrente:\s*semanal[^)]*\)", "semanal"),
+        (r"\(Recorrente:\s*mensal[^)]*\)", "mensal"),
+        (r"\(Recorrente:\s*anual[^)]*\)", "anual"),
+        (r"\btodo\s+dia\s+\d+\b", "mensal"),
+        (r"\bdiari[ao]mente\b|\btodo\s+dia\b", "diaria"),
+        (r"\bsemanalmente\b|\btod[ao]s?\s+(segunda|terça|quarta|quinta|sexta|s[aá]bado|domingo)\b", "semanal"),
+        (r"\bmensalmente\b|\btodo\s+m[eê]s\b", "mensal"),
+        (r"\banualmente\b|\btodo\s+ano\b", "anual")
+    ]
+    if not rec_detectada:
+        tit_lower = tit_limpo.lower()
+        for padrao, tipo_rec in padroes_rec:
+            if re.search(padrao, tit_lower, re.IGNORECASE):
+                rec_detectada = tipo_rec
+                break
+
+    # Remove qualquer marcador artificial "(Recorrente:...)" do título
+    tit_limpo = re.sub(r"\s*\(Recorrente:[^)]*\)", "", tit_limpo).strip()
+
+    # Se for recorrente e a data informada já tiver passado, calcula a próxima ocorrência válida
+    data_agendada = data_hora_lembrete.strip()
+    if rec_detectada:
+        data_agendada = calcular_proxima_ocorrencia(data_agendada, rec_detectada)
 
     item = {
         "id": str(uuid.uuid4()),
         "tipo": "lembrete",
-        "titulo": titulo.strip(),
-        "data_hora_lembrete": data_hora_lembrete.strip(),
+        "titulo": tit_limpo,
+        "data_hora_lembrete": data_agendada,
+        "recorrencia": rec_detectada,
         "status": "pendente",
         "tags": tags_limpas,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    _salvar_item(item)
+    _salvar_item(item, colecao="notes_reminders")
     tags_str = _formatar_tags_exibicao(tags_limpas)
+    rec_str = f" | 🔄 Recorrência: {rec_detectada.capitalize()}" if rec_detectada else ""
     return (
         f"⏰ Lembrete agendado com sucesso!\n"
         f"• **Assunto:** {item['titulo']}{tags_str}\n"
-        f"• **Quando:** {item['data_hora_lembrete']}\n"
+        f"• **Quando:** {item['data_hora_lembrete']}{rec_str}\n"
         f"• **Status:** Pendente ⏳ (ID: {item['id'][:8]})"
     )
 
 
 def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> str:
     """
-    Search saved notes by keyword or category tag.
+    Search saved notes by keyword or category tag in the information notes database.
 
     Args:
         termo (str, optional): Search keyword in title or content.
         tag (str, optional): Tag name to filter.
     """
-    todos = _obter_todos_itens()
-    notas = [item for item in todos if item.get("tipo") == "nota"]
+    notas = _obter_todos_itens(colecao="information_notes")
+    if not notas:
+        todos = _obter_todos_itens(colecao="notes_reminders")
+        notas = [item for item in todos if item.get("tipo") == "nota"]
 
     if not notas:
         return "Nenhuma anotação encontrada no seu histórico."
@@ -283,12 +378,13 @@ def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Option
 def concluir_lembrete(lembrete_id_ou_titulo: str) -> str:
     """
     Mark a reminder as completed by its ID or title.
+    For recurring reminders, advances to the next period.
 
     Args:
         lembrete_id_ou_titulo (str): Reminder ID or title substring.
     """
     termo = lembrete_id_ou_titulo.strip().lower()
-    todos = _obter_todos_itens()
+    todos = _obter_todos_itens(colecao="notes_reminders")
 
     candidato = None
     for item in todos:
@@ -305,6 +401,21 @@ def concluir_lembrete(lembrete_id_ou_titulo: str) -> str:
 
     item_id = candidato["id"]
     concluido_em = datetime.now(timezone.utc).isoformat()
-    _atualizar_item(item_id, {"status": "concluido", "concluido_em": concluido_em})
+    recorrencia = candidato.get("recorrencia")
 
-    return f"✅ Lembrete **'{candidato['titulo']}'** marcado como concluído com sucesso!"
+    if recorrencia:
+        tz_br = timezone(timedelta(hours=-3))
+        prox_data = calcular_proxima_ocorrencia(
+            candidato.get("data_hora_lembrete", ""),
+            recorrencia,
+            datetime.now(tz_br) + timedelta(minutes=1)
+        )
+        _atualizar_item(item_id, {
+            "data_hora_lembrete": prox_data,
+            "ultima_conclusao": concluido_em,
+            "updated_at": concluido_em
+        }, colecao="notes_reminders")
+        return f"✅ Lembrete recorrente **'{candidato['titulo']}'** concluído! Próxima ocorrência agendada para: **{prox_data}**."
+    else:
+        _atualizar_item(item_id, {"status": "concluido", "concluido_em": concluido_em}, colecao="notes_reminders")
+        return f"✅ Lembrete **'{candidato['titulo']}'** marcado como concluído com sucesso!"

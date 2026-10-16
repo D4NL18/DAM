@@ -1,6 +1,7 @@
 import unittest
 from services.tools.notes_tool import (
     _reset_mock_storage,
+    _obter_todos_itens,
     criar_anotacao,
     criar_lembrete,
     buscar_anotacoes,
@@ -117,5 +118,47 @@ class TestFase9Notes(unittest.TestCase):
         conclusao = concluir_lembrete("Lembrete que nunca existiu")
         self.assertIn("Não encontrei nenhum lembrete pendente", conclusao)
 
+    def test_criar_lembrete_com_recorrencia_avanca_se_passado(self):
+        """Lembrete com recorrência mensal avança automaticamente se data original já passou."""
+        # Data passada: 25/09
+        criar_lembrete(
+            titulo="Aniversário de namoro",
+            data_hora_lembrete="2026-09-25 00:00",
+            recorrencia="mensal"
+        )
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if i["titulo"] == "Aniversário de namoro")
+        self.assertEqual(lembrete["recorrencia"], "mensal")
+        # Deve ter avançado para pelo menos outubro ou além
+        self.assertTrue(lembrete["data_hora_lembrete"] >= "2026-10-25 00:00")
+
+    def test_criar_lembrete_remove_marcador_recorrente_do_titulo(self):
+        """Remove '(Recorrente:...)' do título e detecta a frequência."""
+        criar_lembrete(
+            titulo="Aniversário de namoro (Recorrente: todo dia 25 às 00:00)",
+            data_hora_lembrete="2026-09-25 00:00"
+        )
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if "Aniversário de namoro" in i["titulo"])
+        self.assertEqual(lembrete["titulo"], "Aniversário de namoro")
+        self.assertEqual(lembrete["recorrencia"], "mensal")
+
+    def test_concluir_lembrete_recorrente_agenda_proxima_data(self):
+        """Ao concluir lembrete recorrente, avança para próxima data mantendo status pendente."""
+        criar_lembrete(
+            titulo="Regar plantas",
+            data_hora_lembrete="2026-10-15 08:00",
+            recorrencia="diaria"
+        )
+        msg = concluir_lembrete("Regar plantas")
+        self.assertIn("Lembrete recorrente", msg)
+        self.assertIn("concluído", msg)
+
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if i["titulo"] == "Regar plantas")
+        self.assertEqual(lembrete["status"], "pendente")
+        self.assertTrue(lembrete["data_hora_lembrete"] >= "2026-10-16 08:00")
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -111,19 +111,35 @@ class TestDashboardAPI:
             assert data["upcomingEvents"] == []
 
     def test_agenda_summary_with_real_reminders(self):
-        """P-DASH-03: Retorna lembretes reais mapeando titulo e data_hora_lembrete do Firestore."""
+        """P-DASH-03: Separa ativos e histórico, ignora notas e recalcula recorrência."""
         mock_itens = [
             {
                 "id": "rem-1",
-                "titulo": "Aniversário de namoro",
-                "data_hora_lembrete": "2026-09-25 00:00",
+                "tipo": "lembrete",
+                "titulo": "Pagar fatura",
+                "data_hora_lembrete": "2026-11-20 09:00",
                 "status": "pendente"
             },
             {
                 "id": "rem-2",
-                "title": "Pagar fatura",
-                "due_date": "2026-10-20T10:00:00Z",
+                "tipo": "lembrete",
+                "titulo": "Exame de sangue",
+                "data_hora_lembrete": "2026-09-01 08:00",
                 "status": "concluido"
+            },
+            {
+                "id": "rem-3",
+                "tipo": "nota",
+                "titulo": "Orçamento PC EUA",
+                "conteudo": "Detalhes de preços"
+            },
+            {
+                "id": "rem-4",
+                "tipo": "lembrete",
+                "titulo": "Aniversário de namoro",
+                "data_hora_lembrete": "2026-09-25 00:00",
+                "recorrencia": "mensal",
+                "status": "pendente"
             }
         ]
         with patch("services.tools.calendar_tool._get_calendar_service", return_value=None), \
@@ -131,11 +147,35 @@ class TestDashboardAPI:
             response = client.get("/api/v1/agenda/summary")
             assert response.status_code == 200
             data = response.json()
+            # rem-3 (nota) nunca entra
+            # rem-1 (futuro) e rem-4 (recorrente avançado) entram em reminders (ativos)
+            # rem-2 (concluido) entra em reminderHistory
             assert len(data["reminders"]) == 2
-            assert data["reminders"][0]["text"] == "Aniversário de namoro"
-            assert data["reminders"][0]["dueTime"] == "25/09 00:00"
-            assert data["reminders"][0]["completed"] is False
-            assert data["reminders"][1]["text"] == "Pagar fatura"
-            assert data["reminders"][1]["dueTime"] == "20/10 10:00"
-            assert data["reminders"][1]["completed"] is True
+            assert data["reminders"][0]["text"] in ["Pagar fatura", "Aniversário de namoro"]
+            assert data["reminders"][1]["text"] in ["Pagar fatura", "Aniversário de namoro"]
+            # Verifica que a nota de PC não está em lugar nenhum
+            todos_textos = [r["text"] for r in data["reminders"]] + [h["text"] for h in data["reminderHistory"]]
+            assert "Orçamento PC EUA" not in todos_textos
+            assert len(data["reminderHistory"]) == 1
+            assert data["reminderHistory"][0]["text"] == "Exame de sangue"
+
+    def test_toggle_agenda_reminder(self):
+        """P-DASH-03: Marca ou desmarca lembrete."""
+        mock_itens = [
+            {
+                "id": "rem-toggle-1",
+                "tipo": "lembrete",
+                "titulo": "Comprar pão",
+                "data_hora_lembrete": "2026-10-25 10:00",
+                "status": "pendente"
+            }
+        ]
+        with patch("routers.dashboard._obter_todos_itens", return_value=mock_itens), \
+             patch("routers.dashboard.concluir_lembrete") as mock_concluir:
+            resp = client.post("/api/v1/agenda/reminders/rem-toggle-1/toggle")
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "concluido"
+            assert resp.json()["completed"] is True
+            mock_concluir.assert_called_once_with("rem-toggle-1")
+
 

@@ -77,8 +77,13 @@ def get_finance_dashboard(
     category: Optional[str] = Query(None),
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
-    """Retorna dados agregados para o dashboard avançado de finanças."""
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    """Retorna dados agregados para o dashboard avançado de finanças com projeção de despesas fixas (P-0904)."""
+    effective_user = x_user_id.strip() if isinstance(x_user_id, str) and x_user_id else "daniel"
+    type_filter = type if isinstance(type, str) else None
+    cat_filter = category if isinstance(category, str) else None
+    target_year = year if isinstance(year, int) else datetime.now().year
+    target_month = month if isinstance(month, int) else datetime.now().month
+
     total_income = 0.0
     total_fixed = 0.0
     total_variable = 0.0
@@ -104,75 +109,146 @@ def get_finance_dashboard(
 
     all_categories = user_cats if user_cats else DEFAULT_CATEGORIES
 
+    user_docs = []
     if firebase.db is not None:
         try:
             docs = firebase.db.collection("finances").stream()
             for doc in docs:
                 data = doc.to_dict() or {}
                 doc_user = data.get("userId") or data.get("user_id") or "daniel"
-                if doc_user != effective_user:
-                    continue
-
-                date_str = data.get("date") or data.get("created_at") or ""
-                valido = True
-                dt_obj = None
-                if date_str:
-                    try:
-                        clean_date = date_str.replace("Z", "+00:00")
-                        dt_obj = datetime.fromisoformat(clean_date)
-                        if dt_obj.year != year or dt_obj.month != month:
-                            valido = False
-                    except Exception:
-                        pass
-
-                if not valido:
-                    continue
-
-                amount = float(data.get("amount") or 0.0)
-                tx_type = data.get("type") or "expense_variable"
-                cat = data.get("category") or "Outros"
-
-                if tx_type == "income":
-                    total_income += amount
-                elif tx_type == "expense_fixed":
-                    total_fixed += amount
-                else:
-                    total_variable += amount
-
-                # Verifica se deve incluir na listagem e no gráfico da aba ativa
-                incluir = True
-                if type and type != "total" and tx_type != type:
-                    incluir = False
-                if category and cat.lower() != category.lower():
-                    incluir = False
-
-                if incluir:
-                    # O gráfico deve exibir apenas o negativo (despesas)
-                    if tx_type != "income":
-                        category_map[cat] = category_map.get(cat, 0.0) + amount
-
-                    transactions.append({
-                        "id": doc.id,
-                        "date": date_str or datetime.now(timezone.utc).isoformat(),
-                        "description": data.get("description") or "Sem descrição",
-                        "amount": amount,
-                        "category": cat,
-                        "categoryColor": _get_category_color(cat, all_categories),
-                        "type": tx_type,
-                        "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
-                        "installment": data.get("installment"),
-                        "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else ""
-                    })
+                if doc_user == effective_user:
+                    user_docs.append((doc, data))
         except Exception as e:
             logger.error(f"Erro ao processar finanças no Firestore: {e}")
 
-    # Ordenar transações mais recentes primeiro
+    current_month_tx_ids = set()
+    current_month_origin_ids = set()
+    current_month_descriptions = set()
+
+    # 1. Processa transações fiscais cadastradas no mês consultado
+    for doc, data in user_docs:
+        date_str = data.get("date") or data.get("created_at") or ""
+        valido = True
+        dt_obj = None
+        if date_str:
+            try:
+                clean_date = date_str.replace("Z", "+00:00")
+                dt_obj = datetime.fromisoformat(clean_date)
+                if dt_obj.year != target_year or dt_obj.month != target_month:
+                    valido = False
+            except Exception:
+                pass
+
+        if not valido:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        tx_type = data.get("type") or "expense_variable"
+        cat = data.get("category") or "Outros"
+
+        current_month_tx_ids.add(doc.id)
+        if data.get("originId"):
+            current_month_origin_ids.add(data.get("originId"))
+        d_norm = (data.get("description") or "").strip().lower()
+        if d_norm:
+            current_month_descriptions.add(d_norm)
+
+        if tx_type == "income":
+            total_income += amount
+        elif tx_type == "expense_fixed":
+            total_fixed += amount
+        else:
+            total_variable += amount
+
+        incluir = True
+        if type_filter and type_filter != "total" and tx_type != type_filter:
+            incluir = False
+        if cat_filter and cat.lower() != cat_filter.lower():
+            incluir = False
+
+        if incluir:
+            if tx_type != "income":
+                category_map[cat] = category_map.get(cat, 0.0) + amount
+
+            transactions.append({
+                "id": doc.id,
+                "date": date_str or datetime.now(timezone.utc).isoformat(),
+                "description": data.get("description") or "Sem descrição",
+                "amount": amount,
+                "category": cat,
+                "categoryColor": _get_category_color(cat, all_categories),
+                "type": tx_type,
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
+                "installment": data.get("installment"),
+                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
+                "isRecurring": bool(data.get("isRecurring", False)),
+                "originId": data.get("originId")
+            })
+
+    # 2. Projeção Dinâmica em Tempo de Leitura de Despesas Fixas Recorrentes (P-0904)
+    target_month_val = target_year * 12 + target_month
+    for doc, data in user_docs:
+        tx_type = data.get("type") or "expense_variable"
+        if tx_type != "expense_fixed":
+            continue
+        if data.get("active") is False:
+            continue
+
+        date_str = data.get("date") or data.get("created_at") or ""
+        dt_obj = None
+        if date_str:
+            try:
+                dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            except Exception:
+                pass
+
+        if dt_obj:
+            doc_month_val = dt_obj.year * 12 + dt_obj.month
+            if doc_month_val > target_month_val:
+                continue
+
+        # Deduplicação: não projetar se já existir no mês alvo por ID, originId ou descrição
+        d_norm = (data.get("description") or "").strip().lower()
+        if doc.id in current_month_tx_ids:
+            continue
+        if doc.id in current_month_origin_ids:
+            continue
+        if d_norm and d_norm in current_month_descriptions:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        cat = data.get("category") or "Outros"
+        total_fixed += amount
+
+        incluir = True
+        if type_filter and type_filter != "total" and type_filter != "expense_fixed":
+            incluir = False
+        if cat_filter and cat.lower() != cat_filter.lower():
+            incluir = False
+
+        if incluir:
+            category_map[cat] = category_map.get(cat, 0.0) + amount
+            proj_id = f"proj_{doc.id}_{target_year}_{target_month}"
+            proj_date = f"{target_year}-{target_month:02d}-05T12:00:00Z"
+            transactions.append({
+                "id": proj_id,
+                "date": proj_date,
+                "description": data.get("description") or "Sem descrição",
+                "amount": amount,
+                "category": cat,
+                "categoryColor": _get_category_color(cat, all_categories),
+                "type": "expense_fixed",
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
+                "installment": data.get("installment"),
+                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
+                "isRecurring": True,
+                "originId": doc.id
+            })
+
     transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
 
     total_spent = total_fixed + total_variable
     balance = total_income - total_spent
-
-    # Soma da base para percentuais do gráfico
     target_sum = sum(category_map.values()) or 1.0
 
     expenses_by_category = [
@@ -202,6 +278,14 @@ def create_transaction(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
     effective_user = x_user_id.strip() if x_user_id else "daniel"
+
+    # Validação P-0902: Se for receita, o valor deve ser estritamente positivo
+    if payload.type == "income" and payload.amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="O valor da receita deve ser estritamente maior que zero."
+        )
+
     tx_id = str(uuid.uuid4())
     date_val = payload.date if payload.date else datetime.now(timezone.utc).isoformat()
 
@@ -230,6 +314,7 @@ def create_transaction(
             raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
 
     return doc_data
+
 
 @router.put("/transactions/{tx_id}")
 def update_transaction(
@@ -622,45 +707,84 @@ def get_finance_trends(
     prev_income = 0.0
     prev_expenses = 0.0
 
+    user_docs = []
     if firebase.db is not None:
         try:
             docs = firebase.db.collection("finances").stream()
             for doc in docs:
                 data = doc.to_dict() or {}
-                if (data.get("userId") or data.get("user_id") or "daniel") != effective_user:
-                    continue
-
-                date_str = data.get("date") or data.get("created_at") or ""
-                if not date_str:
-                    continue
-
-                try:
-                    dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
-                except Exception:
-                    continue
-
-                amount = float(data.get("amount") or 0.0)
-                tx_type = data.get("type") or "expense_variable"
-
-                # Período corrente da série
-                if doc_key in series_map:
-                    if tx_type == "income":
-                        series_map[doc_key]["income"] += amount
-                        total_income += amount
-                    else:
-                        series_map[doc_key]["expenses"] += amount
-                        total_expenses += amount
-
-                # Período comparativo anterior
-                elif doc_key in prev_series_keys:
-                    if tx_type == "income":
-                        prev_income += amount
-                    else:
-                        prev_expenses += amount
-
+                if (data.get("userId") or data.get("user_id") or "daniel") == effective_user:
+                    user_docs.append((doc, data))
         except Exception as e:
             logger.error(f"Erro ao agregar tendências financeiras no Firestore: {e}")
+
+    fixed_docs_in_series: Dict[str, set] = {k: set() for k in series_map}
+    fixed_candidates = []
+
+    for doc, data in user_docs:
+        date_str = data.get("date") or data.get("created_at") or ""
+        if not date_str:
+            continue
+
+        try:
+            dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
+        except Exception:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        tx_type = data.get("type") or "expense_variable"
+
+        if tx_type == "expense_fixed" and data.get("active") is not False:
+            fixed_candidates.append((doc, data, dt_obj))
+
+        # Período corrente da série
+        if doc_key in series_map:
+            if tx_type == "income":
+                series_map[doc_key]["income"] += amount
+                total_income += amount
+            else:
+                series_map[doc_key]["expenses"] += amount
+                total_expenses += amount
+                if tx_type == "expense_fixed":
+                    desc_norm = (data.get("description") or "").strip().lower()
+                    fixed_docs_in_series[doc_key].add(doc.id)
+                    if data.get("originId"):
+                        fixed_docs_in_series[doc_key].add(data.get("originId"))
+                    if desc_norm:
+                        fixed_docs_in_series[doc_key].add(desc_norm)
+
+        # Período comparativo anterior
+        elif doc_key in prev_series_keys:
+            if tx_type == "income":
+                prev_income += amount
+            else:
+                prev_expenses += amount
+
+    # Projetar despesas fixas para os nós mensais da série histórica (P-0904)
+    for key, item in series_map.items():
+        y = item["year"]
+        m = item["month"]
+        target_month_val = y * 12 + m
+
+        for fix_doc, fix_data, dt_fix in fixed_candidates:
+            fix_month_val = dt_fix.year * 12 + dt_fix.month
+            if fix_month_val > target_month_val:
+                continue
+
+            desc_norm = (fix_data.get("description") or "").strip().lower()
+            existing_set = fixed_docs_in_series.get(key, set())
+            if fix_doc.id in existing_set or (desc_norm and desc_norm in existing_set):
+                continue
+            if fix_data.get("originId") and fix_data.get("originId") in existing_set:
+                continue
+
+            fix_amount = float(fix_data.get("amount") or 0.0)
+            item["expenses"] += fix_amount
+            total_expenses += fix_amount
+            existing_set.add(fix_doc.id)
+            if desc_norm:
+                existing_set.add(desc_norm)
 
     for item in series_list:
         item["income"] = round(item["income"], 2)
@@ -690,4 +814,21 @@ def get_finance_trends(
         },
         "series": series_list
     }
+
+
+@router.post("/maintenance/sanitize")
+def sanitize_legacy_finance_data(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    """Endpoint de auto-cura para sanear registros corrompidos legados (P-0903)."""
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    from services.finance_migration_service import sanear_transacoes_legadas
+    result = sanear_transacoes_legadas(effective_user)
+    return {
+        "data": result,
+        "meta": {
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    }
+
 

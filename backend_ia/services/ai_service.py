@@ -18,8 +18,17 @@ from services.tools.notes_tool import (
     criar_anotacao,
     criar_lembrete,
     buscar_anotacoes,
+    atualizar_anotacao,
+    excluir_anotacao,
     listar_lembretes_pendentes,
     concluir_lembrete
+)
+from services.tools.wishlist_tool import (
+    adicionar_item_wishlist,
+    consultar_wishlist,
+    atualizar_item_wishlist,
+    marcar_item_wishlist_comprado,
+    remover_item_wishlist
 )
 from services.tools.gift_curator_tool import (
     salvar_ideia_presente,
@@ -180,8 +189,15 @@ class AIService:
 
             # 6. Roteamento Dinâmico de Ferramentas & Prompts Modulares (P-1101 e P-1102)
             has_media = bool(media_base64 or orig_media_b64)
-            selected_tools = ToolsDispatcher.resolve_tools(user_text, has_media=has_media)
-            detected_domains = ToolsDispatcher.detect_domains(user_text)
+            recent_context = " ".join(
+                [m["parts"][0] for m in history[-2:] if m.get("parts") and isinstance(m["parts"][0], str)]
+            )
+            selected_tools = ToolsDispatcher.resolve_tools(
+                user_text,
+                has_media=has_media,
+                context_text=recent_context
+            )
+            detected_domains = ToolsDispatcher.detect_domains(user_text, context_text=recent_context)
             system_instruction = PromptComposer.compose_system_instruction(agora, domains=detected_domains)
 
             model = genai.GenerativeModel(
@@ -266,4 +282,3 @@ class AIService:
         except Exception as e:
             logger.error(f"Erro no Gemini: {e}")
             return "Desculpe, meus servidores estão indisponíveis no momento. Tente novamente mais tarde."
-

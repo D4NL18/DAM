@@ -81,6 +81,8 @@ export class AgendaDashboardComponent implements OnInit {
     return this.summary.upcomingEvents.filter(ev => ev.category === this.selectedFilter);
   }
 
+  activeRemindersTab: 'ativos' | 'historico' = 'ativos';
+
   setFilter(filter: 'todos' | 'trabalho' | 'pessoal' | 'saude' | 'reuniao'): void {
     this.selectedFilter = filter;
   }
@@ -96,6 +98,21 @@ export class AgendaDashboardComponent implements OnInit {
     const reminder = this.summary.reminders.find(r => r.id === id);
     if (reminder) {
       reminder.completed = !reminder.completed;
+      this.agendaApi.toggleReminder(id).subscribe({
+        next: () => {
+          setTimeout(() => this.loadAgenda(), 400);
+        }
+      });
+    } else {
+      const hist = this.summary.reminderHistory?.find(r => r.id === id);
+      if (hist) {
+        hist.completed = !hist.completed;
+        this.agendaApi.toggleReminder(id).subscribe({
+          next: () => {
+            setTimeout(() => this.loadAgenda(), 400);
+          }
+        });
+      }
     }
   }
 

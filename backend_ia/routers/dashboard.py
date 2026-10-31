@@ -1,10 +1,11 @@
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query
 from config import firebase
 from services.tools.calendar_tool import _get_calendar_service
-from services.tools.notes_tool import _obter_todos_itens
+from services.tools.notes_tool import _obter_todos_itens, calcular_proxima_ocorrencia, concluir_lembrete, _atualizar_item
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -209,18 +210,101 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
             logger.error(f"Erro ao buscar Google Calendar no endpoint da agenda: {e}")
 
     # Lembretes reais da coleção 'notes_reminders'
-    lembretes_reais = []
+    lembretes_ativos = []
+    lembretes_historico = []
+
+    tz_br = timezone(timedelta(hours=-3))
+    agora_br = datetime.now(tz_br)
+
     try:
-        todos_itens = _obter_todos_itens()
+        todos_itens = _obter_todos_itens(colecao="notes_reminders")
         for item in todos_itens:
-            lembretes_reais.append({
-                "id": item.get("id", ""),
-                "text": item.get("title", ""),
-                "dueTime": item.get("due_date", ""),
-                "completed": item.get("status") == "completed"
-            })
+            # FILTRO ESTRITO: Notas ('tipo' == 'nota') nunca entram na lista de lembretes!
+            tipo = item.get("tipo", "lembrete")
+            if tipo != "lembrete":
+                continue
+
+            # Captura o texto do lembrete (compatível com 'titulo', 'title')
+            texto = (
+                item.get("titulo")
+                or item.get("title")
+                or ""
+            ).strip()
+
+            if not texto:
+                continue
+
+            # Detecção e padronização de recorrência
+            recorrencia = item.get("recorrencia")
+            if not recorrencia and "(recorrente:" in texto.lower():
+                recorrencia = "mensal"
+            # Remove qualquer marcador artificial do título
+            texto = re.sub(r"\s*\(Recorrente:[^)]*\)", "", texto).strip()
+
+            # Captura data/hora bruta do lembrete
+            data_hora_raw = str(
+                item.get("data_hora_lembrete")
+                or item.get("due_date")
+                or item.get("dueTime")
+                or ""
+            ).strip()
+
+            # Se for recorrente, avança para a próxima ocorrência válida a partir de hoje
+            if recorrencia and data_hora_raw:
+                data_hora_raw = calcular_proxima_ocorrencia(data_hora_raw, recorrencia, agora_br)
+
+            # Verifica se já expirou no passado (apenas para não-recorrentes)
+            is_past = False
+            if data_hora_raw and not recorrencia:
+                try:
+                    if "T" in data_hora_raw:
+                        dt_check = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                    else:
+                        dt_check = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
+                    if dt_check.tzinfo is None:
+                        dt_check = dt_check.replace(tzinfo=tz_br)
+                    if dt_check < agora_br:
+                        is_past = True
+                except Exception:
+                    pass
+
+            due_time_fmt = data_hora_raw
+            if data_hora_raw:
+                try:
+                    if "T" in data_hora_raw:
+                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                    elif len(data_hora_raw) >= 16 and data_hora_raw[4] == '-' and data_hora_raw[7] == '-':
+                        dt = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
+                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                except Exception:
+                    due_time_fmt = data_hora_raw
+
+            status = str(item.get("status", "")).lower()
+            is_completed = status in ["completed", "concluido"]
+
+            rem_data = {
+                "id": str(item.get("id", "")),
+                "text": texto,
+                "dueTime": due_time_fmt,
+                "rawDue": data_hora_raw,
+                "completed": is_completed,
+                "isPast": is_past,
+                "recorrencia": recorrencia
+            }
+
+            if is_completed or is_past:
+                lembretes_historico.append(rem_data)
+            else:
+                lembretes_ativos.append(rem_data)
+
     except Exception as e:
         logger.warning(f"Erro ao ler lembretes para a agenda: {e}")
+
+    # Ordena ativos pela data mais próxima
+    lembretes_ativos.sort(key=lambda x: x.get("rawDue", ""))
+    # Ordena histórico pelo mais recente primeiro
+    lembretes_historico.sort(key=lambda x: x.get("rawDue", ""), reverse=True)
 
     next_event = upcoming_events[0] if upcoming_events else None
 
@@ -230,5 +314,21 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
         "nextEvent": next_event,
         "upcomingEvents": upcoming_events,
         "insights": [],
-        "reminders": lembretes_reais[:5]
+        "reminders": lembretes_ativos[:10],
+        "reminderHistory": lembretes_historico[:20]
     }
+
+@router.post("/agenda/reminders/{reminder_id}/toggle")
+def toggle_agenda_reminder(reminder_id: str) -> Dict[str, Any]:
+    """Marca ou desmarca um lembrete no Firestore."""
+    todos = _obter_todos_itens(colecao="notes_reminders")
+    for item in todos:
+        if str(item.get("id", "")) == reminder_id:
+            status_atual = str(item.get("status", "")).lower()
+            if status_atual in ["completed", "concluido"]:
+                _atualizar_item(reminder_id, {"status": "pendente"}, colecao="notes_reminders")
+                return {"id": reminder_id, "status": "pendente", "completed": False}
+            else:
+                concluir_lembrete(reminder_id)
+                return {"id": reminder_id, "status": "concluido", "completed": True}
+    return {"id": reminder_id, "status": "not_found", "completed": False}

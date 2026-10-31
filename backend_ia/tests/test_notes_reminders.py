@@ -1,12 +1,17 @@
 import unittest
+from unittest.mock import MagicMock, patch
 from services.tools.notes_tool import (
     _reset_mock_storage,
+    _obter_todos_itens,
     criar_anotacao,
     criar_lembrete,
     buscar_anotacoes,
+    atualizar_anotacao,
+    excluir_anotacao,
     listar_lembretes_pendentes,
     concluir_lembrete
 )
+
 
 class TestFase9Notes(unittest.TestCase):
     def setUp(self):
@@ -24,6 +29,22 @@ class TestFase9Notes(unittest.TestCase):
         self.assertIn("salva com sucesso", resultado)
         self.assertIn("Configurações do Servidor", resultado)
         self.assertIn("#devops", resultado)
+
+    @patch("services.tools.notes_tool.firebase")
+    def test_criar_anotacao_persiste_no_firestore_information_notes(self, mock_firebase):
+        mock_db = MagicMock()
+        mock_firebase.db = mock_db
+        res = criar_anotacao(
+            titulo="Peças de Computador",
+            conteudo="i7 14700K US$ 339.99, RTX 5060 Ti US$ 379.99",
+            tags=["pc", "hardware"]
+        )
+        self.assertIn("salva com sucesso", res)
+        mock_db.collection.assert_called_with("information_notes")
+        mock_db.collection.return_value.document.return_value.set.assert_called_once()
+        saved_payload = mock_db.collection.return_value.document.return_value.set.call_args[0][0]
+        self.assertEqual(saved_payload["titulo"], "Peças de Computador")
+        self.assertEqual(saved_payload["tipo"], "nota")
 
     def test_criar_lembrete_sucesso(self):
         resultado = criar_lembrete(
@@ -52,6 +73,16 @@ class TestFase9Notes(unittest.TestCase):
         self.assertIn("Ideias para o DAM", resultado)
         self.assertNotIn("Receita de Bolo", resultado)
 
+    def test_buscar_anotacoes_sinonimo_pecas_computador(self):
+        criar_anotacao(
+            titulo="Orçamento PC EUA - Combo 5 Micro Center Miami",
+            conteudo="Intel Core i7-14700KF + ASUS Z790 + 32GB DDR5 + RTX 4060 Ti",
+            tags=["hardware", "setup", "compras"]
+        )
+        resultado = buscar_anotacoes(termo="peças de computador")
+        self.assertIn("Orçamento PC EUA", resultado)
+        self.assertIn("14700KF", resultado)
+
     def test_buscar_anotacoes_por_tag(self):
         criar_anotacao(
             titulo="Comprar suplementos",
@@ -68,7 +99,7 @@ class TestFase9Notes(unittest.TestCase):
         self.assertIn("Comprar suplementos", resultado)
         self.assertNotIn("Reunião Sprint", resultado)
 
-    def test_buscar_anotacoes_nao_encontradas(self):
+    def test_buscar_anotacoes_nao_encontradas_exibe_fallback(self):
         criar_anotacao(
             titulo="Nota A",
             conteudo="Conteúdo qualquer.",
@@ -76,6 +107,27 @@ class TestFase9Notes(unittest.TestCase):
         )
         resultado = buscar_anotacoes(termo="termo_inexistente_xyz")
         self.assertIn("Nenhuma anotação encontrada", resultado)
+        self.assertIn("Nota A", resultado)
+
+    def test_atualizar_e_excluir_anotacao(self):
+        criar_anotacao(
+            titulo="Setup PC",
+            conteudo="i7 14700K",
+            tags=["pc"]
+        )
+        res_upd = atualizar_anotacao(
+            id_ou_titulo="Setup PC",
+            novo_conteudo="i7 14700K + RTX 5060 Ti 8GB"
+        )
+        self.assertIn("atualizada com sucesso", res_upd)
+
+        busca = buscar_anotacoes(termo="Setup PC")
+        self.assertIn("RTX 5060 Ti 8GB", busca)
+
+        res_del = excluir_anotacao("Setup PC")
+        self.assertIn("removida com sucesso", res_del)
+        busca_vazia = buscar_anotacoes()
+        self.assertIn("Nenhuma anotação encontrada", busca_vazia)
 
     def test_listar_lembretes_pendentes(self):
         # Nenhum lembrete inicialmente
@@ -116,6 +168,48 @@ class TestFase9Notes(unittest.TestCase):
     def test_concluir_lembrete_inexistente(self):
         conclusao = concluir_lembrete("Lembrete que nunca existiu")
         self.assertIn("Não encontrei nenhum lembrete pendente", conclusao)
+
+    def test_criar_lembrete_com_recorrencia_avanca_se_passado(self):
+        """Lembrete com recorrência mensal avança automaticamente se data original já passou."""
+        # Data passada: 25/09
+        criar_lembrete(
+            titulo="Aniversário de namoro",
+            data_hora_lembrete="2026-09-25 00:00",
+            recorrencia="mensal"
+        )
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if i["titulo"] == "Aniversário de namoro")
+        self.assertEqual(lembrete["recorrencia"], "mensal")
+        # Deve ter avançado para pelo menos outubro ou além
+        self.assertTrue(lembrete["data_hora_lembrete"] >= "2026-10-25 00:00")
+
+    def test_criar_lembrete_remove_marcador_recorrente_do_titulo(self):
+        """Remove '(Recorrente:...)' do título e detecta a frequência."""
+        criar_lembrete(
+            titulo="Aniversário de namoro (Recorrente: todo dia 25 às 00:00)",
+            data_hora_lembrete="2026-09-25 00:00"
+        )
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if "Aniversário de namoro" in i["titulo"])
+        self.assertEqual(lembrete["titulo"], "Aniversário de namoro")
+        self.assertEqual(lembrete["recorrencia"], "mensal")
+
+    def test_concluir_lembrete_recorrente_agenda_proxima_data(self):
+        """Ao concluir lembrete recorrente, avança para próxima data mantendo status pendente."""
+        criar_lembrete(
+            titulo="Regar plantas",
+            data_hora_lembrete="2026-10-15 08:00",
+            recorrencia="diaria"
+        )
+        msg = concluir_lembrete("Regar plantas")
+        self.assertIn("Lembrete recorrente", msg)
+        self.assertIn("concluído", msg)
+
+        itens = _obter_todos_itens(colecao="notes_reminders")
+        lembrete = next(i for i in itens if i["titulo"] == "Regar plantas")
+        self.assertEqual(lembrete["status"], "pendente")
+        self.assertTrue(lembrete["data_hora_lembrete"] >= "2026-10-16 08:00")
+
 
 if __name__ == "__main__":
     unittest.main()

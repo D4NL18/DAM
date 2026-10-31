@@ -103,7 +103,7 @@
           </div>
           <div class="kpi-info">
             <span class="kpi-val">{{ summary.reminders.length }}</span>
-            <span class="kpi-lbl">Lembretes no Firestore</span>
+            <span class="kpi-lbl">Lembretes ativos</span>
           </div>
         </div>
       </div>
@@ -183,33 +183,91 @@
     <!-- 4. Lembretes & Tarefas do Dia (Span 5) -->
     <div class="bento-card bento-reminders">
       <div class="card-header">
-        <h3 class="card-title">Lembretes (Firestore)</h3>
-        <span class="material-symbols-outlined header-icon">checklist</span>
+        <div class="reminders-header-left">
+          <h3 class="card-title">Lembretes</h3>
+        </div>
+        <div class="reminders-tabs">
+          <button 
+            type="button"
+            class="rem-tab-pill" 
+            [class.active]="activeRemindersTab === 'ativos'" 
+            (click)="activeRemindersTab = 'ativos'">
+            Ativos ({{ summary.reminders.length }})
+          </button>
+          <button 
+            type="button"
+            class="rem-tab-pill" 
+            [class.active]="activeRemindersTab === 'historico'" 
+            (click)="activeRemindersTab = 'historico'">
+            Histórico ({{ summary.reminderHistory ? summary.reminderHistory.length : 0 }})
+          </button>
+        </div>
       </div>
 
-      <div class="reminders-list" *ngIf="summary.reminders.length > 0; else noReminders">
-        <div 
-          *ngFor="let rem of summary.reminders" 
-          class="reminder-item" 
-          [class.completed]="rem.completed"
-          (click)="toggleReminder(rem.id)">
-          <div class="checkbox-box">
-            <span class="material-symbols-outlined check-icon">
-              {{ rem.completed ? 'check_box' : 'check_box_outline_blank' }}
-            </span>
-          </div>
-          <div class="reminder-text-area">
-            <p class="reminder-text">{{ rem.text }}</p>
-            <span class="reminder-due">{{ rem.dueTime }}</span>
+      <!-- ABA 1: LEMBRETES ATIVOS -->
+      <ng-container *ngIf="activeRemindersTab === 'ativos'">
+        <div class="reminders-list" *ngIf="summary.reminders.length > 0; else noReminders">
+          <div 
+            *ngFor="let rem of summary.reminders" 
+            class="reminder-item" 
+            [class.completed]="rem.completed"
+            (click)="toggleReminder(rem.id)">
+            <div class="checkbox-box">
+              <span class="material-symbols-outlined check-icon">
+                {{ rem.completed ? 'check_box' : 'check_box_outline_blank' }}
+              </span>
+            </div>
+            <div class="reminder-text-area">
+              <p class="reminder-text">{{ rem.text || 'Lembrete sem título' }}</p>
+              <div class="reminder-meta-row">
+                <span class="reminder-due" *ngIf="rem.dueTime">{{ rem.dueTime }}</span>
+                <span class="recurrence-tag" *ngIf="rem.recorrencia">
+                  <span class="material-symbols-outlined rec-icon">sync</span>
+                  {{ rem.recorrencia }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <ng-template #noReminders>
-        <div class="empty-state-content" style="padding: 2rem; text-align: center;">
-          <span class="material-symbols-outlined" style="font-size: 2.5rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">task_alt</span>
-          <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete pendente na coleção 'notes_reminders'.</p>
+        <ng-template #noReminders>
+          <div class="empty-state-content" style="padding: 2rem; text-align: center;">
+            <span class="material-symbols-outlined" style="font-size: 2.5rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">task_alt</span>
+            <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete pendente para hoje ou próximos dias.</p>
+          </div>
+        </ng-template>
+      </ng-container>
+
+      <!-- ABA 2: HISTÓRICO (PASSADOS E CONCLUÍDOS) -->
+      <ng-container *ngIf="activeRemindersTab === 'historico'">
+        <div class="reminders-list" *ngIf="summary.reminderHistory && summary.reminderHistory.length > 0; else noHistory">
+          <div 
+            *ngFor="let rem of summary.reminderHistory" 
+            class="reminder-item history-item"
+            [class.completed]="rem.completed"
+            (click)="toggleReminder(rem.id)">
+            <div class="checkbox-box">
+              <span class="material-symbols-outlined check-icon text-muted">
+                {{ rem.completed ? 'task_alt' : 'history' }}
+              </span>
+            </div>
+            <div class="reminder-text-area">
+              <p class="reminder-text history-text">{{ rem.text || 'Lembrete sem título' }}</p>
+              <div class="reminder-meta-row">
+                <span class="reminder-due" *ngIf="rem.dueTime">{{ rem.dueTime }}</span>
+                <span class="history-badge" [class.badge-completed]="rem.completed" [class.badge-expired]="rem.isPast && !rem.completed">
+                  {{ rem.completed ? 'Concluído' : 'Expirado' }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-      </ng-template>
+        <ng-template #noHistory>
+          <div class="empty-state-content" style="padding: 2rem; text-align: center;">
+            <span class="material-symbols-outlined" style="font-size: 2.5rem; color: #94a3b8; display: block; margin-bottom: 0.5rem;">history</span>
+            <p style="color: #64748b; font-size: 0.9rem;">Nenhum lembrete no histórico.</p>
+          </div>
+        </ng-template>
+      </ng-container>
 
       <div class="reminders-footer">
         <p class="tip-text">

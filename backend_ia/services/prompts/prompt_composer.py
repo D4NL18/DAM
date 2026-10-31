@@ -13,6 +13,7 @@ from services.prompts.calendar_notes_rules import get_calendar_notes_prompt
 from services.prompts.saved_videos_rules import get_saved_videos_prompt
 from services.prompts.file_converter_rules import get_file_converter_prompt
 
+
 class PromptComposer:
     """
     Compositor modular de prompts de sistema (P-1102).
@@ -66,7 +67,7 @@ class PromptComposer:
                 secoes.append(get_nutrition_prompt())
             if "translation" in dom_set:
                 secoes.append(get_translation_rules_prompt())
-            if "calendar_notes" in dom_set:
+            if dom_set.intersection({"calendar_notes", "wishlist"}):
                 secoes.append(get_calendar_notes_prompt())
             if "saved_videos" in dom_set:
                 secoes.append(get_saved_videos_prompt())
@@ -74,4 +75,3 @@ class PromptComposer:
                 secoes.append(get_file_converter_prompt())
 
         return "\n".join(secoes)
-

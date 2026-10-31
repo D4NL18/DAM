@@ -172,8 +172,14 @@
         &.bg-tertiary-soft { background: var(--color-tertiary-fixed); }
       }
 
-      .kpi-val { font-size: 16px; font-weight: 700; color: var(--color-on-surface); }
-      .kpi-lbl { font-size: 11px; color: var(--color-on-surface-variant); }
+      .kpi-info {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+      }
+
+      .kpi-val { font-size: 16px; font-weight: 700; color: var(--color-on-surface); flex-shrink: 0; }
+      .kpi-lbl { font-size: 12px; color: var(--color-on-surface-variant); }
     }
   }
 
@@ -310,6 +316,40 @@
 .bento-reminders {
   @media (min-width: 768px) { grid-column: span 5; }
 
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    .reminders-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--color-surface-container);
+      padding: 3px;
+      border-radius: 20px;
+      border: 1px solid var(--color-outline-variant);
+
+      .rem-tab-pill {
+        border: none;
+        background: transparent;
+        padding: 4px 10px;
+        border-radius: 14px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--color-on-surface-variant);
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &.active {
+          background: var(--color-surface-container-lowest);
+          color: var(--color-primary);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+      }
+    }
+  }
+
   .reminders-list {
     display: flex;
     flex-direction: column;
@@ -323,15 +363,93 @@
       border-radius: 8px;
       background: var(--color-surface-container-low);
       cursor: pointer;
+      transition: background 0.15s ease;
 
-      .check-icon { font-size: 18px; color: var(--color-primary); }
-      .reminder-text { font-size: 12px; font-weight: 500; color: var(--color-on-surface); }
-      .reminder-due { font-size: 10px; color: var(--color-outline); }
+      &:hover {
+        background: var(--color-surface-container);
+      }
+
+      .check-icon { font-size: 18px; color: var(--color-primary); flex-shrink: 0; margin-top: 1px; }
+
+      .reminder-text-area {
+        flex: 1;
+        min-width: 0;
+
+        .reminder-text {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--color-on-surface);
+          margin: 0;
+          line-height: 1.4;
+          word-break: break-word;
+        }
+
+        .reminder-meta-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 3px;
+
+          .reminder-due {
+            font-size: 11px;
+            color: var(--color-outline);
+          }
+
+          .recurrence-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 1px 6px;
+            background: #e0f2fe;
+            color: #0369a1;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: capitalize;
+
+            .rec-icon {
+              font-size: 12px;
+            }
+          }
+
+          .history-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+
+            &.badge-completed {
+              background: #dcfce7;
+              color: #15803d;
+            }
+
+            &.badge-expired {
+              background: #f1f5f9;
+              color: #64748b;
+            }
+          }
+        }
+      }
 
       &.completed {
         opacity: 0.6;
         .reminder-text { text-decoration: line-through; }
         .check-icon { color: var(--color-outline); }
+      }
+
+      &.history-item {
+        opacity: 0.85;
+        background: var(--color-surface-container);
+
+        .history-text {
+          color: var(--color-outline);
+        }
+
+        .text-muted {
+          color: #94a3b8;
+        }
       }
     }
   }

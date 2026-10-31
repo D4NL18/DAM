@@ -1,11 +1,20 @@
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import uuid
 import logging
+import re
+import time
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from config import firebase
 from services.user_context import UserContext
+from routers.finance import DEFAULT_CATEGORIES
 
 logger = logging.getLogger(__name__)
+
+# Cache L1 em memória para categorias do usuário: (user_id, db_instance_id) -> (timestamp, list_categories)
+_USER_CATEGORIES_CACHE: Dict[tuple, tuple[float, List[Dict[str, Any]]]] = {}
+CACHE_TTL_SECONDS = 300  # 5 minutos
+
 
 def normalizar_metodo_pagamento(metodo: Optional[str]) -> Optional[str]:
     """
@@ -33,6 +42,111 @@ def normalizar_metodo_pagamento(metodo: Optional[str]) -> Optional[str]:
 
     return None
 
+
+def _normalize_str(s: str) -> str:
+    """Normaliza string para comparação sem acentos e em minúsculas."""
+    if not s:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
+
+
+def obter_categorias_usuario(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retorna as categorias ativas do usuário com cache L1 em memória (5 min).
+    Se o banco estiver vazio ou indisponível, retorna DEFAULT_CATEGORIES.
+    """
+    effective_user = user_id or UserContext.get_user_id() or "daniel"
+    now_ts = time.time()
+    cache_key = (effective_user, id(firebase.db))
+
+    if cache_key in _USER_CATEGORIES_CACHE:
+        cached_time, cached_data = _USER_CATEGORIES_CACHE[cache_key]
+        if now_ts - cached_time < CACHE_TTL_SECONDS:
+            return cached_data
+
+    defaults = [c for c in DEFAULT_CATEGORIES if c.get("name", "").lower() not in ["christian", "reembolso"]]
+
+    if firebase.db is None:
+        return defaults
+
+    categories = []
+    try:
+        col = firebase.db.collection("finance_categories")
+        docs = []
+        if hasattr(col, "where"):
+            stream_obj = col.where("userId", "==", effective_user).stream()
+            docs = list(stream_obj)
+        if not docs and hasattr(col, "stream"):
+            all_docs = list(col.stream())
+            docs = [d for d in all_docs if hasattr(d, "to_dict") and (d.to_dict() or {}).get("userId") == effective_user]
+
+        for d in docs:
+            if not hasattr(d, "to_dict"):
+                continue
+            data = d.to_dict() or {}
+            name = data.get("name")
+            if name and str(name).strip().lower() not in ["christian", "reembolso"]:
+                categories.append({
+                    "id": getattr(d, "id", str(uuid.uuid4())),
+                    "name": str(name).strip(),
+                    "color": data.get("color", "#64748b")
+                })
+    except Exception as e:
+        logger.warning(f"Erro ao buscar categorias customizadas para [{effective_user}]: {e}")
+
+    if categories:
+        _USER_CATEGORIES_CACHE[cache_key] = (now_ts, categories)
+        return categories
+
+    _USER_CATEGORIES_CACHE[cache_key] = (now_ts, defaults)
+    return defaults
+
+
+def normalizar_categoria(cat: Optional[str], user_id: Optional[str] = None) -> str:
+    """
+    Normaliza a categoria para um nome oficial autorizado (P-0901).
+    - Suporta aliases e sinônimos conhecidos.
+    - Proíbe categoricamente a atribuição de 'Reembolso' (converte para 'Receitas' ou 'Outros').
+    - Verifica as categorias ativas do usuário.
+    - Fallback determinístico para 'Outros'.
+    """
+    if not cat:
+        return "Outros"
+
+    c_norm = _normalize_str(cat)
+    if not c_norm:
+        return "Outros"
+
+    # Proibição estrita de "Reembolso" (P-0901 / P-0902)
+    if "reembolso" in c_norm:
+        return "Receitas"
+
+    # Mapeamento de sinônimos conhecidos
+    synonym_rules = [
+        ("iFood", [r"\bifood\b", r"\bdelivery\b"]),
+        ("Mercado", [r"\bsupermercado\b", r"\balmoco\b", r"\bcomida\b", r"\bacougue\b", r"\bpadaria\b", r"\balimentacao\b"]),
+        ("Carro", [r"\bgasolina\b", r"\bcombustivel\b", r"\buber\b", r"\bestacionamento\b", r"\bmecanico\b", r"\bveiculo\b"]),
+        ("Farmácia", [r"\bfarmacia\b", r"\bremedio\b", r"\bdrogaria\b", r"\bmedico\b", r"\bmedica\b", r"\bconsulta\b", r"\bexame\b"]),
+        ("Casa", [r"\baluguel\b", r"\bcondominio\b", r"\bluz\b", r"\benergia\b", r"\bagua\b", r"\binternet\b", r"\bmoradia\b"]),
+        ("Lazer", [r"\bcinema\b", r"\bjogos?\b", r"\bgames?\b", r"\bchurrasco\b", r"\bbar\b", r"\bpasseio\b", r"\bviagem\b"]),
+    ]
+
+    for target_cat, patterns in synonym_rules:
+        for pat in patterns:
+            if re.search(pat, c_norm):
+                return target_cat
+
+    # Comparação com categorias ativas do usuário
+    user_cats = obter_categorias_usuario(user_id)
+    for c in user_cats:
+        c_name = c.get("name", "")
+        if _normalize_str(c_name) == c_norm:
+            return c_name
+
+    return "Outros"
+
+
 def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamento: str) -> str:
     """
     Record a new expense for the user.
@@ -54,39 +168,83 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
 
     if firebase.db is None:
         return "Erro: O banco de dados não está disponível no momento."
-    
+
     try:
-        user_id = UserContext.get_user_id()
+        user_id = UserContext.get_user_id() or "daniel"
+        cat_normalizada = normalizar_categoria(categoria, user_id)
+        amount = abs(float(valor))
+
         data_to_save = {
             "id": str(uuid.uuid4()),
             "userId": user_id,
             "user_id": user_id,
             "description": descricao,
-            "amount": valor,
-            "category": categoria,
+            "amount": amount,
+            "category": cat_normalizada,
+            "type": "expense_variable",
             "payment_method": metodo_normalizado,
             "date": datetime.now(timezone.utc).isoformat(),
-            "timestamp": datetime.now(timezone.utc)
+            "timestamp": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
-        
+
         firebase.db.collection("finances").add(data_to_save)
-        logger.info(f"Gasto registrado para [{user_id}]: {descricao} - R$ {valor:.2f} [{metodo_normalizado}]")
+        desc_log = (descricao[:30] + "...") if len(descricao) > 30 else descricao
+        logger.info(f"Gasto registrado para [{user_id}]: {desc_log} - R$ {amount:.2f} [{metodo_normalizado}]")
         return (
-            f"Sucesso! Registrei o gasto de R$ {valor:.2f} com '{descricao}' "
-            f"na categoria {categoria} no cartão **{metodo_normalizado}**."
+            f"Sucesso! Registrei o gasto de R$ {amount:.2f} com '{descricao}' "
+            f"na categoria {cat_normalizada} no cartão **{metodo_normalizado}**."
         )
-    
+
     except Exception as e:
         logger.error(f"Erro ao registrar finanças: {e}")
         return "Desculpe, ocorreu um erro ao salvar seu gasto. Tente novamente mais tarde."
 
-def _normalize_str(s: str) -> str:
-    """Normaliza string para comparação sem acentos e em minúsculas."""
-    import unicodedata
-    if not s:
-        return ""
-    nfkd = unicodedata.normalize("NFKD", s)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
+
+def registrar_receita(descricao: str, valor: float, metodo_recebimento: Optional[str] = None) -> str:
+    """
+    Record a new income/reimbursement for the user (P-0902).
+
+    Args:
+        descricao (str): Income/reimbursement description.
+        valor (float): Amount received.
+        metodo_recebimento (str, optional): Payment method received into (Pix, Cartão de Débito, etc.).
+    """
+    if firebase.db is None:
+        return "Erro: O banco de dados não está disponível no momento."
+
+    try:
+        user_id = UserContext.get_user_id() or "daniel"
+        amount = abs(float(valor))
+        metodo_norm = normalizar_metodo_pagamento(metodo_recebimento) or "Cartão de Débito"
+
+        data_to_save = {
+            "id": str(uuid.uuid4()),
+            "userId": user_id,
+            "user_id": user_id,
+            "description": descricao,
+            "amount": amount,
+            "category": "Receitas",
+            "type": "income",
+            "payment_method": metodo_norm,
+            "date": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        firebase.db.collection("finances").add(data_to_save)
+        desc_log = (descricao[:30] + "...") if len(descricao) > 30 else descricao
+        logger.info(f"Receita registrada para [{user_id}]: {desc_log} - R$ {amount:.2f} [{metodo_norm}]")
+
+        valor_fmt = f"R$ {amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return (
+            f"Sucesso! Registrei a receita de {valor_fmt} referente a '{descricao}' "
+            f"na categoria Receitas ({metodo_norm})."
+        )
+    except Exception as e:
+        logger.error(f"Erro ao registrar receita: {e}")
+        return "Desculpe, ocorreu um erro ao salvar a receita. Tente novamente mais tarde."
+
 
 def _match_category(item_cat: str, target_cat: str) -> bool:
     """Compara categorias tratando variações de escrita e sinônimos comuns."""
@@ -96,8 +254,7 @@ def _match_category(item_cat: str, target_cat: str) -> bool:
         return False
     if t_norm in i_norm or i_norm in t_norm:
         return True
-    
-    # Aliases semânticos usuais
+
     aliases = {
         "moradia": ["casa", "habitacao", "aluguel", "condominio", "contas fixas"],
         "casa": ["moradia", "habitacao", "contas fixas"],
@@ -110,6 +267,7 @@ def _match_category(item_cat: str, target_cat: str) -> bool:
         if alias in i_norm:
             return True
     return False
+
 
 def _calcular_intervalo_busca(
     agora: datetime,
@@ -309,14 +467,14 @@ def consultar_resumo_gastos(
     Args:
         mes (int, optional): Month (1-12). Defaults to current month.
         ano (int, optional): Year (e.g. 2026). Defaults to current year.
-        categoria (str, optional): Specific category to detail (e.g. 'Moradia', 'Alimentação', 'Mercado'). If provided, lists each individual expense in that category.
+        categoria (str, optional): Specific category to detail.
         dias_retroativos (int, optional): Days back to summarize instead of calendar month.
     """
     if firebase.db is None:
         return "Erro: O banco de dados não está disponível no momento."
 
     try:
-        user_id = UserContext.get_user_id()
+        user_id = UserContext.get_user_id() or "daniel"
         agora = datetime.now(timezone.utc)
         inicio, fim, titulo_periodo, ano_alvo, mes_alvo = _calcular_intervalo_busca(agora, mes, ano, dias_retroativos)
 

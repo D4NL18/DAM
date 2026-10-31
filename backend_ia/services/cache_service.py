@@ -103,6 +103,10 @@ class ConversationCacheService:
     REGEX_ACTIONS = re.compile(
         r"\b(gastei|comprei|paguei|compra de|debito|débito|credito|crédito|pix de|enviar pix|"
         r"cria um lembrete|criar lembrete|crie um lembrete|cria uma nota|criar nota|crie uma nota|"
+        r"criar anotacao|cria uma anotacao|crie uma anotacao|salvar nota|salve uma nota|"
+        r"minhas notas|minhas anotacoes|buscar anotacoes|quais anotacoes|onde vc salvou|onde voce salvou|"
+        r"wishlist|lista de desejos|lista de compras|quero comprar|adicione na wishlist|adicionar na wishlist|"
+        r"minha wishlist|pecas de computador|pecas de pc|hardware|"
         r"anota ai|anota aí|anotar|lembrete para|agendar|agenda uma|agende uma|salvar senha|salve a senha|"
         r"tranca o carro|trancar o carro|destrancar o carro|fala na alexa|falar na alexa|"
         r"adicionar despesa|adiciona despesa|bater ponto|registrar ponto|ponto de entrada|ponto de saida|"

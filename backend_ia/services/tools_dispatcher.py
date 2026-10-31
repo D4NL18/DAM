@@ -23,8 +23,17 @@ from services.tools.notes_tool import (
     criar_anotacao,
     criar_lembrete,
     buscar_anotacoes,
+    atualizar_anotacao,
+    excluir_anotacao,
     listar_lembretes_pendentes,
     concluir_lembrete
+)
+from services.tools.wishlist_tool import (
+    adicionar_item_wishlist,
+    consultar_wishlist,
+    atualizar_item_wishlist,
+    marcar_item_wishlist_comprado,
+    remover_item_wishlist
 )
 from services.tools.gift_curator_tool import (
     salvar_ideia_presente,
@@ -106,8 +115,15 @@ class ToolsDispatcher:
         "finance": [registrar_gasto, registrar_receita, consultar_resumo_gastos, dividir_conta_restaurante],
         "calendar_notes": [
             agendar_evento, consultar_agenda, editar_evento, excluir_evento,
-            criar_anotacao, criar_lembrete, buscar_anotacoes,
-            listar_lembretes_pendentes, concluir_lembrete
+            criar_anotacao, criar_lembrete, buscar_anotacoes, atualizar_anotacao, excluir_anotacao,
+            listar_lembretes_pendentes, concluir_lembrete,
+            adicionar_item_wishlist, consultar_wishlist, atualizar_item_wishlist,
+            marcar_item_wishlist_comprado, remover_item_wishlist
+        ],
+        "wishlist": [
+            adicionar_item_wishlist, consultar_wishlist, atualizar_item_wishlist,
+            marcar_item_wishlist_comprado, remover_item_wishlist,
+            criar_anotacao, buscar_anotacoes, atualizar_anotacao, excluir_anotacao
         ],
         "mobility": [
             consultar_rota, calcular_horario_saida, otimizar_rota_multiplos_pontos,
@@ -136,6 +152,12 @@ class ToolsDispatcher:
         "translation": [traduzir_conteudo]
     }
 
+    # Regex de saudações/conversas puramente casuais que não devem herdar ferramentas de contexto anterior
+    CASUAL_GREETING_REGEX = re.compile(
+        r"^(oi+|ola+|bom dia.*|boa tarde.*|boa noite.*|obrigad[oa].*|valeu.*|tudo bem\??|quem e voce\??)$",
+        re.IGNORECASE
+    )
+
     # Regex de detecção de intenções com normalização sem acentos
     INTENT_REGEXES = {
         "finance": re.compile(
@@ -144,10 +166,18 @@ class ToolsDispatcher:
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(
-            r"\b(agenda|agendar|agendad[oa]|compromisso|compromissos|evento|eventos|lembrete|lembretes|anotacao|anotacoes|anotar|nota|notas|tarefa|tarefas|pendente|pendentes|minha agenda|reuniao|reunioes|programad[oa]|consulta|consultas|medico|dentista|treino|aniversario|festa|almoco|jantar|encontro|show)\b|"
-            r"\b(marcar|marque|anota|anote|salva|salve|lembra|lembre|agende)\b|"
+            r"\b(agenda|agendar|agendad[oa]s?|compromissos?|eventos?|lembretes?|anotac(ao|oes)|anotar|notas?|tarefas?|pendentes?|minha agenda|reuni(ao|oes)|programad[oa]s?|consultas?|medico|dentista|treino|aniversario|festa|almoco|jantar|encontro|show|informac(ao|oes)|orcamentos?|historico de notas)\b|"
+            r"\b(marcar|marque|anot(a|e|ei|ou|ado|ada)|salv(a|e|ar|ei|ou|os|as)|guard(a|e|ar|ei|ou|ados|adas)|lembr(a|e|ar)|agend(a|e|ar)|registr(a|e|ar|ei|ou|ados|adas))\b|"
             r"\b(tenho|vou ter|vamos ter|vou)\b.*?\b(as\s+\d{1,2}|\d{1,2}h|\d{1,2}:\d{2}|horas?|hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b|"
             r"\b(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b.*?\b(tenho|vou|as\s+\d{1,2}|\d{1,2}h|\d{1,2}:\d{2})\b",
+            re.IGNORECASE
+        ),
+        "wishlist": re.compile(
+            r"\b(wishlist|wish list|lista de desejos?|lista de compras?|quero comprar|pretendo comprar|vou comprar|comprar no futuro|itens para comprar|"
+            r"adicion(e|a|ar) (na|a|em|este|esse|isso)|me mostre minha (wishlist|lista)|"
+            r"pecas? de (computador|pc)|pecas? (que|do|pro|para)|computador|meu pc|montar pc|orcamento pc|micro\s?center|"
+            r"processador|placa de video|placa[- ]mae|motherboard|rtx\s?\d+|gtx\s?\d+|ryzen|core i[3579]|i7\s?\d+|i5\s?\d+|i9\s?\d+|zotac|corsair|asus|gigabyte|msi|memoria ram|ssd|nvme|fonte \d+w|80\s?plus|power\s?bank|"
+            r"mercadolivre\.com|amazon\.com|kabum\.com|pichau\.com|terabyteshop\.com)\b",
             re.IGNORECASE
         ),
         "mobility": re.compile(
@@ -235,22 +265,33 @@ class ToolsDispatcher:
         return sem_acento.lower()
 
     @classmethod
-    def detect_domains(cls, text: str) -> List[str]:
-        """Identifica quais domínios funcionais foram ativados pelo texto."""
+    def detect_domains(cls, text: str, context_text: str = "") -> List[str]:
+        """Identifica quais domínios funcionais foram ativados pelo texto (e contexto conversacional se aplicável)."""
         matched = []
         clean_text = cls._normalize(text)
         for domain, regex in cls.INTENT_REGEXES.items():
             if regex.search(clean_text):
                 matched.append(domain)
+
+        # Se houver contexto recente e a mensagem atual não for uma saudação casual,
+        # preserva continuidade para sessões multi-turn (ex: adicionando itens seguidos na wishlist/notas/finanças)
+        if context_text and not cls.CASUAL_GREETING_REGEX.match(clean_text.strip()):
+            ctx_clean = cls._normalize(context_text)
+            sticky_domains = {"wishlist", "calendar_notes", "finance"}
+            for d in sticky_domains:
+                if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
+                    if not matched or d in {"wishlist", "calendar_notes"}:
+                        matched.append(d)
+
         return matched
 
     @classmethod
-    def resolve_tools(cls, text: str, has_media: bool = False) -> Optional[List[Callable]]:
+    def resolve_tools(cls, text: str, has_media: bool = False, context_text: str = "") -> Optional[List[Callable]]:
         """
         P-1101: Retorna a lista restrita de ferramentas para a intenção.
         Retorna None se for conversa casual/geral para zero overhead de tokens.
         """
-        domains = cls.detect_domains(text)
+        domains = cls.detect_domains(text, context_text=context_text)
 
         # Se houver mídia (foto, áudio, doc), carrega ferramentas essenciais
         if has_media:
@@ -286,4 +327,3 @@ class ToolsDispatcher:
                 if t not in all_tools:
                     all_tools.append(t)
         return all_tools
-

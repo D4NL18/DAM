@@ -84,6 +84,37 @@ class TestToolsDispatcher:
             tool_names = [getattr(t, "__name__", str(t)) for t in tools]
             assert any("agenda" in name or "lembrete" in name for name in tool_names)
 
+    def test_wishlist_and_notes_detection(self):
+        """Garante que pedidos de wishlist, peças de computador e anotações ativam as tools de banco."""
+        frases_wishlist_notas = [
+            "adicione na wishlist: i7 14700K 339.99 dolares",
+            "zotac RTX 5060 ti 8GB 379.99 dolares",
+            "ASUS B760M-AYW WIFI D4 II Intel LGA 1700 microATX Motherboard 119.99 dolares",
+            "Fonte Corsair CX750 750W 80Plus 399,99 reais",
+            "https://www.mercadolivre.com.br/power-bank-baseus adicione na wishlist",
+            "me mostre minha wishlist",
+            "quais anotações vc tem?",
+            "e as peças de computador? onde vc salvou? quais sao?",
+        ]
+        for frase in frases_wishlist_notas:
+            tools = ToolsDispatcher.resolve_tools(frase)
+            assert tools is not None, f"Esperava tools para frase: '{frase}'"
+            tool_names = [getattr(t, "__name__", str(t)) for t in tools]
+            assert "adicionar_item_wishlist" in tool_names
+            assert "consultar_wishlist" in tool_names
+            assert "criar_anotacao" in tool_names
+            assert "buscar_anotacoes" in tool_names
+
+    def test_multi_turn_context_keeps_wishlist_tools_active(self):
+        """Quando o usuário envia itens em sequência após abrir a conversa de wishlist, o context_text mantém as tools ativas."""
+        tools = ToolsDispatcher.resolve_tools(
+            "Mais esse item por 199 reais",
+            context_text="adicione na wishlist: i7 14700K"
+        )
+        assert tools is not None
+        tool_names = [getattr(t, "__name__", str(t)) for t in tools]
+        assert "adicionar_item_wishlist" in tool_names
+
     def test_get_all_tools(self):
         """P-1108: ToolsDispatcher disponibiliza o catálogo completo de ferramentas para resiliência/auto-healing."""
         all_tools = ToolsDispatcher.get_all_tools()
@@ -92,6 +123,8 @@ class TestToolsDispatcher:
         assert "agendar_evento" in tool_names
         assert "registrar_gasto" in tool_names
         assert "consultar_rota" in tool_names
+        assert "adicionar_item_wishlist" in tool_names
+        assert "consultar_wishlist" in tool_names
 
     def test_media_context_returns_vision_and_converter_tools(self):
         """P-1101: Quando houver imagem ou documento, ferramentas adequadas são carregadas."""
@@ -128,10 +161,14 @@ class TestPromptComposerModularity:
         prompt_cal = PromptComposer.compose_system_instruction(domains=["calendar_notes"])
         assert "agendar_evento" in prompt_cal
         assert "listar_lembretes_pendentes" in prompt_cal
+        assert "adicionar_item_wishlist" in prompt_cal
+
+        prompt_wish = PromptComposer.compose_system_instruction(domains=["wishlist"])
+        assert "adicionar_item_wishlist" in prompt_wish
+        assert "consultar_wishlist" in prompt_wish
 
         prompt_video = PromptComposer.compose_system_instruction(domains=["saved_videos"])
         assert "salvar_video" in prompt_video
 
         prompt_files = PromptComposer.compose_system_instruction(domains=["media_files"])
         assert "gerenciar_arquivos" in prompt_files
-

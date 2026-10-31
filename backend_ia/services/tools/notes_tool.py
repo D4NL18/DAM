@@ -1,9 +1,11 @@
 import logging
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from config import firebase
+from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -13,12 +15,34 @@ TAG_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_\-]+")
 # Armazenamento em memória para fallback/mock (quando Firebase não inicializado ou em testes)
 _mock_storage: List[Dict[str, Any]] = []
 
+# Sinônimos semânticos para buscas de hardware / peças de computador nas anotações
+_PC_SYNONYM_TRIGGERS = {
+    "pc", "computador", "peca", "pecas", "hardware", "componente", "componentes",
+    "setup", "upgrade", "maquina", "desktop", "gamer", "miami", "micro center", "microcenter"
+}
+_PC_NOTE_KEYWORDS = {
+    "pc", "computador", "peca", "pecas", "hardware", "processador", "cpu", "gpu",
+    "placa de video", "placa-mae", "placa mae", "motherboard", "rtx", "gtx", "radeon",
+    "geforce", "intel", "core i", "i5", "i7", "i9", "ryzen", "amd", "zotac", "asus",
+    "msi", "gigabyte", "corsair", "ssd", "nvme", "ram", "ddr4", "ddr5", "fonte",
+    "micro center", "microcenter", "combo"
+}
+
+
 def _reset_mock_storage() -> None:
     """Limpa o armazenamento em memória (útil para testes unitários)."""
     global _mock_storage
     _mock_storage.clear()
 
-from services.user_context import UserContext
+
+def _normalizar_texto(texto: str) -> str:
+    """Remove acentos e normaliza para minúsculas."""
+    if not texto:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", str(texto))
+    sem_acento = "".join([c for c in nfkd if not unicodedata.combining(c)])
+    return sem_acento.lower().strip()
+
 
 def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
     """Recupera todos os itens da coleção indicada ou de ambas se None, ou do mock, filtrados pelo usuário ativo."""
@@ -28,12 +52,27 @@ def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
             if colecao:
                 docs = firebase.db.collection(colecao).stream()
-                todos = [doc.to_dict() for doc in docs]
+                for doc in docs:
+                    d = doc.to_dict()
+                    if d:
+                        d.setdefault("id", doc.id)
+                        d.setdefault("_colecao", colecao)
+                        todos.append(d)
             else:
                 docs_rem = firebase.db.collection("notes_reminders").stream()
-                todos = [doc.to_dict() for doc in docs_rem]
+                for doc in docs_rem:
+                    d = doc.to_dict()
+                    if d:
+                        d.setdefault("id", doc.id)
+                        d.setdefault("_colecao", "notes_reminders")
+                        todos.append(d)
                 docs_notes = firebase.db.collection("information_notes").stream()
-                todos.extend([doc.to_dict() for doc in docs_notes])
+                for doc in docs_notes:
+                    d = doc.to_dict()
+                    if d:
+                        d.setdefault("id", doc.id)
+                        d.setdefault("_colecao", "information_notes")
+                        todos.append(d)
         except Exception as e:
             logger.error(f"Erro ao ler Firestore: {e}. Usando mock.")
             if colecao:
@@ -49,18 +88,48 @@ def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
     # Filtra estritamente pelo usuário ativo (retrocompatibilidade: se sem user_id, pertence ao daniel)
     return [i for i in todos if (i.get("userId") or i.get("user_id") or "daniel") == user_id]
 
+
+def _obter_todas_anotacoes() -> List[Dict[str, Any]]:
+    """
+    Recupera e unifica todas as anotações do usuário ativo tanto da coleção dedicada
+    'information_notes' quanto de registros legados ('tipo' == 'nota') em 'notes_reminders'.
+    """
+    notas_map: Dict[str, Dict[str, Any]] = {}
+    for item in _obter_todos_itens(colecao="information_notes"):
+        item_id = str(item.get("id") or uuid.uuid4())
+        notas_map[item_id] = item
+
+    for item in _obter_todos_itens(colecao="notes_reminders"):
+        if item.get("tipo") == "nota":
+            item_id = str(item.get("id") or uuid.uuid4())
+            if item_id not in notas_map:
+                notas_map[item_id] = item
+
+    notas = list(notas_map.values())
+    notas.sort(key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""), reverse=True)
+    return notas
+
+
 def _salvar_item(item: Dict[str, Any], colecao: str = "notes_reminders") -> None:
     """Salva um item no Firestore na coleção indicada ou no armazenamento em memória vinculado ao usuário ativo."""
     user_id = UserContext.get_user_id()
     item["userId"] = user_id
     item["user_id"] = user_id
     item["_colecao"] = colecao
-    _mock_storage.append(item)
+
+    existing_idx = next((idx for idx, x in enumerate(_mock_storage) if x.get("id") == item.get("id")), None)
+    if existing_idx is not None:
+        _mock_storage[existing_idx] = dict(item)
+    else:
+        _mock_storage.append(item)
+
     if firebase.db is not None:
         try:
             firebase.db.collection(colecao).document(item["id"]).set(item)
+            logger.info(f"[NOTES] Item '{item.get('titulo')}' ({item['id']}) salvo em '{colecao}' para {user_id}.")
         except Exception as e:
             logger.error(f"Erro ao salvar no Firestore ({colecao}): {e}. Mantido em mock.")
+
 
 def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes_reminders") -> bool:
     """Atualiza um item no Firestore e no mock, garantindo que pertença ao usuário ativo."""
@@ -71,13 +140,13 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes
             item.update(updates)
             atualizado = True
             break
-            
+
     if firebase.db is not None:
         try:
             doc_ref = firebase.db.collection(colecao).document(item_id)
             doc = doc_ref.get()
             if doc.exists:
-                doc_data = doc.to_dict()
+                doc_data = doc.to_dict() or {}
                 if (doc_data.get("userId") or doc_data.get("user_id") or "daniel") == user_id:
                     doc_ref.update(updates)
                     atualizado = True
@@ -87,6 +156,36 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes
             logger.error(f"Erro ao atualizar Firestore doc {item_id} em {colecao}: {e}")
 
     return atualizado
+
+
+def _remover_item(item_id: str, colecao: str = "information_notes") -> bool:
+    """Remove um item do Firestore e do mock garantindo isolamento por usuário."""
+    global _mock_storage
+    user_id = UserContext.get_user_id()
+    removido = False
+
+    tam_antes = len(_mock_storage)
+    _mock_storage = [
+        i for i in _mock_storage
+        if not (i.get("id") == item_id and (i.get("userId") or i.get("user_id") or "daniel") == user_id)
+    ]
+    if len(_mock_storage) < tam_antes:
+        removido = True
+
+    if firebase.db is not None:
+        for col in {colecao, "information_notes", "notes_reminders"}:
+            try:
+                doc_ref = firebase.db.collection(col).document(item_id)
+                doc = doc_ref.get()
+                if doc.exists:
+                    doc_data = doc.to_dict() or {}
+                    if (doc_data.get("userId") or doc_data.get("user_id") or "daniel") == user_id:
+                        doc_ref.delete()
+                        removido = True
+            except Exception as e:
+                logger.error(f"Erro ao excluir Firestore doc {item_id} em {col}: {e}")
+
+    return removido
 
 
 def calcular_proxima_ocorrencia(data_hora_str: str, recorrencia: Optional[str], data_base: Optional[datetime] = None) -> str:
@@ -130,7 +229,6 @@ def calcular_proxima_ocorrencia(data_hora_str: str, recorrencia: Optional[str], 
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
-
 def _extrair_tokens_tags(dado: Any) -> List[str]:
     """Extrai recursivamente tokens válidos de tags de strings ou listas aninhadas."""
     if isinstance(dado, str):
@@ -154,29 +252,187 @@ def _formatar_tags_exibicao(tags_raw: Any) -> str:
 
 def criar_anotacao(titulo: str, conteudo: str, tags: Optional[Any] = None) -> str:
     """
-    Save personal note, quote, or information in the dedicated information database.
+    Save personal note, quote, list, or information in the dedicated Firestore 'information_notes' database.
     Does NOT create a reminder.
 
     Args:
-        titulo (str): Note or topic title (e.g. 'Orçamento PC EUA', 'Anotação de reunião').
-        conteudo (str): Detailed text, numbers, or information to remember.
+        titulo (str): Note or topic title (e.g. 'Orçamento PC EUA', 'Peças de Computador', 'Anotação de reunião').
+        conteudo (str): Detailed text, numbers, components, or information to remember.
         tags (list[str] or str, optional): Tags for categorization.
     """
     tags_limpas = list(dict.fromkeys(_extrair_tokens_tags(tags))) if tags else []
+    agora_iso = datetime.now(timezone.utc).isoformat()
 
     item = {
         "id": str(uuid.uuid4()),
         "tipo": "nota",
-        "titulo": titulo.strip(),
-        "conteudo": conteudo.strip(),
+        "titulo": (titulo or "Anotação").strip(),
+        "conteudo": (conteudo or "").strip(),
         "tags": tags_limpas,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": agora_iso,
+        "updated_at": agora_iso,
     }
 
     _salvar_item(item, colecao="information_notes")
     tags_str = _formatar_tags_exibicao(tags_limpas)
     return f"📝 Anotação '{item['titulo']}' salva com sucesso no banco de informações!{tags_str} (ID: {item['id'][:8]})"
+
+
+def _corresponde_termo_nota(nota: Dict[str, Any], termo_busca: str) -> bool:
+    """Verifica correspondência semântica e sem acentos de uma anotação com o termo buscado."""
+    termo_norm = _normalizar_texto(termo_busca)
+    if not termo_norm:
+        return True
+
+    texto_nota = _normalizar_texto(
+        f"{nota.get('titulo', '')} {nota.get('conteudo', '')} {' '.join(nota.get('tags', []))}"
+    )
+
+    if termo_norm in texto_nota:
+        return True
+
+    tokens = [
+        t for t in re.findall(r"[a-z0-9]+", termo_norm)
+        if len(t) >= 2 and t not in {"de", "do", "da", "dos", "das", "no", "na", "em", "para", "pro", "pra", "meu", "minha"}
+    ]
+    if any(t in _PC_SYNONYM_TRIGGERS for t in tokens) or termo_norm in _PC_SYNONYM_TRIGGERS:
+        if any(kw in texto_nota for kw in _PC_NOTE_KEYWORDS):
+            return True
+
+    if tokens and all(t in texto_nota for t in tokens):
+        return True
+
+    return False
+
+
+def _formatar_lista_anotacoes(notas: List[Dict[str, Any]], cabecalho: str) -> str:
+    linhas = [cabecalho]
+    for idx, item in enumerate(notas, start=1):
+        tags_fmt = f" `#{' #'.join(item.get('tags', []))}`" if item.get("tags") else ""
+        linhas.append(
+            f"{idx}. **{item.get('titulo', 'Sem título')}**{tags_fmt} *(ID: {str(item.get('id', ''))[:8]})*\n"
+            f"   {item.get('conteudo', '')}"
+        )
+    return "\n\n".join(linhas)
+
+
+def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> str:
+    """
+    Search saved notes by keyword or category tag in the Firestore information notes database.
+    Leave termo and tag empty (None) to list ALL saved notes.
+
+    Args:
+        termo (str, optional): Search keyword in title or content.
+        tag (str, optional): Tag name to filter.
+    """
+    notas = _obter_todas_anotacoes()
+
+    if not notas:
+        return "Nenhuma anotação encontrada no seu histórico."
+
+    filtradas = []
+    termo_busca = termo.strip() if termo else None
+    tag_busca = _normalizar_texto(tag) if tag else None
+
+    for n in notas:
+        corresponde_termo = _corresponde_termo_nota(n, termo_busca) if termo_busca else True
+        corresponde_tag = True
+
+        if tag_busca:
+            tags_item = [_normalizar_texto(t) for t in n.get("tags", [])]
+            corresponde_tag = any(tag_busca in t for t in tags_item) or (tag_busca in _normalizar_texto(n.get("titulo", "")))
+
+        if corresponde_termo and corresponde_tag:
+            filtradas.append(n)
+
+    if not filtradas:
+        criterios = []
+        if termo:
+            criterios.append(f"termo '{termo}'")
+        if tag:
+            criterios.append(f"tag '{tag}'")
+        msg_nao_encontrada = f"Nenhuma anotação encontrada para os critérios informados ({', '.join(criterios)})."
+        # Retorna também todas as anotações existentes como contexto de fallback para evitar falso negativo na IA
+        fallback_lista = _formatar_lista_anotacoes(
+            notas,
+            f"📋 **Suas Anotações Salvas no Banco ({len(notas)}):**"
+        )
+        return f"{msg_nao_encontrada}\n\n{fallback_lista}"
+
+    return _formatar_lista_anotacoes(filtradas, f"📋 **Anotações Encontradas ({len(filtradas)}):**")
+
+
+def atualizar_anotacao(
+    id_ou_titulo: str,
+    novo_titulo: Optional[str] = None,
+    novo_conteudo: Optional[str] = None,
+    tags: Optional[Any] = None
+) -> str:
+    """
+    Update an existing note in the Firestore database by its ID prefix or title.
+
+    Args:
+        id_ou_titulo (str): Note ID (or prefix) or title substring to locate.
+        novo_titulo (str, optional): New title if changing.
+        novo_conteudo (str, optional): Updated content text.
+        tags (list[str] or str, optional): Updated tags list.
+    """
+    termo = _normalizar_texto(id_ou_titulo)
+    if not termo:
+        return "Por favor, informe o ID ou título da anotação que deseja atualizar."
+
+    notas = _obter_todas_anotacoes()
+    candidato = None
+    for n in notas:
+        nid = str(n.get("id", "")).lower()
+        ntit = _normalizar_texto(n.get("titulo", ""))
+        if nid == termo or nid.startswith(termo) or termo in ntit:
+            candidato = n
+            break
+
+    if not candidato:
+        return f"Não encontrei nenhuma anotação com o termo ou ID '{id_ou_titulo}'."
+
+    updates: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if novo_titulo and novo_titulo.strip():
+        updates["titulo"] = novo_titulo.strip()
+    if novo_conteudo and novo_conteudo.strip():
+        updates["conteudo"] = novo_conteudo.strip()
+    if tags is not None:
+        updates["tags"] = list(dict.fromkeys(_extrair_tokens_tags(tags)))
+
+    colecao_alvo = candidato.get("_colecao") or "information_notes"
+    _atualizar_item(candidato["id"], updates, colecao=colecao_alvo)
+    tit_final = updates.get("titulo") or candidato.get("titulo")
+    return f"✅ Anotação **'{tit_final}'** (ID: `{candidato['id'][:8]}`) atualizada com sucesso no banco de dados!"
+
+
+def excluir_anotacao(id_ou_titulo: str) -> str:
+    """
+    Delete a saved note from the Firestore database by its ID prefix or title.
+
+    Args:
+        id_ou_titulo (str): Note ID (or prefix) or title substring to delete.
+    """
+    termo = _normalizar_texto(id_ou_titulo)
+    if not termo:
+        return "Por favor, informe o ID ou título da anotação que deseja excluir."
+
+    notas = _obter_todas_anotacoes()
+    candidato = None
+    for n in notas:
+        nid = str(n.get("id", "")).lower()
+        ntit = _normalizar_texto(n.get("titulo", ""))
+        if nid == termo or nid.startswith(termo) or termo in ntit:
+            candidato = n
+            break
+
+    if not candidato:
+        return f"Não encontrei nenhuma anotação com o termo ou ID '{id_ou_titulo}'."
+
+    colecao_alvo = candidato.get("_colecao") or "information_notes"
+    _remover_item(candidato["id"], colecao=colecao_alvo)
+    return f"🗑️ Anotação **'{candidato.get('titulo')}'** removida com sucesso do banco de dados!"
 
 
 def criar_lembrete(
@@ -249,61 +505,6 @@ def criar_lembrete(
     )
 
 
-def buscar_anotacoes(termo: Optional[str] = None, tag: Optional[str] = None) -> str:
-    """
-    Search saved notes by keyword or category tag in the information notes database.
-
-    Args:
-        termo (str, optional): Search keyword in title or content.
-        tag (str, optional): Tag name to filter.
-    """
-    notas = _obter_todos_itens(colecao="information_notes")
-    if not notas:
-        todos = _obter_todos_itens(colecao="notes_reminders")
-        notas = [item for item in todos if item.get("tipo") == "nota"]
-
-    if not notas:
-        return "Nenhuma anotação encontrada no seu histórico."
-
-    filtradas = []
-    termo_busca = termo.strip().lower() if termo else None
-    tag_busca = tag.strip().lower() if tag else None
-
-    for n in notas:
-        corresponde_termo = True
-        corresponde_tag = True
-
-        if termo_busca:
-            tit = n.get("titulo", "").lower()
-            cont = n.get("conteudo", "").lower()
-            corresponde_termo = (termo_busca in tit) or (termo_busca in cont)
-
-        if tag_busca:
-            tags_item = [t.lower() for t in n.get("tags", [])]
-            corresponde_tag = any(tag_busca in t for t in tags_item)
-
-        if corresponde_termo and corresponde_tag:
-            filtradas.append(n)
-
-    if not filtradas:
-        criterios = []
-        if termo:
-            criterios.append(f"termo '{termo}'")
-        if tag:
-            criterios.append(f"tag '{tag}'")
-        return f"Nenhuma anotação encontrada para os critérios informados ({', '.join(criterios)})."
-
-    linhas = [f"📋 **Anotações Encontradas ({len(filtradas)}):**"]
-    for idx, item in enumerate(filtradas, start=1):
-        tags_fmt = f" `#{' #'.join(item.get('tags', []))}`" if item.get("tags") else ""
-        linhas.append(
-            f"{idx}. **{item['titulo']}**{tags_fmt} *(ID: {item['id'][:8]})*\n"
-            f"   {item['conteudo']}"
-        )
-
-    return "\n\n".join(linhas)
-
-
 def _obter_data_filtro_lembrete(data_referencia: Optional[str]) -> str:
     """Retorna a string YYYY-MM-DD da data de referência informada ou de hoje em Brasília."""
     if data_referencia:
@@ -346,7 +547,7 @@ def listar_lembretes_pendentes(apenas_hoje: bool = True, data_referencia: Option
         apenas_hoje (bool, optional): If True (default), filter for today only. If False, list all.
         data_referencia (str, optional): Target date 'YYYY-MM-DD' filter.
     """
-    todos = _obter_todos_itens()
+    todos = _obter_todos_itens(colecao="notes_reminders")
     lembretes = [
         item for item in todos 
         if item.get("tipo") == "lembrete" and item.get("status") == "pendente"

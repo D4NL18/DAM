@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 import base64
 import json
 from fastapi import APIRouter, Request, HTTPException, Header
@@ -55,7 +56,6 @@ async def gcp_billing_alert(
     # Salva snapshot no Firestore para consulta da IA via chat
     try:
         from config import firebase
-        from datetime import timezone
         if firebase.db is not None:
             firebase.db.collection("gcp_billing_snapshots").document("latest").set({
                 "cost_amount": cost_amount,

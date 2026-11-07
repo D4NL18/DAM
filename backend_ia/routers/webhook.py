@@ -1,5 +1,7 @@
 import logging
 import re
+import asyncio
+from collections import OrderedDict
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException, Header
 from typing import Optional
 from services.ai_service import AIService
@@ -12,6 +14,12 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Cache LRU para deduplicação idempotente de message_id
+_PROCESSED_MESSAGE_IDS = OrderedDict()
+
+def _reset_processed_message_ids():
+    _PROCESSED_MESSAGE_IDS.clear()
 
 def normalize_digits(value: str) -> str:
     """Extrai apenas dígitos de uma string."""
@@ -115,14 +123,17 @@ async def process_and_reply(
                 "Analise esta imagem enviada pelo usuário.",
                 "Transcreva e responda ao que o usuário solicitou neste áudio."
             ]
+            or str(text).startswith("Process this document:")
         ):
             logger.warning(f"--> [BACKGROUND] Download da mídia falhou para {masked_jid}. Enviando aviso ao usuário.")
             aviso = "Não consegui carregar o arquivo de mídia que você enviou no momento. Poderia tentar reenviar, por favor?"
-            WhatsAppService.send_text(remote_jid, aviso)
-            ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=aviso)
+            await asyncio.to_thread(WhatsAppService.send_text, remote_jid, aviso)
+            await asyncio.to_thread(ChatRepository.save_log, remote_jid=remote_jid, from_me=True, text=aviso)
             return
 
-        ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
+        ai_response = await asyncio.to_thread(
+            AIService.process_message, remote_jid, text, media_base64, media_mimetype
+        )
         logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars).")
 
         # Verifica se deve responder em áudio
@@ -140,9 +151,9 @@ async def process_and_reply(
         enviado_com_sucesso = False
         if deve_enviar_audio:
             logger.info(f"--> [BACKGROUND] Sintetizando voz via TTSService para {masked_jid}...")
-            audio_bytes = TTSService.synthesize_speech(ai_response)
+            audio_bytes = await asyncio.to_thread(TTSService.synthesize_speech, ai_response)
             if audio_bytes:
-                resp = WhatsAppService.send_voice_note(remote_jid, audio_bytes)
+                resp = await asyncio.to_thread(WhatsAppService.send_voice_note, remote_jid, audio_bytes)
                 if resp is not None:
                     logger.info(f"--> [BACKGROUND] Áudio entregue via WhatsApp para {masked_jid}")
                     enviado_com_sucesso = True
@@ -151,10 +162,10 @@ async def process_and_reply(
 
         # Fallback para envio de texto caso áudio não tenha sido acionado ou tenha falhado
         if not enviado_com_sucesso:
-            resp = WhatsAppService.send_text(remote_jid, ai_response)
+            resp = await asyncio.to_thread(WhatsAppService.send_text, remote_jid, ai_response)
             logger.info(f"--> [BACKGROUND] Mensagem de texto entregue via WhatsApp para {masked_jid}")
 
-        ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=ai_response)
+        await asyncio.to_thread(ChatRepository.save_log, remote_jid=remote_jid, from_me=True, text=ai_response)
     except Exception as e:
         logger.error(f"--> [BACKGROUND ERROR] Falha no processamento da mensagem: {e}")
 
@@ -196,6 +207,8 @@ async def whatsapp_webhook(
     remote_jid = key.get("remoteJid", "")
     message_id = key.get("id")
     masked_jid = SecurityService.mask_phone(remote_jid)
+
+
 
     # Guard clause: ignora mensagens enviadas pelo próprio bot (anti-loop)
     if key.get("fromMe", False):
@@ -281,6 +294,15 @@ async def whatsapp_webhook(
     # Anti-loop: se terminar com caractere invisível, foi enviado pelo próprio bot
     if text.endswith("\u200b"):
         return {"status": "ignored", "reason": "bot_echo_anti_loop"}
+
+    # Deduplicação idempotente por message_id antes de despachar processamento
+    if message_id and not message_id.startswith("MSG_"):
+        if message_id in _PROCESSED_MESSAGE_IDS:
+            logger.info(f"--> [WEBHOOK] Mensagem duplicada ignorada (id={message_id})")
+            return {"status": "ignored", "reason": "duplicate_message_id"}
+        _PROCESSED_MESSAGE_IDS[message_id] = True
+        if len(_PROCESSED_MESSAGE_IDS) > 2000:
+            _PROCESSED_MESSAGE_IDS.popitem(last=False)
 
     # Salva log da mensagem do usuário no banco
     ChatRepository.save_log(remote_jid=remote_jid, from_me=False, text=text, message_id=message_id)

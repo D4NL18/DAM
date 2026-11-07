@@ -8,7 +8,7 @@ from PIL import Image
 import fitz  # PyMuPDF
 from pypdf import PdfReader, PdfWriter
 from docx import Document
-from pdf2docx import Converter
+# Nota: pdf2docx importado lazily em pdf_to_docx
 
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -308,6 +308,10 @@ class FileConverterService:
                 f.write(pdf_bytes)
 
             try:
+                try:
+                    from pdf2docx import Converter
+                except Exception as imp_err:
+                    raise ValueError(f"Módulo de conversão pdf2docx indisponível no ambiente: {imp_err}")
                 cv = Converter(pdf_path)
                 cv.convert(docx_path, start=0, end=None)
                 cv.close()

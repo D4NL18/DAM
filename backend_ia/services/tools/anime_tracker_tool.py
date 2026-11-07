@@ -199,7 +199,18 @@ def _renovar_proximos_episodios_expirados(forcar: bool = False) -> None:
                         "tempo_restante_segundos": nep["timeUntilAiring"]
                     }
 
+                title_obj = media.get("title") or {}
+                romaji_title = title_obj.get("romaji")
+                english_title = title_obj.get("english")
+                principal_title = romaji_title or english_title or "Anime"
+
                 if doc_id in _MEMORY_WATCHLIST:
+                    if romaji_title or english_title:
+                        _MEMORY_WATCHLIST[doc_id]["titulo_principal"] = principal_title
+                    if romaji_title:
+                        _MEMORY_WATCHLIST[doc_id]["titulo_romaji"] = romaji_title
+                    if english_title:
+                        _MEMORY_WATCHLIST[doc_id]["titulo_ingles"] = english_title
                     _MEMORY_WATCHLIST[doc_id]["proximo_episodio"] = proximo_ep
                     _MEMORY_WATCHLIST[doc_id]["status_transmissao"] = media.get("status", "DESCONHECIDO")
                     _MEMORY_WATCHLIST[doc_id]["ultimo_episodio_visto"] = int(entry.get("progress", 0))
@@ -207,8 +218,9 @@ def _renovar_proximos_episodios_expirados(forcar: bool = False) -> None:
                 else:
                     _MEMORY_WATCHLIST[doc_id] = {
                         "anilist_id": media["id"],
-                        "titulo_principal": media["title"]["romaji"] or media["title"]["english"] or "Anime",
-                        "titulo_ingles": media["title"]["english"] or "Anime",
+                        "titulo_principal": principal_title,
+                        "titulo_romaji": romaji_title or principal_title,
+                        "titulo_ingles": english_title or principal_title,
                         "status_transmissao": media.get("status", "DESCONHECIDO"),
                         "total_episodios": media.get("episodes"),
                         "status_usuario": "assistindo",
@@ -318,6 +330,7 @@ def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
             anime_info = {
                 "anilist_id": media["id"],
                 "titulo_principal": titulo_principal,
+                "titulo_romaji": media["title"].get("romaji") or titulo_principal,
                 "titulo_ingles": titulo_ingles,
                 "status_transmissao": media.get("status", "DESCONHECIDO"),
                 "total_episodios": media.get("episodes"),
@@ -599,6 +612,127 @@ def explorar_temporada_animes(estacao: Optional[str] = None, ano: Optional[int] 
         linhas.append("")
 
     return "\n".join(linhas).strip()
+
+
+
+
+def _formatar_titulo_anime_display(item: Dict[str, Any]) -> str:
+    romaji = (item.get("titulo_romaji") or item.get("titulo_principal") or "").strip()
+    ingles = (item.get("titulo_ingles") or "").strip()
+    if ingles and romaji and ingles.lower() != romaji.lower():
+        return f"{romaji} ({ingles})"
+    return romaji or ingles or "Anime"
+
+
+def consultar_meu_episodio_anime(titulo: str) -> str:
+    """
+    Informa qual episódio você está assistindo (em qual episódio você parou) de um determinado anime na sua watchlist.
+    Use esta ferramenta quando o usuário perguntar: 'qual ep eu tô de <anime>?', 'em qual episódio parei em <anime>?',
+    'qual o meu progresso em <anime>?' ou 'quantos episódios já assisti de <anime>?'.
+
+    Args:
+        titulo (str): Nome ou título do anime (ex: 'Solo Leveling', 'Frieren', 'One Piece', 'Mushoku Tensei').
+    """
+    titulo_busca = titulo.strip()
+    if not titulo_busca:
+        return "Erro: Informe o nome do anime para consultar seu progresso."
+
+    titulo_busca_lower = titulo_busca.lower()
+
+    # 1. Busca na memória (_MEMORY_WATCHLIST)
+    anime_salvo = None
+    for item in _MEMORY_WATCHLIST.values():
+        t_prin = (item.get("titulo_principal") or "").lower()
+        t_ing = (item.get("titulo_ingles") or "").lower()
+        t_rom = (item.get("titulo_romaji") or "").lower()
+        if (
+            titulo_busca_lower in t_prin 
+            or titulo_busca_lower in t_ing 
+            or titulo_busca_lower in t_rom
+            or t_prin in titulo_busca_lower
+            or (t_ing and t_ing in titulo_busca_lower)
+            or (t_rom and t_rom in titulo_busca_lower)
+        ):
+            anime_salvo = item
+            break
+
+    # 2. Busca no Firestore se não achou em memória
+    if not anime_salvo and firebase.db is not None:
+        try:
+            docs = firebase.db.collection("anime_watchlist").stream()
+            for doc in docs:
+                data = doc.to_dict()
+                t_prin = (data.get("titulo_principal") or "").lower()
+                t_ing = (data.get("titulo_ingles") or "").lower()
+                t_rom = (data.get("titulo_romaji") or "").lower()
+                if (
+                    titulo_busca_lower in t_prin 
+                    or titulo_busca_lower in t_ing 
+                    or titulo_busca_lower in t_rom
+                    or t_prin in titulo_busca_lower
+                    or (t_ing and t_ing in titulo_busca_lower)
+                    or (t_rom and t_rom in titulo_busca_lower)
+                ):
+                    anime_salvo = data
+                    break
+        except Exception as e:
+            logger.error(f"Erro ao buscar anime no Firestore: {e}")
+
+    # 3. Se encontrado na lista pessoal do usuário:
+    if anime_salvo:
+        nome_display = _formatar_titulo_anime_display(anime_salvo)
+        visto = int(anime_salvo.get("ultimo_episodio_visto", 0))
+        total_ep = anime_salvo.get("total_episodios") or "?"
+        status_u = (anime_salvo.get("status_usuario") or "assistindo").lower()
+
+        linhas = [
+            f"📺 *{nome_display}*",
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        ]
+
+        if status_u in ["concluido", "completed"]:
+            linhas.append(f"• **Seu Progresso:** Você já **concluiu** este anime! ({visto}/{total_ep} episódios assistidos) 🏆")
+        elif visto == 0 and status_u in ["planejo_assistir", "planning"]:
+            linhas.append("• **Seu Progresso:** Você ainda não começou a assistir este anime (está marcado na sua lista como 'Planejo Assistir').")
+            linhas.append("• **Episódio Inicial:** Episódio 1")
+        else:
+            status_trad = "Assistindo" if status_u == "assistindo" else status_u.capitalize()
+            linhas.append(f"• **Seu Progresso Atual:** Você parou no **Episódio {visto}** de {total_ep} (Status: {status_trad})")
+            linhas.append(f"• **Próximo Episódio a Assistir:** Episódio {visto + 1}")
+
+        pep = anime_salvo.get("proximo_episodio")
+        if pep and isinstance(pep, dict) and pep.get("episodio"):
+            tempo_str = _calcular_tempo_restante(pep.get("tempo_restante_segundos", 0))
+            linhas.append(f"• ⏰ **Lançamento do Ep. {pep.get('episodio')}:** {pep.get('data_formatada', 'Breve')} ({tempo_str})")
+            linhas.append("• **Onde Assistir:** Crunchyroll / Plataformas parceiras")
+
+        return "\n".join(linhas)
+
+    # 4. Se não encontrado na lista, busca título no AniList para sugerir adição
+    nome_sugerido = titulo_busca
+    graphql_query = """
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        title {
+          romaji
+          english
+        }
+      }
+    }
+    """
+    try:
+        data = _consultar_anilist_graphql(graphql_query, {"search": titulo_busca})
+        if data and data.get("Media"):
+            t = data["Media"]["title"]
+            nome_sugerido = t.get("english") or t.get("romaji") or titulo_busca
+    except Exception:
+        pass
+
+    return (
+        f"ℹ️ O anime *{nome_sugerido}* não está na sua lista de animes cadastrados.\n"
+        f"Para adicioná-lo à sua watchlist, você pode dizer: "
+        f"\"Adicione {nome_sugerido} aos meus animes no episódio 1\"."
+    )
 
 
 def consultar_proximo_episodio(titulo: str) -> str:

@@ -181,7 +181,7 @@ def consultar_agenda(dias: int = 1, dias_a_frente: int = None, usuario: str = "a
         return resp
     
     except Exception as e:
-        logger.error(f"Erro ao listar eventos: {e}")
+        logger.exception("Erro ao listar eventos")
         return f"Erro ao acessar a agenda de {titular}."
 
 
@@ -199,6 +199,21 @@ def _formatar_horario_evento(event: dict) -> str:
         return dt_str
 
 
+def _calcular_janela_busca(data_referencia: Optional[str], dias_busca: int) -> tuple[str, str]:
+    if data_referencia:
+        clean_date = data_referencia.split("T")[0] if "T" in data_referencia else data_referencia
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt_ref = datetime.strptime(clean_date, fmt)
+                t_min = dt_ref.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_BRASILIA).isoformat()
+                t_max = dt_ref.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=TZ_BRASILIA).isoformat()
+                return t_min, t_max
+            except ValueError:
+                pass
+    now_br = datetime.now(TZ_BRASILIA)
+    return now_br.isoformat(), (now_br + timedelta(days=dias_busca)).isoformat()
+
+
 def _localizar_eventos_por_termo(
     service,
     calendar_id: str,
@@ -210,27 +225,7 @@ def _localizar_eventos_por_termo(
     Localiza eventos no Google Calendar que contenham o termo no título ou descrição.
     """
     termo_clean = (termo or "").strip().lower()
-    
-    if data_referencia:
-        dt_ref = None
-        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"]:
-            try:
-                dt_ref = datetime.strptime(data_referencia.split("T")[0] if "T" in data_referencia else data_referencia, fmt)
-                break
-            except Exception:
-                pass
-
-        if dt_ref:
-            time_min = dt_ref.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_BRASILIA).isoformat()
-            time_max = dt_ref.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=TZ_BRASILIA).isoformat()
-        else:
-            now_br = datetime.now(TZ_BRASILIA)
-            time_min = now_br.isoformat()
-            time_max = (now_br + timedelta(days=dias_busca)).isoformat()
-    else:
-        now_br = datetime.now(TZ_BRASILIA)
-        time_min = now_br.isoformat()
-        time_max = (now_br + timedelta(days=dias_busca)).isoformat()
+    time_min, time_max = _calcular_janela_busca(data_referencia, dias_busca)
 
     try:
         events_result = service.events().list(
@@ -242,7 +237,7 @@ def _localizar_eventos_por_termo(
         ).execute()
         items = events_result.get('items', [])
     except Exception as e:
-        logger.error(f"Erro ao consultar eventos no Google Calendar: {e}")
+        logger.exception("Erro ao consultar eventos no Google Calendar")
         return []
 
     correspondentes = []

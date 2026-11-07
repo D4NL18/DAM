@@ -13,6 +13,8 @@ from services.tools.esports_tool import consultar_jogos_cs2, obter_partidas_estr
 from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST, _renovar_proximos_episodios_expirados
 from services.tools.clash_of_clans_tool import _fetch_coc_data, _encode_tag, _verificar_raid_season, _verificar_clan_war
 
+DEFAULT_ADVERSARY = "Adversário"
+VALID_BRIEFING_TOPICS = {"agenda", "lembretes", "saude", "veiculo", "furia", "esports", "animes", "clash", "financas", "streaming"}
 logger = logging.getLogger(__name__)
 
 # Fuso horário de Brasília (UTC-3)
@@ -107,7 +109,6 @@ def configurar_preferencias_briefing(
     user_name = UserContext.get_user_name()
     prefs = obter_preferencias_briefing(user_id)
 
-    VALID_BRIEFING_TOPICS = {"agenda", "lembretes", "saude", "veiculo", "furia", "esports", "animes", "clash", "financas", "streaming"}
     alteracoes = []
     if horario and horario.strip():
         h_limpo = horario.strip()
@@ -197,7 +198,7 @@ def _formatar_jogos_furia_dia(jogos: List[Dict[str, Any]]) -> str:
 
     linhas = []
     for j in jogos:
-        adv = j.get("time_b") if j.get("time_a", "").upper() == "FURIA" else j.get("time_a", "Adversário")
+        adv = j.get("time_b") if j.get("time_a", "").upper() == "FURIA" else j.get("time_a", DEFAULT_ADVERSARY)
         champ = j.get("campeonato", "CS2")
         horario = j.get("horario", "")
         hora_int = j.get("hora_int", 12)
@@ -262,15 +263,17 @@ def _formatar_titulo_anime_briefing(anime_dict: Dict[str, Any]) -> str:
 def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     """Identifica animes cadastrados na watchlist do usuário que lançam episódio hoje."""
     hoje = _obter_data_brasilia(data_hoje)
-    hoje_data_str = hoje.strftime("%Y-%m-%d")
 
-    try:
-        _renovar_proximos_episodios_expirados()
-    except Exception as e:
-        logger.warning(f"Erro ao verificar renovação de episódios para briefing: {e}")
+    # 1. Verifica animes lançando hoje (suporte a mock de _obter_animes_lancando_hoje)
+    animes_hoje = _obter_animes_lancando_hoje(hoje)
+    if animes_hoje:
+        linhas_animes = []
+        for an in animes_hoje:
+            linhas_animes.append(f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)")
+        return "\n".join(linhas_animes)
 
+    # 2. Caso não haja lançamentos hoje, busca próximo lançamento
     animes_memoria = list(_MEMORY_WATCHLIST.values())
-
     if firebase.db is not None:
         try:
             docs = firebase.db.collection("anime_watchlist").stream()
@@ -278,36 +281,20 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
             if db_animes:
                 animes_memoria = db_animes
         except Exception as e:
-            logger.error(f"Erro ao buscar animes para briefing: {e}")
+            logger.exception(f"Erro ao buscar animes para briefing: {e}")
 
-    animes_hoje = []
     proximos_lancamentos = []
-
     for a in animes_memoria:
-        # P-0412: apenas animes em andamento (assistindo)
         if a.get("status_usuario", "").lower() != "assistindo":
             continue
-
         pep = a.get("proximo_episodio")
         if pep and isinstance(pep, dict):
             airing_at = pep.get("airing_at")
             if airing_at:
                 dt_ep = datetime.fromtimestamp(airing_at, tz=timezone.utc).astimezone(TZ_BRASILIA)
                 titulo_fmt = _formatar_titulo_anime_briefing(a)
-                if dt_ep.strftime("%Y-%m-%d") == hoje_data_str:
-                    animes_hoje.append({
-                        "titulo": titulo_fmt,
-                        "episodio": pep.get("episodio", "?"),
-                        "horario": dt_ep.strftime("%H:%M")
-                    })
-                elif dt_ep > hoje:
+                if dt_ep > hoje:
                     proximos_lancamentos.append((dt_ep, titulo_fmt, pep.get("episodio", "?"), pep.get("data_formatada", "")))
-
-    if animes_hoje:
-        linhas_animes = []
-        for an in animes_hoje:
-            linhas_animes.append(f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)")
-        return "\n".join(linhas_animes)
 
     if proximos_lancamentos:
         proximos_lancamentos.sort(key=lambda x: x[0])
@@ -376,7 +363,7 @@ def _obter_alertas_coc() -> str:
         data = _fetch_coc_data(f"clans/{clan_tag_encoded}/currentwar")
         war_state = data.get("state")
         if war_state == "inWar":
-            adv_name = data.get("opponent", {}).get("name", "Adversário")
+            adv_name = data.get("opponent", {}).get("name", DEFAULT_ADVERSARY)
             ataques_por_membro = data.get("attacksPerMember", 2)
             tag_norm = player_tag.strip().upper()
             membro = next(
@@ -393,7 +380,7 @@ def _obter_alertas_coc() -> str:
             else:
                 alertas.append(f"• 🏹 *Guerra de Clãs:* Ativa contra **{adv_name}** (Você não está escalado)")
         elif war_state == "preparation":
-            adv_name = data.get("opponent", {}).get("name", "Adversário")
+            adv_name = data.get("opponent", {}).get("name", DEFAULT_ADVERSARY)
             alertas.append(f"• 🏹 *Guerra de Clãs:* Em preparação contra **{adv_name}** (Dia de batalha começa em breve)")
     except Exception as e:
         logger.warning(f"[CoC Briefing] Erro ao consultar Guerra de Clãs: {e}")
@@ -421,10 +408,10 @@ def _obter_alertas_coc() -> str:
                         if meu_clan_tag in clan_tags_guerra:
                             if war_data.get("clan", {}).get("tag", "").upper() == meu_clan_tag:
                                 side_data = war_data["clan"]
-                                adv_name = war_data.get("opponent", {}).get("name", "Adversário")
+                                adv_name = war_data.get("opponent", {}).get("name", DEFAULT_ADVERSARY)
                             else:
                                 side_data = war_data["opponent"]
-                                adv_name = war_data.get("clan", {}).get("name", "Adversário")
+                                adv_name = war_data.get("clan", {}).get("name", DEFAULT_ADVERSARY)
 
                             ataques_por_membro = war_data.get("attacksPerMember", 1)
                             tag_norm = player_tag.strip().upper()
@@ -478,6 +465,35 @@ def _obter_resumo_veiculo_briefing(user_id: str) -> str:
     except Exception as e:
         logger.warning(f"Erro ao buscar veículo para briefing: {e}")
         return ""
+
+def _formatar_bloco_agenda_briefing(agenda_raw: str, hoje_str: str) -> str:
+    if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
+        return "• ℹ️ Nenhum compromisso agendado para hoje."
+
+    linhas_agenda = []
+    for linha in agenda_raw.splitlines():
+        linha_s = linha.strip()
+        if not linha_s or "Você tem os seguintes eventos" in linha_s:
+            continue
+        match_date = re.search(r"\d{4}-\d{2}-\d{2}", linha_s)
+        if match_date and match_date.group(0) != hoje_str:
+            continue
+
+        if linha_s.startswith("- "):
+            partes = linha_s.lstrip("- ").split(": ", 1)
+            if len(partes) == 2:
+                dt_raw, desc = partes
+                try:
+                    dt_evt = datetime.fromisoformat(dt_raw.replace("Z", "+00:00")).astimezone(TZ_BRASILIA)
+                    linhas_agenda.append(f"• 🕘 **{dt_evt.strftime('%H:%M')}** – {desc}")
+                except Exception:
+                    linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
+            else:
+                linhas_agenda.append(f"• {linha_s.lstrip('- ')}")
+        else:
+            linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
+
+    return "\n".join(linhas_agenda) if linhas_agenda else "• ℹ️ Nenhum compromisso agendado para hoje."
 
 def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optional[str] = None) -> str:
     """

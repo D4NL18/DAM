@@ -155,7 +155,7 @@ class ToolsDispatcher:
 
     # Regex de saudações/conversas puramente casuais que não devem herdar ferramentas de contexto anterior
     CASUAL_GREETING_REGEX = re.compile(
-        r"^(oi+|ola+|bom dia.*|boa tarde.*|boa noite.*|obrigad[oa].*|valeu.*|tudo bem\??|quem e voce\??)$",
+        r"^(oi+|ola+|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|tudo bem\??|quem e voce\??)\b",
         re.IGNORECASE
     )
 
@@ -273,6 +273,16 @@ class ToolsDispatcher:
         return sem_acento.lower()
 
     @classmethod
+    def _resolve_sticky_domains(cls, clean_text: str, context_text: str, matched: List[str]) -> None:
+        if not context_text or cls.CASUAL_GREETING_REGEX.match(clean_text.strip()):
+            return
+        ctx_clean = cls._normalize(context_text)
+        sticky_domains = {"wishlist", "calendar_notes", "finance"}
+        for d in sticky_domains:
+            if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
+                matched.append(d)
+
+    @classmethod
     def detect_domains(cls, text: str, context_text: str = "") -> List[str]:
         """Identifica quais domínios funcionais foram ativados pelo texto (e contexto conversacional se aplicável)."""
         matched = []
@@ -281,16 +291,7 @@ class ToolsDispatcher:
             if regex.search(clean_text):
                 matched.append(domain)
 
-        # Se houver contexto recente e a mensagem atual não for uma saudação casual,
-        # preserva continuidade para sessões multi-turn (ex: adicionando itens seguidos na wishlist/notas/finanças)
-        if context_text and not cls.CASUAL_GREETING_REGEX.match(clean_text.strip()):
-            ctx_clean = cls._normalize(context_text)
-            sticky_domains = {"wishlist", "calendar_notes", "finance"}
-            for d in sticky_domains:
-                if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
-                    if not matched or d in {"wishlist", "calendar_notes", "finance"}:
-                        matched.append(d)
-
+        cls._resolve_sticky_domains(clean_text, context_text, matched)
         return matched
 
     @classmethod

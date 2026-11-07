@@ -56,7 +56,7 @@
         color: #64748b;
         padding: 4px;
         border-radius: 8px;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
         &:hover {
           color: #0f172a;
@@ -93,7 +93,7 @@
         font-weight: 500;
         color: #64748b;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
         &:hover {
           color: #0f172a;
@@ -192,6 +192,10 @@
   gap: 20px;
   animation: fadeInScale 0.25s ease-out;
 
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+
   .trends-periods-bar {
     display: flex;
     align-items: center;
@@ -214,7 +218,7 @@
         font-weight: 500;
         color: #334155;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 
         &:hover {
@@ -441,7 +445,7 @@
       color: #475569;
       cursor: pointer;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-      transition: all 0.2s ease;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 
       span.material-symbols-outlined {
         font-size: 18px;
@@ -970,7 +974,7 @@
       cursor: pointer;
       padding: 6px 10px;
       border-radius: 8px;
-      transition: all 0.2s ease;
+      transition: background 0.2s ease, color 0.2s ease;
 
       &:hover {
         color: #0f172a;
@@ -1237,7 +1241,7 @@
 
   &.danger {
     background: #fef2f2;
-    color: #dc2626;
+    color: #b91c1c;
 
     &:hover {
       background: #fee2e2;
@@ -1389,7 +1393,7 @@
           }
 
           &.danger:hover {
-            color: #dc2626;
+            color: #b91c1c;
             background: #fef2f2;
           }
 
@@ -1552,7 +1556,7 @@
 
     &.danger {
       background: #fee2e2;
-      color: #dc2626;
+      color: #b91c1c;
     }
 
     &.warning {

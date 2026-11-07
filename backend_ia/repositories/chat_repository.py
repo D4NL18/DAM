@@ -45,7 +45,7 @@ class ChatRepository:
 
             firebase.db.collection(ChatRepository.COLLECTION).add(doc_data)
         except Exception as e:
-            logger.error(f"Erro ao salvar chat log no Firestore: {e}")
+            logger.exception("Erro ao salvar chat log no Firestore")
 
     @staticmethod
     def compact_and_archive_history(
@@ -130,7 +130,7 @@ class ChatRepository:
                 "doc_id": doc_id
             }
         except Exception as e:
-            logger.error(f"Erro ao compactar histórico de chat: {e}")
+            logger.exception("Erro ao compactar histórico de chat")
             return {"status": "error", "message": str(e)}
 
     @staticmethod
@@ -193,5 +193,5 @@ class ChatRepository:
 
             return history
         except Exception as e:
-            logger.error(f"Erro ao recuperar histórico recente no Firestore: {e}")
+            logger.exception("Erro ao recuperar histórico recente no Firestore")
             return []

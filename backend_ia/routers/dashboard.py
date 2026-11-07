@@ -28,10 +28,23 @@ def get_finance_monthly_summary(
 
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finances").where("userId", "==", effective_user).stream()
+            col = firebase.db.collection("finances")
+            try:
+                query = col.where("userId", "==", effective_user)
+                docs = list(query.stream())
+            except Exception:
+                docs = []
+            if not docs and hasattr(col, "stream"):
+                try:
+                    fallback_docs = list(col.stream())
+                    if fallback_docs:
+                        docs = fallback_docs
+                except Exception:
+                    pass
+
             for doc in docs:
                 data = doc.to_dict() or {}
-                doc_user = data.get("userId") or data.get("user_id") or "daniel"
+                doc_user = data.get("userId") or data.get("user_id") or effective_user
                 if doc_user != effective_user:
                     continue
 

@@ -232,61 +232,97 @@ class ConversationCacheService:
         return max(0, ttl)
 
     @classmethod
-    def extract_game_time_from_text(cls, text: str) -> Optional[datetime]:
-        """
-        Tenta extrair o datetime da próxima partida a partir da resposta de texto.
-        Suporta formatos com ou sem formatação markdown (**, _, etc.), tais como:
-        - "04/09/2026 às 14:30" / "04/09 às 13:50"
-        - "Hoje às 18:00" / "Hoje (04/09) às 13:50"
-        - "Amanhã às 11:00"
-        - "Horário: 13:50"
-        """
-        now = _now_br()
-        
-        # Remove caracteres de formatação markdown para não interferir nas expressões
-        clean = re.sub(r"[\*_`>#]", " ", text)
-        clean = " ".join(clean.split())
-
-        # 1. Formato explícito: DD/MM/YYYY ou DD/MM às HH:MM
-        match_full = re.search(r"(\d{2})/(\d{2})(?:/(\d{4}))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
-        if match_full:
-            d, m, y, h, mi = match_full.groups()
-            ano = int(y) if y else now.year
-            try:
-                return datetime(ano, int(m), int(d), int(h), int(mi))
-            except Exception:
-                pass
-
-        # 2. Formato relativo: Hoje (opcionalmente com data entre parênteses) às HH:MM
-        match_hoje = re.search(r"\bhoje(?:\s*\([^)]*\))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+    def _parse_game_relative_time(cls, clean: str, now: datetime) -> Optional[datetime]:
+        match_hoje = re.search(r"\bhoje\s*(?:\([^)]*\)\s*)?(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_hoje:
             h, mi = match_hoje.groups()
             try:
                 return datetime(now.year, now.month, now.day, int(h), int(mi))
-            except Exception:
+            except ValueError:
                 pass
 
-        # 3. Formato relativo: Amanhã às HH:MM
-        match_amanha = re.search(r"\bamanh[aã](?:\s*\([^)]*\))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+        match_amanha = re.search(r"\bamanh[aã]\s*(?:\([^)]*\)\s*)?(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_amanha:
             h, mi = match_amanha.groups()
             try:
                 amanha = now + timedelta(days=1)
                 return datetime(amanha.year, amanha.month, amanha.day, int(h), int(mi))
-            except Exception:
+            except ValueError:
                 pass
 
-        # 4. Horário isolado com menção a hoje no texto
         if "hoje" in clean.lower():
             match_h = re.search(r"hor[aá]rio\s*:\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
             if match_h:
                 h, mi = match_h.groups()
                 try:
                     return datetime(now.year, now.month, now.day, int(h), int(mi))
-                except Exception:
+                except ValueError:
                     pass
-
         return None
+
+    @classmethod
+    def extract_game_time_from_text(cls, text: str) -> Optional[datetime]:
+        """Tenta extrair o datetime da próxima partida a partir da resposta de texto."""
+        now = _now_br()
+        clean = " ".join(re.sub(r"[\*_`>#]", " ", text).split())
+
+        match_full = re.search(r"(\d{2})/(\d{2})(?:/(\d{4}))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+        if match_full:
+            d, m, y, h, mi = match_full.groups()
+            ano = int(y) if y else now.year
+            try:
+                return datetime(ano, int(m), int(d), int(h), int(mi))
+            except ValueError:
+                pass
+
+        return cls._parse_game_relative_time(clean, now)
+
+    @classmethod
+    def _get_from_l1(cls, cache_key: str, now: datetime, query: str, remote_jid: str) -> Optional[str]:
+        with cls._lock:
+            entry = cls._l1_cache.get(cache_key)
+            if not entry:
+                return None
+            if not entry.is_expired(now):
+                cls._record_hit(query, entry.response_text)
+                logger.info(f"[CACHE HIT L1] Reusando resposta para {remote_jid[:8]}... [{entry.domain}]")
+                return entry.response_text
+            del cls._l1_cache[cache_key]
+            return None
+
+    @classmethod
+    def _get_from_l2(cls, cache_key: str, now: datetime, query: str, remote_jid: str, norm_query: str, volatility: str) -> Optional[str]:
+        if firebase.db is None:
+            return None
+        try:
+            doc = firebase.db.collection("conversation_cache").document(cache_key).get()
+            if not doc.exists:
+                return None
+            data = doc.to_dict() or {}
+            expires_at_iso = data.get("expires_at")
+            if not expires_at_iso:
+                return None
+            expires_at = datetime.fromisoformat(expires_at_iso)
+            if now >= expires_at:
+                return None
+            resp = data.get("response_text", "")
+            cls._record_hit(query, resp)
+            entry = CacheEntry(
+                remote_jid=remote_jid,
+                query_normalized=norm_query,
+                response_text=resp,
+                domain=volatility,
+                created_at=datetime.fromisoformat(data.get("created_at", now.isoformat())),
+                expires_at=expires_at,
+                ttl_seconds=data.get("ttl_seconds", 3600)
+            )
+            with cls._lock:
+                cls._l1_cache[cache_key] = entry
+            logger.info(f"[CACHE HIT L2] Reusando resposta Firestore para {remote_jid[:8]}...")
+            return resp
+        except Exception as e:
+            logger.warning(f"[CACHE] Falha ao consultar L2 Firestore: {e}")
+            return None
 
     @classmethod
     def get_cached_response(
@@ -295,71 +331,30 @@ class ConversationCacheService:
         query: str, 
         media_base64: Optional[str] = None
     ) -> Optional[str]:
-        """
-        Recupera resposta em cache para a mensagem caso elegível e não expirada.
-        Suporta queries textuais e requisições com mídias multimodais (P-1106).
-        """
-        # Verifica se o usuário pediu forçamento de atualização
+        """Recupera resposta em cache para a mensagem caso elegível e não expirada."""
         norm_query = cls.normalize_text(query)
         for kw in cls.FORCE_REFRESH_KEYWORDS:
             if re.search(rf"\b{kw}\b", norm_query):
                 logger.info(f"[CACHE] Forçamento de refresh detectado ('{kw}'). Ignorando cache.")
                 return None
 
-        # Roteamento de volatilidade
         volatility = cls.classify_query_volatility(query)
         if volatility in (QueryVolatility.REALTIME_VOLATILE, QueryVolatility.STATE_CHANGING_ACTION):
             return None
-
-        # Se for UNKNOWN mas tiver mídia, permite cache
         if volatility == QueryVolatility.UNKNOWN and not media_base64:
             return None
 
         cache_key = cls.generate_cache_key(remote_jid, query, media_base64=media_base64)
         now = _now_br()
 
-        # 1. Consulta L1 (Memória)
-        with cls._lock:
-            entry = cls._l1_cache.get(cache_key)
-            if entry:
-                if not entry.is_expired(now):
-                    cls._record_hit(query, entry.response_text)
-                    logger.info(f"[CACHE HIT L1] Reusando resposta para {remote_jid[:8]}... [{entry.domain}]")
-                    return entry.response_text
-                else:
-                    # Expirado: remove de L1
-                    del cls._l1_cache[cache_key]
+        hit_l1 = cls._get_from_l1(cache_key, now, query, remote_jid)
+        if hit_l1 is not None:
+            return hit_l1
 
-        # 2. Consulta L2 (Firestore) se disponível
-        try:
-            if firebase.db is not None:
-                doc = firebase.db.collection("conversation_cache").document(cache_key).get()
-                if doc.exists:
-                    data = doc.to_dict() or {}
-                    expires_at_iso = data.get("expires_at")
-                    if expires_at_iso:
-                        expires_at = datetime.fromisoformat(expires_at_iso)
-                        if now < expires_at:
-                            resp = data.get("response_text", "")
-                            cls._record_hit(query, resp)
-                            # Repopula L1
-                            entry = CacheEntry(
-                                remote_jid=remote_jid,
-                                query_normalized=norm_query,
-                                response_text=resp,
-                                domain=volatility,
-                                created_at=datetime.fromisoformat(data.get("created_at", now.isoformat())),
-                                expires_at=expires_at,
-                                ttl_seconds=data.get("ttl_seconds", 3600)
-                            )
-                            with cls._lock:
-                                cls._l1_cache[cache_key] = entry
-                            logger.info(f"[CACHE HIT L2] Reusando resposta Firestore para {remote_jid[:8]}...")
-                            return resp
-        except Exception as e:
-            logger.warning(f"[CACHE] Falha ao consultar L2 Firestore: {e}")
+        hit_l2 = cls._get_from_l2(cache_key, now, query, remote_jid, norm_query, volatility)
+        if hit_l2 is not None:
+            return hit_l2
 
-        # Cache Miss
         cls._record_miss()
         return None
 

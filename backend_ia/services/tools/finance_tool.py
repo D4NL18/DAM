@@ -62,26 +62,10 @@ def invalidar_cache_categorias(user_id: Optional[str] = None):
     else:
         _USER_CATEGORIES_CACHE.clear()
 
-def obter_categorias_usuario(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Retorna as categorias ativas do usuário com cache L1 em memória (5 min).
-    Se o banco estiver vazio ou indisponível, retorna DEFAULT_CATEGORIES.
-    """
-    effective_user = user_id or UserContext.get_user_id() or "daniel"
-    now_ts = time.time()
-    cache_key = (effective_user, id(firebase.db))
-
-    if cache_key in _USER_CATEGORIES_CACHE:
-        cached_time, cached_data = _USER_CATEGORIES_CACHE[cache_key]
-        if now_ts - cached_time < CACHE_TTL_SECONDS:
-            return cached_data
-
-    defaults = [c for c in DEFAULT_CATEGORIES if c.get("name", "").lower() not in ["christian", "reembolso"]]
-
-    if firebase.db is None:
-        return defaults
-
+def _carregar_categorias_firestore(effective_user: str) -> List[Dict[str, Any]]:
     categories = []
+    if firebase.db is None:
+        return categories
     try:
         col = firebase.db.collection("finance_categories")
         docs = []
@@ -105,13 +89,29 @@ def obter_categorias_usuario(user_id: Optional[str] = None) -> List[Dict[str, An
                 })
     except Exception as e:
         logger.warning(f"Erro ao buscar categorias customizadas para [{effective_user}]: {e}")
+    return categories
 
-    if categories:
-        _USER_CATEGORIES_CACHE[cache_key] = (now_ts, categories)
-        return categories
 
-    _USER_CATEGORIES_CACHE[cache_key] = (now_ts, defaults)
-    return defaults
+def obter_categorias_usuario(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retorna as categorias ativas do usuário com cache L1 em memória (5 min).
+    Se o banco estiver vazio ou indisponível, retorna DEFAULT_CATEGORIES.
+    """
+    effective_user = user_id or UserContext.get_user_id() or "daniel"
+    now_ts = time.time()
+    cache_key = (effective_user, id(firebase.db))
+
+    if cache_key in _USER_CATEGORIES_CACHE:
+        cached_time, cached_data = _USER_CATEGORIES_CACHE[cache_key]
+        if now_ts - cached_time < CACHE_TTL_SECONDS:
+            return cached_data
+
+    defaults = [c for c in DEFAULT_CATEGORIES if c.get("name", "").lower() not in ["christian", "reembolso"]]
+    categories = _carregar_categorias_firestore(effective_user)
+
+    result = categories if categories else defaults
+    _USER_CATEGORIES_CACHE[cache_key] = (now_ts, result)
+    return result
 
 
 def normalizar_categoria(cat: Optional[str], user_id: Optional[str] = None) -> str:

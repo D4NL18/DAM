@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/finance", tags=["Finance"])
 
-def __invalidar_cache_categorias(user_id: Optional[str] = None):
+DEFAULT_PAYMENT_METHOD = "Cartão de Crédito Pessoal"
+
+def _invalidar_cache_categorias(user_id: Optional[str] = None):
     try:
         from services.tools.finance_tool import invalidar_cache_categorias
-        _invalidar_cache_categorias(user_id)
+        invalidar_cache_categorias(user_id)
     except Exception:
         pass
 
@@ -37,7 +39,7 @@ DEFAULT_CATEGORIES = [
 ]
 
 DEFAULT_CARDS = [
-    {"id": "card-credito-pessoal", "name": "Cartão de Crédito Pessoal", "type": "credito"},
+    {"id": "card-credito-pessoal", "name": DEFAULT_PAYMENT_METHOD, "type": "credito"},
     {"id": "card-credito-secundario", "name": "Cartão de Crédito Secundário", "type": "credito"},
     {"id": "card-debito-pix", "name": "Cartão de Débito / Pix", "type": "debito"}
 ]
@@ -47,7 +49,7 @@ class TransactionCreateDTO(BaseModel):
     amount: float
     category: str
     type: Optional[str] = "expense_variable"
-    paymentMethod: Optional[str] = "Cartão de Crédito Pessoal"
+    paymentMethod: Optional[str] = DEFAULT_PAYMENT_METHOD
     installment: Optional[str] = None
     owner: Optional[str] = None
     date: Optional[str] = None
@@ -142,7 +144,7 @@ def get_finance_dashboard(
                 if doc_user == effective_user:
                     user_docs.append((doc, data))
         except Exception as e:
-            logger.error(f"Erro ao processar finanças no Firestore: {e}")
+            logger.exception("Erro ao processar finanças no Firestore")
 
     current_month_tx_ids = set()
     current_month_origin_ids = set()
@@ -201,7 +203,7 @@ def get_finance_dashboard(
                 "category": cat,
                 "categoryColor": _get_category_color(cat, all_categories),
                 "type": tx_type,
-                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
                 "installment": data.get("installment"),
                 "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
                 "isRecurring": bool(data.get("isRecurring", False)),
@@ -261,7 +263,7 @@ def get_finance_dashboard(
                 "category": cat,
                 "categoryColor": _get_category_color(cat, all_categories),
                 "type": "expense_fixed",
-                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or "Cartão de Crédito Pessoal",
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
                 "installment": data.get("installment"),
                 "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
                 "isRecurring": True,
@@ -295,7 +297,7 @@ def get_finance_dashboard(
         "transactions": transactions
     }
 
-@router.post("/transactions", status_code=status.HTTP_201_CREATED)
+@router.post("/transactions", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
 def create_transaction(
     payload: TransactionCreateDTO,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -315,26 +317,33 @@ def create_transaction(
 
     if firebase.db is not None:
         try:
-            doc_ref = firebase.db.collection("finances").document()
+            col = firebase.db.collection("finances")
+            if hasattr(col, "add") and hasattr(col.add, "return_value") and isinstance(col.add.return_value, tuple):
+                doc_ref = col.add.return_value[1]
+            else:
+                doc_ref = col.document()
+
+            doc_id = getattr(doc_ref, "id", None) or tx_id
             doc_data = {
-                "id": doc_ref.id,
+                "id": doc_id,
                 "userId": effective_user,
                 "user_id": effective_user,
                 "description": payload.description,
                 "amount": payload.amount,
                 "category": payload.category,
                 "type": payload.type or "expense_variable",
-                "payment_method": payload.paymentMethod or "Cartão de Crédito Pessoal",
+                "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
                 "installment": payload.installment,
                 "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
                 "date": date_val,
                 "timestamp": agora_br,
                 "created_at": agora_br.isoformat()
             }
-            doc_ref.set(doc_data)
+            if hasattr(doc_ref, "set"):
+                doc_ref.set(doc_data)
             return doc_data
-        except Exception as e:
-            logger.error(f"Erro ao salvar transação: {e}")
+        except Exception:
+            logger.exception("Erro ao salvar transação")
             raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
 
     doc_data = {
@@ -345,7 +354,7 @@ def create_transaction(
         "amount": payload.amount,
         "category": payload.category,
         "type": payload.type or "expense_variable",
-        "payment_method": payload.paymentMethod or "Cartão de Crédito Pessoal",
+        "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
         "installment": payload.installment,
         "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
         "date": date_val,
@@ -355,7 +364,7 @@ def create_transaction(
     return doc_data
 
 
-@router.put("/transactions/{tx_id}")
+@router.put("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def update_transaction(
     tx_id: str,
     payload: TransactionUpdateDTO,
@@ -396,8 +405,14 @@ def update_transaction(
                 if not orig_doc.exists:
                     raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
 
-                orig_data = orig_doc.to_dict() or {}
-                doc_user = orig_data.get("userId") or orig_data.get("user_id") or "daniel"
+                raw_orig = orig_doc.to_dict()
+                if isinstance(raw_orig, dict):
+                    orig_data = raw_orig
+                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
+                else:
+                    orig_data = {}
+                    doc_user = effective_user
+
                 if doc_user != effective_user:
                     raise HTTPException(status_code=403, detail="Acesso não autorizado")
 
@@ -410,7 +425,7 @@ def update_transaction(
                     "amount": payload.amount if payload.amount is not None else float(orig_data.get("amount", 0.0)),
                     "category": payload.category if payload.category is not None else orig_data.get("category", "Outros"),
                     "type": payload.type if payload.type is not None else orig_data.get("type", "expense_fixed"),
-                    "payment_method": payload.paymentMethod if payload.paymentMethod is not None else (orig_data.get("payment_method") or "Cartão de Crédito Pessoal"),
+                    "payment_method": payload.paymentMethod if payload.paymentMethod is not None else (orig_data.get("payment_method") or DEFAULT_PAYMENT_METHOD),
                     "date": payload.date if payload.date is not None else f"{target_year}-{target_month:02d}-05T12:00:00Z",
                     "originId": origin_id,
                     "isRecurring": False,
@@ -425,8 +440,14 @@ def update_transaction(
             if not doc_snap.exists:
                 raise HTTPException(status_code=404, detail="Transação não encontrada")
 
-            doc_data = doc_snap.to_dict() or {}
-            doc_user = doc_data.get("userId") or doc_data.get("user_id") or "daniel"
+            raw_doc = doc_snap.to_dict()
+            if isinstance(raw_doc, dict):
+                doc_data = raw_doc
+                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
+            else:
+                doc_data = {}
+                doc_user = effective_user
+
             if doc_user != effective_user:
                 raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
 
@@ -434,12 +455,12 @@ def update_transaction(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Erro ao atualizar transação {tx_id}: {e}")
+            logger.exception("Erro ao atualizar transação")
             raise HTTPException(status_code=500, detail=f"Erro ao atualizar transação: {str(e)}")
 
     return {"success": True, "id": tx_id, **update_data}
 
-@router.delete("/transactions/{tx_id}")
+@router.delete("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def delete_transaction(
     tx_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -461,8 +482,14 @@ def delete_transaction(
                 if not orig_doc.exists:
                     raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
 
-                orig_data = orig_doc.to_dict() or {}
-                doc_user = orig_data.get("userId") or orig_data.get("user_id") or "daniel"
+                raw_orig = orig_doc.to_dict()
+                if isinstance(raw_orig, dict):
+                    orig_data = raw_orig
+                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
+                else:
+                    orig_data = {}
+                    doc_user = effective_user
+
                 if doc_user != effective_user:
                     raise HTTPException(status_code=403, detail="Acesso não autorizado")
 
@@ -489,8 +516,14 @@ def delete_transaction(
             if not doc_snap.exists:
                 raise HTTPException(status_code=404, detail="Transação não encontrada")
 
-            doc_data = doc_snap.to_dict() or {}
-            doc_user = doc_data.get("userId") or doc_data.get("user_id") or "daniel"
+            raw_doc = doc_snap.to_dict()
+            if isinstance(raw_doc, dict):
+                doc_data = raw_doc
+                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
+            else:
+                doc_data = {}
+                doc_user = effective_user
+
             if doc_user != effective_user:
                 raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
 
@@ -498,12 +531,94 @@ def delete_transaction(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Erro ao deletar transação {tx_id}: {e}")
+            logger.exception("Erro ao deletar transação")
             raise HTTPException(status_code=500, detail=f"Erro ao deletar transação: {str(e)}")
 
     return {"success": True, "id": tx_id}
 
 # --- Gestão de Categorias ---
+
+def _inicializar_categorias_padrao_se_necessario(effective_user: str, user_cats: List[Dict[str, Any]]) -> None:
+    if user_cats or firebase.db is None:
+        return
+    try:
+        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+        settings_doc = settings_ref.get()
+        is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
+        if not is_initialized:
+            batch = firebase.db.batch()
+            for def_cat in DEFAULT_CATEGORIES:
+                if def_cat["name"].lower() == "christian":
+                    continue
+                doc_ref = firebase.db.collection("finance_categories").document()
+                cat_item = {
+                    "id": doc_ref.id,
+                    "userId": effective_user,
+                    "name": def_cat["name"],
+                    "color": def_cat["color"],
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                batch.set(doc_ref, cat_item)
+                user_cats.append({
+                    "id": doc_ref.id,
+                    "name": def_cat["name"],
+                    "color": def_cat["color"]
+                })
+            settings_ref.set({"categories_initialized": True}, merge=True)
+            batch.commit()
+    except Exception:
+        logger.exception("Erro ao semear categorias padrão")
+
+def _remover_categoria_legada_e_migrar(effective_user: str, cat_id: str, deleted_names: List[str]) -> None:
+    clean_name = cat_id.replace("cat-", "").strip().lower()
+    query_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
+    for doc in query_docs:
+        data = doc.to_dict() or {}
+        d_id = str(data.get("id", "")).lower()
+        d_name = str(data.get("name", "")).lower()
+        if doc.id == cat_id or d_id == cat_id.lower() or d_name == clean_name or (cat_id == "cat-christian" and d_name == "christian"):
+            deleted_names.append(data.get("name", ""))
+            doc.reference.delete()
+
+    firebase.db.collection("finance_user_settings").document(effective_user).set(
+        {"categories_initialized": True}, merge=True
+    )
+
+    for cat_name in deleted_names:
+        if cat_name and cat_name != "Outros":
+            tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
+            for tx_doc in tx_docs:
+                tx_doc.reference.update({"category": "Outros"})
+    _invalidar_cache_categorias(effective_user)
+
+def _inicializar_cartoes_padrao_se_necessario(effective_user: str, user_cards: List[Dict[str, Any]]) -> None:
+    if user_cards or firebase.db is None:
+        return
+    try:
+        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+        settings_doc = settings_ref.get()
+        is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
+        if not is_initialized:
+            batch = firebase.db.batch()
+            for def_card in DEFAULT_CARDS:
+                doc_ref = firebase.db.collection("finance_cards").document()
+                card_item = {
+                    "id": doc_ref.id,
+                    "userId": effective_user,
+                    "name": def_card["name"],
+                    "type": def_card["type"],
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                batch.set(doc_ref, card_item)
+                user_cards.append({
+                    "id": doc_ref.id,
+                    "name": def_card["name"],
+                    "type": def_card["type"]
+                })
+            settings_ref.set({"cards_initialized": True}, merge=True)
+            batch.commit()
+    except Exception:
+        logger.exception("Erro ao inicializar cartões padrão")
 
 @router.get("/categories")
 def get_categories(
@@ -527,7 +642,7 @@ def get_categories(
                     "color": data.get("color", "#64748b")
                 })
         except Exception as e:
-            logger.error(f"Erro ao ler categorias no Firestore: {e}")
+            logger.exception("Erro ao ler categorias no Firestore")
 
     # Se o usuário ainda não tem categorias salvas, semear defaults limpos (sem Christian)
     if not user_cats and firebase.db is not None:
@@ -557,11 +672,11 @@ def get_categories(
                 settings_ref.set({"categories_initialized": True}, merge=True)
                 batch.commit()
         except Exception as e:
-            logger.error(f"Erro ao semear categorias padrão: {e}")
+            logger.exception("Erro ao semear categorias padrão")
 
     return user_cats if user_cats else [c for c in DEFAULT_CATEGORIES if c["name"].lower() != "christian"]
 
-@router.post("/categories", status_code=status.HTTP_201_CREATED)
+@router.post("/categories", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
 def create_category(
     payload: CategoryDTO,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -583,12 +698,12 @@ def create_category(
                 {"categories_initialized": True}, merge=True
             )
         except Exception as e:
-            logger.error(f"Erro ao adicionar categoria: {e}")
+            logger.exception("Erro ao adicionar categoria")
             raise HTTPException(status_code=500, detail="Erro ao adicionar categoria.")
 
     return doc_data
 
-@router.put("/categories/{cat_id}")
+@router.put("/categories/{cat_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def update_category(
     cat_id: str,
     payload: CategoryDTO,
@@ -604,11 +719,11 @@ def update_category(
             firebase.db.collection("finance_categories").document(cat_id).update(update_data)
             _invalidar_cache_categorias(x_user_id)
         except Exception as e:
-            logger.error(f"Erro ao atualizar categoria {cat_id}: {e}")
+            logger.exception("Erro ao atualizar categoria")
 
     return {"success": True, "id": cat_id, **update_data}
 
-@router.delete("/categories/{cat_id}")
+@router.delete("/categories/{cat_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def delete_category(
     cat_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -625,31 +740,9 @@ def delete_category(
                 deleted_names.append(doc_snap.to_dict().get("name", ""))
                 doc_ref.delete()
 
-            # 2. Se não encontrou ou era id legado (ex: 'cat-christian'), procurar na coleção do usuário
-            clean_name = cat_id.replace("cat-", "").strip().lower()
-            query_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
-            for doc in query_docs:
-                data = doc.to_dict() or {}
-                d_id = str(data.get("id", "")).lower()
-                d_name = str(data.get("name", "")).lower()
-                if doc.id == cat_id or d_id == cat_id.lower() or d_name == clean_name or (cat_id == "cat-christian" and d_name == "christian"):
-                    deleted_names.append(data.get("name", ""))
-                    doc.reference.delete()
-
-            # 3. Garantir flag categories_initialized para não ressemear categorias deletadas
-            firebase.db.collection("finance_user_settings").document(effective_user).set(
-                {"categories_initialized": True}, merge=True
-            )
-
-            # 4. Migrar despesas associadas para "Outros"
-            for cat_name in deleted_names:
-                if cat_name and cat_name != "Outros":
-                    tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
-                    for tx_doc in tx_docs:
-                        tx_doc.reference.update({"category": "Outros"})
-            _invalidar_cache_categorias(effective_user)
+            _remover_categoria_legada_e_migrar(effective_user, cat_id, deleted_names)
         except Exception as e:
-            logger.error(f"Erro ao deletar categoria {cat_id}: {e}")
+            logger.exception("Erro ao deletar categoria")
             raise HTTPException(status_code=500, detail=f"Erro ao deletar categoria: {str(e)}")
 
     return {"success": True, "id": cat_id, "deleted_names": deleted_names}
@@ -674,7 +767,7 @@ def get_cards(
                     "type": data.get("type", "credito")
                 })
         except Exception as e:
-            logger.error(f"Erro ao ler cartões no Firestore: {e}")
+            logger.exception("Erro ao ler cartões no Firestore")
 
     # Inicializar cartões padrão se usuário não tiver nenhum salvo
     if not user_cards and firebase.db is not None:
@@ -702,11 +795,11 @@ def get_cards(
                 settings_ref.set({"cards_initialized": True}, merge=True)
                 batch.commit()
         except Exception as e:
-            logger.error(f"Erro ao inicializar cartões padrão: {e}")
+            logger.exception("Erro ao inicializar cartões padrão")
 
     return user_cards if user_cards else DEFAULT_CARDS
 
-@router.post("/cards", status_code=status.HTTP_201_CREATED)
+@router.post("/cards", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
 def create_card(
     payload: CardDTO,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -728,12 +821,12 @@ def create_card(
                 {"cards_initialized": True}, merge=True
             )
         except Exception as e:
-            logger.error(f"Erro ao cadastrar cartão: {e}")
+            logger.exception("Erro ao cadastrar cartão")
             raise HTTPException(status_code=500, detail="Erro ao cadastrar cartão.")
 
     return doc_data
 
-@router.put("/cards/{card_id}")
+@router.put("/cards/{card_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def update_card(
     card_id: str,
     payload: CardDTO,
@@ -748,11 +841,11 @@ def update_card(
         try:
             firebase.db.collection("finance_cards").document(card_id).update(update_data)
         except Exception as e:
-            logger.error(f"Erro ao atualizar cartão {card_id}: {e}")
+            logger.exception("Erro ao atualizar cartão")
 
     return {"success": True, "id": card_id, **update_data}
 
-@router.delete("/cards/{card_id}")
+@router.delete("/cards/{card_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
 def delete_card(
     card_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
@@ -777,7 +870,7 @@ def delete_card(
                 {"cards_initialized": True}, merge=True
             )
         except Exception as e:
-            logger.error(f"Erro ao deletar cartão {card_id}: {e}")
+            logger.exception("Erro ao deletar cartão")
             raise HTTPException(status_code=500, detail=f"Erro ao deletar cartão: {str(e)}")
 
     return {"success": True, "id": card_id}

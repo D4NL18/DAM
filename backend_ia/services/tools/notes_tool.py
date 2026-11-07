@@ -74,7 +74,7 @@ def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
                         d.setdefault("_colecao", "information_notes")
                         todos.append(d)
         except Exception as e:
-            logger.error(f"Erro ao ler Firestore: {e}. Usando mock.")
+            logger.exception("Erro ao ler Firestore. Usando mock.")
             if colecao:
                 todos = [i for i in _mock_storage if i.get("_colecao") == colecao]
             else:
@@ -128,7 +128,7 @@ def _salvar_item(item: Dict[str, Any], colecao: str = "notes_reminders") -> None
             firebase.db.collection(colecao).document(item["id"]).set(item)
             logger.info(f"[NOTES] Item '{item.get('titulo')}' ({item['id']}) salvo em '{colecao}' para {user_id}.")
         except Exception as e:
-            logger.error(f"Erro ao salvar no Firestore ({colecao}): {e}. Mantido em mock.")
+            logger.exception("Erro ao salvar no Firestore")
 
 
 def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes_reminders") -> bool:
@@ -153,7 +153,7 @@ def _atualizar_item(item_id: str, updates: Dict[str, Any], colecao: str = "notes
                 else:
                     logger.warning(f"Tentativa de atualização de item de outro usuário: {item_id}")
         except Exception as e:
-            logger.error(f"Erro ao atualizar Firestore doc {item_id} em {colecao}: {e}")
+            logger.exception("Erro ao atualizar Firestore doc")
 
     return atualizado
 
@@ -183,7 +183,7 @@ def _remover_item(item_id: str, colecao: str = "information_notes") -> bool:
                         doc_ref.delete()
                         removido = True
             except Exception as e:
-                logger.error(f"Erro ao excluir Firestore doc {item_id} em {col}: {e}")
+                logger.exception("Erro ao excluir Firestore doc")
 
     return removido
 

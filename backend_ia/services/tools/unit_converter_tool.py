@@ -262,7 +262,7 @@ def interpretar_e_converter(texto: str) -> str:
     # Padrão 1: "350 f para c", "35 milhas em km", "10.5 ft to m", "2 xicaras em ml"
     # Também suporta termos compostos como "colheres de sopa", "onça fluida", etc.
     padrao_frase = re.search(
-        r'(-?\d+(?:\.\d+)?)\s*([a-záéíóúçº°\s_]+?)\s+(?:em|para|pra|to|equivale[am]?\s+a|->|=)\s+([a-záéíóúçº°\s_]+)',
+        r'(-?\d+(?:\.\d+)?)\s*([a-záéíóúçº°_]+(?:\s+[a-záéíóúçº°_]+){0,3})\s+(?:em|para|pra|to|equivale[am]?\s+a|->|=)\s+([a-záéíóúçº°_]+)',
         t_num_fixed
     )
 
@@ -276,7 +276,7 @@ def interpretar_e_converter(texto: str) -> str:
 
     # Padrão 2: "converter 350 f em c", "converta 5 ft para m"
     padrao_converter = re.search(
-        r'(?:converter?|transformar?|passar?|quanto\s+(?:é|vale|da|dá))\s+(-?\d+(?:\.\d+)?)\s*([a-záéíóúçº°\s_]+?)\s+(?:em|para|pra|to)\s+([a-záéíóúçº°\s_]+)',
+        r'(?:converte?r?|transforma?r?|passa?r?|quanto\s+(?:é|vale|da|dá))\s+(-?\d+(?:\.\d+)?)\s*([a-záéíóúçº°_]+(?:\s+[a-záéíóúçº°_]+){0,3})\s+(?:em|para|pra|to)\s+([a-záéíóúçº°_]+)',
         t_num_fixed
     )
     if padrao_converter:

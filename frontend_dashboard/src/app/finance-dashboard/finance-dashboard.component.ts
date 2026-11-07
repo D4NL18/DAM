@@ -27,11 +27,11 @@ export class FinanceDashboardComponent implements OnInit {
   private escapeHtml(str: any): string {
     if (str === null || str === undefined) return '';
     return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
   }
   dashboardData: FinanceDashboardData | null = null;
   loading = true;
@@ -265,7 +265,7 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   initTrendChart(data: FinanceTrendData): void {
-    if (!data || !data.series || data.series.length === 0) {
+    if (!data?.series?.length) {
       this.trendChartOption = {
         title: {
           text: 'Sem dados para o período',
@@ -804,7 +804,7 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   saveEditCard(): void {
-    if (!this.editingCard || !this.editingCard.name.trim()) return;
+    if (!this.editingCard?.name?.trim()) return;
     const name = this.editingCard.name.trim();
     this.financeApi.updateCard(this.editingCard.id, {
       name,

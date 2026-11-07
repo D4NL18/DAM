@@ -25,10 +25,10 @@ export interface LoginResponse {
 export class AuthService {
   private readonly STORAGE_KEY = 'dam_auth_user';
   private currentUserSubject = new BehaviorSubject<User | null>(this.loadUserFromStorage());
-  public currentUser$ = this.currentUserSubject.asObservable();
+  public readonly currentUser$ = this.currentUserSubject.asObservable();
 
   // URL do Backend Core Spring Boot
-  private authApiUrl = 'http://localhost:8080/api/auth';
+  private readonly authApiUrl = 'http://localhost:8080/api/auth';
 
   constructor(private http: HttpClient, private router: Router) {}
 

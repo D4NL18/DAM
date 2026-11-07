@@ -11,6 +11,8 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 
+UTC_OFFSET_SUFFIX = "+00:00"
+
 @router.get("/finance/monthly-summary")
 def get_finance_monthly_summary(
     year: int = Query(default=datetime.now().year),
@@ -53,7 +55,7 @@ def get_finance_monthly_summary(
                 valido = True
                 if date_str:
                     try:
-                        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
                         if dt.year != year or dt.month != month:
                             valido = False
                     except Exception:
@@ -284,7 +286,7 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
             if data_hora_raw and not recorrencia:
                 try:
                     if "T" in data_hora_raw:
-                        dt_check = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                        dt_check = datetime.fromisoformat(data_hora_raw.replace("Z", UTC_OFFSET_SUFFIX))
                     else:
                         dt_check = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
                     if dt_check.tzinfo is None:
@@ -298,7 +300,7 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
             if data_hora_raw:
                 try:
                     if "T" in data_hora_raw:
-                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", UTC_OFFSET_SUFFIX))
                         due_time_fmt = dt.strftime("%d/%m %H:%M")
                     elif len(data_hora_raw) >= 16 and data_hora_raw[4] == '-' and data_hora_raw[7] == '-':
                         dt = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")

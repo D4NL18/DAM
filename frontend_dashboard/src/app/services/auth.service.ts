@@ -59,7 +59,7 @@ export class AuthService {
       password: cleanPass
     }).pipe(
       map(res => {
-        if (res && res.authenticated) {
+        if (res?.authenticated) {
           const user: User = {
             userId: res.userId,
             name: res.name,

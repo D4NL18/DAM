@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/finance", tags=["Finance"])
 
 DEFAULT_PAYMENT_METHOD = "Cartão de Crédito Pessoal"
+UTC_OFFSET_SUFFIX = "+00:00"
 
 def _invalidar_cache_categorias(user_id: Optional[str] = None):
     try:
@@ -157,7 +158,7 @@ def get_finance_dashboard(
         dt_obj = None
         if date_str:
             try:
-                clean_date = date_str.replace("Z", "+00:00")
+                clean_date = date_str.replace("Z", UTC_OFFSET_SUFFIX)
                 dt_obj = datetime.fromisoformat(clean_date)
                 if dt_obj.year != target_year or dt_obj.month != target_month:
                     valido = False
@@ -223,7 +224,7 @@ def get_finance_dashboard(
         dt_obj = None
         if date_str:
             try:
-                dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
             except Exception:
                 pass
 
@@ -718,7 +719,7 @@ def update_category(
         try:
             firebase.db.collection("finance_categories").document(cat_id).update(update_data)
             _invalidar_cache_categorias(x_user_id)
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao atualizar categoria")
 
     return {"success": True, "id": cat_id, **update_data}
@@ -766,7 +767,7 @@ def get_cards(
                     "name": data.get("name", ""),
                     "type": data.get("type", "credito")
                 })
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao ler cartões no Firestore")
 
     # Inicializar cartões padrão se usuário não tiver nenhum salvo
@@ -840,7 +841,7 @@ def update_card(
     if firebase.db is not None:
         try:
             firebase.db.collection("finance_cards").document(card_id).update(update_data)
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao atualizar cartão")
 
     return {"success": True, "id": card_id, **update_data}
@@ -965,7 +966,7 @@ def get_finance_trends(
                 if (data.get("userId") or data.get("user_id") or "daniel") == effective_user:
                     user_docs.append((doc, data))
         except Exception as e:
-            logger.error(f"Erro ao agregar tendências financeiras no Firestore: {e}")
+            logger.exception("Erro ao agregar tendências financeiras no Firestore")
 
     fixed_docs_in_series: Dict[str, set] = {k: set() for k in series_map}
     fixed_candidates = []
@@ -976,7 +977,7 @@ def get_finance_trends(
             continue
 
         try:
-            dt_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
             doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
         except Exception:
             continue

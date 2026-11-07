@@ -15,6 +15,9 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+MIME_IMAGE_JPEG = "image/jpeg"
+MIME_AUDIO_OGG = "audio/ogg"
+
 # Cache LRU para deduplicação idempotente de message_id
 _PROCESSED_MESSAGE_IDS = OrderedDict()
 
@@ -245,7 +248,7 @@ async def whatsapp_webhook(
         caption = img_info.get("caption") if isinstance(img_info, dict) else None
         text = caption or text or "Analyze this image."
         b64 = message.get("base64") or data.get("base64")
-        mimetype = img_info.get("mimetype", "image/jpeg") if isinstance(img_info, dict) else "image/jpeg"
+        mimetype = img_info.get("mimetype", MIME_IMAGE_JPEG) if isinstance(img_info, dict) else MIME_IMAGE_JPEG
         if not b64 and message_id:
             media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
             if media_data:
@@ -253,14 +256,14 @@ async def whatsapp_webhook(
                 mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "image/jpeg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else MIME_IMAGE_JPEG
 
     # Suporte Multimodal a Áudio (US-3.6)
     elif "audioMessage" in message or message_type == "audioMessage":
         audio_info = message.get("audioMessage", {})
         text = text or "Transcribe and respond to this audio."
         b64 = message.get("base64") or data.get("base64")
-        mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
+        mimetype = audio_info.get("mimetype", MIME_AUDIO_OGG) if isinstance(audio_info, dict) else MIME_AUDIO_OGG
         if not b64 and message_id:
             media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
             if media_data:
@@ -268,7 +271,7 @@ async def whatsapp_webhook(
                 mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "audio/ogg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else MIME_AUDIO_OGG
 
     # Suporte a Documentos e Arquivos (US-09)
     elif "documentMessage" in message or message_type == "documentMessage":

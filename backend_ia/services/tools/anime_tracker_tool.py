@@ -234,9 +234,9 @@ def _renovar_proximos_episodios_expirados(forcar: bool = False) -> None:
                     try:
                         firebase.db.collection("anime_watchlist").document(doc_id).set(_MEMORY_WATCHLIST[doc_id], merge=True)
                     except Exception as err:
-                        logger.error(f"Erro ao persistir renovacao de anime no Firestore: {err}")
+                        logger.exception("Erro ao persistir renovacao de anime no Firestore")
     except Exception as e:
-        logger.error(f"Erro ao renovar episodios expirados via AniList: {e}")
+        logger.exception("Erro ao renovar episodios expirados via AniList")
 
 
 def sincronizar_perfil_anilist(username: Optional[str] = None) -> str:
@@ -676,7 +676,7 @@ def consultar_meu_episodio_anime(titulo: str) -> str:
                     anime_salvo = data
                     break
         except Exception as e:
-            logger.error(f"Erro ao buscar anime no Firestore: {e}")
+            logger.exception("Erro ao buscar anime no Firestore")
 
     # 3. Se encontrado na lista pessoal do usuário:
     if anime_salvo:

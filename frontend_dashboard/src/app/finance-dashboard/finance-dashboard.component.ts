@@ -739,7 +739,7 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   saveEditCategory(): void {
-    if (!this.editingCategory || !this.editingCategory.name.trim()) return;
+    if (!this.editingCategory?.name?.trim()) return;
     const catName = this.editingCategory.name.trim();
     this.financeApi.updateCategory(this.editingCategory.id, {
       name: catName,

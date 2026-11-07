@@ -14,6 +14,7 @@ from services.tools.anime_tracker_tool import _MEMORY_WATCHLIST, _renovar_proxim
 from services.tools.clash_of_clans_tool import _fetch_coc_data, _encode_tag, _verificar_raid_season, _verificar_clan_war
 
 DEFAULT_ADVERSARY = "Adversário"
+MSG_SEM_COMPROMISSOS_HOJE = "• ℹ️ Nenhum compromisso agendado para hoje."
 VALID_BRIEFING_TOPICS = {"agenda", "lembretes", "saude", "veiculo", "furia", "esports", "animes", "clash", "financas", "streaming"}
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def salvar_preferencias_briefing(user_id: str, prefs: Dict[str, Any]) -> None:
         try:
             firebase.db.collection("briefing_preferences").document(uid).set(prefs)
         except Exception as e:
-            logger.error(f"Erro ao salvar preferências de briefing no Firestore: {e}")
+            logger.exception("Erro ao salvar preferências de briefing no Firestore")
 
 def configurar_preferencias_briefing(
     horario: Optional[str] = None,
@@ -468,7 +469,7 @@ def _obter_resumo_veiculo_briefing(user_id: str) -> str:
 
 def _formatar_bloco_agenda_briefing(agenda_raw: str, hoje_str: str) -> str:
     if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
-        return "• ℹ️ Nenhum compromisso agendado para hoje."
+        return MSG_SEM_COMPROMISSOS_HOJE
 
     linhas_agenda = []
     for linha in agenda_raw.splitlines():
@@ -493,7 +494,7 @@ def _formatar_bloco_agenda_briefing(agenda_raw: str, hoje_str: str) -> str:
         else:
             linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
 
-    return "\n".join(linhas_agenda) if linhas_agenda else "• ℹ️ Nenhum compromisso agendado para hoje."
+    return "\n".join(linhas_agenda) if linhas_agenda else MSG_SEM_COMPROMISSOS_HOJE
 
 def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optional[str] = None) -> str:
     """
@@ -527,7 +528,7 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
             try:
                 agenda_raw = consultar_agenda(dias=1, usuario=target_user_id)
                 if "Nenhum evento encontrado" in agenda_raw or "não foi configurada" in agenda_raw or "livre para esse período" in agenda_raw or not agenda_raw.strip():
-                    agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
+                    agenda_txt = MSG_SEM_COMPROMISSOS_HOJE
                 else:
                     linhas_agenda = []
                     for linha in agenda_raw.splitlines():
@@ -552,10 +553,10 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
                         else:
                             linhas_agenda.append(linha_s if linha_s.startswith("•") else f"• {linha_s}")
 
-                    agenda_txt = "\n".join(linhas_agenda) if linhas_agenda else "• ℹ️ Nenhum compromisso agendado para hoje."
+                    agenda_txt = "\n".join(linhas_agenda) if linhas_agenda else MSG_SEM_COMPROMISSOS_HOJE
             except Exception as e:
                 logger.warning(f"Erro ao consultar agenda para briefing: {e}")
-                agenda_txt = "• ℹ️ Nenhum compromisso agendado para hoje."
+                agenda_txt = MSG_SEM_COMPROMISSOS_HOJE
 
             blocos.append(f"📅 *Compromissos de Hoje:*\n{agenda_txt}")
 

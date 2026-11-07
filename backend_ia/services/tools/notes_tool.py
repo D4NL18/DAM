@@ -73,7 +73,7 @@ def _obter_todos_itens(colecao: Optional[str] = None) -> List[Dict[str, Any]]:
                         d.setdefault("id", doc.id)
                         d.setdefault("_colecao", "information_notes")
                         todos.append(d)
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao ler Firestore. Usando mock.")
             if colecao:
                 todos = [i for i in _mock_storage if i.get("_colecao") == colecao]
@@ -182,7 +182,7 @@ def _remover_item(item_id: str, colecao: str = "information_notes") -> bool:
                     if (doc_data.get("userId") or doc_data.get("user_id") or "daniel") == user_id:
                         doc_ref.delete()
                         removido = True
-            except Exception as e:
+            except Exception:
                 logger.exception("Erro ao excluir Firestore doc")
 
     return removido

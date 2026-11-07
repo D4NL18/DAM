@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Header
 from config import firebase
 from services.tools.calendar_tool import _get_calendar_service
 from services.tools.notes_tool import _obter_todos_itens, calcular_proxima_ocorrencia, concluir_lembrete, _atualizar_item
@@ -14,21 +14,27 @@ router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 @router.get("/finance/monthly-summary")
 def get_finance_monthly_summary(
     year: int = Query(default=datetime.now().year),
-    month: int = Query(default=datetime.now().month)
+    month: int = Query(default=datetime.now().month),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
     """
     Retorna o resumo financeiro mensal consultando diretamente a coleção 'finances' no Firestore.
-    Se a coleção estiver vazia, retorna listas zeradas sem mocks artificiais.
+    Filtra estritamente por userId e NÃO soma receitas (type='income') a total_spent.
     """
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
     total_spent = 0.0
     category_map: Dict[str, float] = {}
     recent_txs: List[Dict[str, Any]] = []
 
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finances").stream()
+            docs = firebase.db.collection("finances").where("userId", "==", effective_user).stream()
             for doc in docs:
                 data = doc.to_dict() or {}
+                doc_user = data.get("userId") or data.get("user_id") or "daniel"
+                if doc_user != effective_user:
+                    continue
+
                 # Filtragem de ano e mês (campo 'date' ou 'created_at')
                 date_str = data.get("date") or data.get("created_at") or ""
                 valido = True
@@ -38,20 +44,27 @@ def get_finance_monthly_summary(
                         if dt.year != year or dt.month != month:
                             valido = False
                     except Exception:
-                        pass
+                        valido = False
+                else:
+                    valido = False
 
                 if valido:
                     amount = float(data.get("amount") or 0.0)
                     category = data.get("category") or "Outros"
-                    total_spent += amount
-                    category_map[category] = category_map.get(category, 0.0) + amount
+                    tx_type = data.get("type") or "expense_variable"
+
+                    # Apenas despesas compõem total_spent e category_map
+                    if tx_type != "income":
+                        total_spent += amount
+                        category_map[category] = category_map.get(category, 0.0) + amount
 
                     recent_txs.append({
                         "id": doc.id,
                         "date": date_str or datetime.now().isoformat(),
                         "description": data.get("description") or "Transação sem descrição",
                         "amount": amount,
-                        "category": category
+                        "category": category,
+                        "type": tx_type
                     })
         except Exception as e:
             logger.error(f"Erro ao consultar finances no Firestore: {e}")

@@ -7,6 +7,7 @@ import unicodedata
 from datetime import datetime, timezone, timedelta
 from config import firebase
 from services.user_context import UserContext
+from services.execution_audit import ExecutionAuditContext
 from routers.finance import DEFAULT_CATEGORIES
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,16 @@ def _normalize_str(s: str) -> str:
     nfkd = unicodedata.normalize("NFKD", s)
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
 
+
+def invalidar_cache_categorias(user_id: Optional[str] = None):
+    """Invalida o cache L1 de categorias de usuários."""
+    global _USER_CATEGORIES_CACHE
+    if user_id:
+        keys_to_del = [k for k in list(_USER_CATEGORIES_CACHE.keys()) if k[0] == user_id]
+        for k in keys_to_del:
+            _USER_CATEGORIES_CACHE.pop(k, None)
+    else:
+        _USER_CATEGORIES_CACHE.clear()
 
 def obter_categorias_usuario(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -157,22 +168,44 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         categoria (str): Expense category (e.g. Food, Transport, Leisure).
         metodo_pagamento (str): 'Cartão de Crédito Secundário', 'Cartão de Crédito Pessoal' or 'Cartão de Débito'.
     """
+    if not descricao or not str(descricao).strip():
+        msg_err = "❌ Erro ao cadastrar no financeiro: A descrição do gasto está vazia. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_err, reason="invalid_description")
+        return msg_err
+
+    try:
+        parsed_val = float(valor)
+    except (ValueError, TypeError):
+        msg_err = "❌ Erro ao cadastrar no financeiro: Valor numérico inválido. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_err, reason="invalid_amount")
+        return msg_err
+
+    if parsed_val == 0:
+        msg_err = "❌ Erro ao cadastrar no financeiro: O valor do gasto deve ser maior que zero. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_err, reason="zero_amount")
+        return msg_err
+
     metodo_normalizado = normalizar_metodo_pagamento(metodo_pagamento)
     if not metodo_normalizado:
-        return (
-            "Método de pagamento não identificado. Em qual das suas contas/cartões foi a cobrança?\n"
+        msg_missing = (
+            "⚠️ ATENÇÃO — LANÇAMENTO AINDA NÃO CADASTRADO: Método de pagamento não identificado. "
+            "Em qual das suas contas/cartões foi a cobrança?\n"
             "• Cartão de crédito secundário\n"
             "• Cartão de crédito pessoal\n"
             "• Cartão de débito (ou Pix)"
         )
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_missing, reason="missing_payment_method")
+        return msg_missing
 
     if firebase.db is None:
-        return "Erro: O banco de dados não está disponível no momento."
+        msg_db = "❌ Erro: O banco de dados não está disponível no momento. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_db, reason="db_unavailable")
+        return msg_db
 
     try:
         user_id = UserContext.get_user_id() or "daniel"
         cat_normalizada = normalizar_categoria(categoria, user_id)
-        amount = abs(float(valor))
+        amount = abs(parsed_val)
 
         data_to_save = {
             "id": str(uuid.uuid4()),
@@ -191,14 +224,18 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         firebase.db.collection("finances").add(data_to_save)
         desc_log = (descricao[:30] + "...") if len(descricao) > 30 else descricao
         logger.info(f"Gasto registrado para [{user_id}]: {desc_log} - R$ {amount:.2f} [{metodo_normalizado}]")
-        return (
+        msg_ok = (
             f"Sucesso! Registrei o gasto de R$ {amount:.2f} com '{descricao}' "
             f"na categoria {cat_normalizada} no cartão **{metodo_normalizado}**."
         )
+        ExecutionAuditContext.record_success("registrar_gasto", msg_ok)
+        return msg_ok
 
     except Exception as e:
         logger.error(f"Erro ao registrar finanças: {e}")
-        return "Desculpe, ocorreu um erro ao salvar seu gasto. Tente novamente mais tarde."
+        msg_exc = "❌ Desculpe, ocorreu um erro ao salvar seu gasto no banco de dados. O lançamento NÃO foi cadastrado. Tente novamente mais tarde."
+        ExecutionAuditContext.record_failure("registrar_gasto", msg_exc, reason="exception")
+        return msg_exc
 
 
 def registrar_receita(descricao: str, valor: float, metodo_recebimento: Optional[str] = None) -> str:
@@ -210,12 +247,32 @@ def registrar_receita(descricao: str, valor: float, metodo_recebimento: Optional
         valor (float): Amount received.
         metodo_recebimento (str, optional): Payment method received into (Pix, Cartão de Débito, etc.).
     """
+    if not descricao or not str(descricao).strip():
+        msg_err = "❌ Erro ao cadastrar receita: A descrição está vazia. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_receita", msg_err, reason="invalid_description")
+        return msg_err
+
+    try:
+        parsed_val = float(valor)
+    except (ValueError, TypeError):
+        msg_err = "❌ Erro ao cadastrar receita: Valor numérico inválido. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_receita", msg_err, reason="invalid_amount")
+        return msg_err
+
+    parsed_val = abs(parsed_val)
+    if parsed_val == 0:
+        msg_err = "❌ Erro ao cadastrar receita: O valor da receita deve ser maior que zero. O lançamento NÃO foi cadastrado."
+        ExecutionAuditContext.record_failure("registrar_receita", msg_err, reason="zero_amount")
+        return msg_err
+
     if firebase.db is None:
-        return "Erro: O banco de dados não está disponível no momento."
+        msg_db = "❌ Erro: O banco de dados não está disponível no momento. A receita NÃO foi cadastrada."
+        ExecutionAuditContext.record_failure("registrar_receita", msg_db, reason="db_unavailable")
+        return msg_db
 
     try:
         user_id = UserContext.get_user_id() or "daniel"
-        amount = abs(float(valor))
+        amount = abs(parsed_val)
         metodo_norm = normalizar_metodo_pagamento(metodo_recebimento) or "Cartão de Débito"
 
         data_to_save = {
@@ -237,13 +294,17 @@ def registrar_receita(descricao: str, valor: float, metodo_recebimento: Optional
         logger.info(f"Receita registrada para [{user_id}]: {desc_log} - R$ {amount:.2f} [{metodo_norm}]")
 
         valor_fmt = f"R$ {amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        return (
+        msg_ok = (
             f"Sucesso! Registrei a receita de {valor_fmt} referente a '{descricao}' "
             f"na categoria Receitas ({metodo_norm})."
         )
+        ExecutionAuditContext.record_success("registrar_receita", msg_ok)
+        return msg_ok
     except Exception as e:
         logger.error(f"Erro ao registrar receita: {e}")
-        return "Desculpe, ocorreu um erro ao salvar a receita. Tente novamente mais tarde."
+        msg_exc = "❌ Desculpe, ocorreu um erro ao salvar a receita no banco de dados. A receita NÃO foi cadastrada. Tente novamente mais tarde."
+        ExecutionAuditContext.record_failure("registrar_receita", msg_exc, reason="exception")
+        return msg_exc
 
 
 def _match_category(item_cat: str, target_cat: str) -> bool:
@@ -296,9 +357,15 @@ def _calcular_intervalo_busca(
     return inicio, fim, f"{nome_mes}/{ano_alvo}", ano_alvo, mes_alvo
 
 
-def _obter_documentos_financas(col, inicio: datetime, fim: datetime, dias_retroativos: Optional[int]) -> list:
-    """Busca documentos da coleção com fallback para stream direto."""
+def _obter_documentos_financas(col, inicio: datetime, fim: datetime, dias_retroativos: Optional[int], user_id: Optional[str] = None) -> list:
+    """Busca documentos da coleção filtrando por userId com fallback seguro."""
     docs = []
+    if user_id and hasattr(col, "where"):
+        try:
+            col.where("userId", "==", user_id)
+        except Exception:
+            pass
+
     if hasattr(col, "where"):
         try:
             if dias_retroativos and dias_retroativos > 0:
@@ -339,7 +406,7 @@ def _parse_data_transacao(data: dict) -> Optional[datetime]:
 def _transacao_no_periodo(dt: Optional[datetime], inicio: datetime, ano_alvo: int, mes_alvo: int, dias_retroativos: Optional[int]) -> bool:
     """Valida se o datetime da transação está contido no período filtrado."""
     if not dt:
-        return True
+        return False
     if dias_retroativos and dias_retroativos > 0:
         return dt >= inicio
     return dt.year == ano_alvo and dt.month == mes_alvo
@@ -479,7 +546,7 @@ def consultar_resumo_gastos(
         inicio, fim, titulo_periodo, ano_alvo, mes_alvo = _calcular_intervalo_busca(agora, mes, ano, dias_retroativos)
 
         col = firebase.db.collection("finances")
-        docs = _obter_documentos_financas(col, inicio, fim, dias_retroativos)
+        docs = _obter_documentos_financas(col, inicio, fim, dias_retroativos, user_id=user_id)
         todos_gastos, por_cartao, por_categoria, total_geral = _processar_lancamentos(
             docs, user_id, inicio, ano_alvo, mes_alvo, dias_retroativos
         )

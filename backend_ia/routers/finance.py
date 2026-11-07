@@ -5,10 +5,20 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Header, HTTPException, Query, status
 from pydantic import BaseModel
 from config import firebase
+from config.timezone import TZ_BRASILIA
+
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/finance", tags=["Finance"])
+
+def __invalidar_cache_categorias(user_id: Optional[str] = None):
+    try:
+        from services.tools.finance_tool import invalidar_cache_categorias
+        _invalidar_cache_categorias(user_id)
+    except Exception:
+        pass
+
 
 DEFAULT_CATEGORIES = [
     {"id": "cat-mercado", "name": "Mercado", "color": "#2563eb"},
@@ -95,7 +105,7 @@ def get_finance_dashboard(
     user_cats = []
     if firebase.db is not None:
         try:
-            cat_docs = firebase.db.collection("finance_categories").stream()
+            cat_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
             for cd in cat_docs:
                 cdata = cd.to_dict() or {}
                 if (cdata.get("userId") or "daniel") == effective_user:
@@ -112,8 +122,21 @@ def get_finance_dashboard(
     user_docs = []
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finances").stream()
-            for doc in docs:
+            col = firebase.db.collection("finances")
+            raw_docs = []
+            if hasattr(col, "where"):
+                try:
+                    q_stream = col.where("userId", "==", effective_user).stream()
+                    raw_docs = list(q_stream)
+                except Exception:
+                    pass
+            if not raw_docs and hasattr(col, "stream"):
+                try:
+                    raw_docs = list(col.stream())
+                except Exception:
+                    pass
+
+            for doc in raw_docs:
                 data = doc.to_dict() or {}
                 doc_user = data.get("userId") or data.get("user_id") or "daniel"
                 if doc_user == effective_user:
@@ -287,7 +310,32 @@ def create_transaction(
         )
 
     tx_id = str(uuid.uuid4())
-    date_val = payload.date if payload.date else datetime.now(timezone.utc).isoformat()
+    agora_br = datetime.now(TZ_BRASILIA)
+    date_val = payload.date if payload.date else agora_br.isoformat()
+
+    if firebase.db is not None:
+        try:
+            doc_ref = firebase.db.collection("finances").document()
+            doc_data = {
+                "id": doc_ref.id,
+                "userId": effective_user,
+                "user_id": effective_user,
+                "description": payload.description,
+                "amount": payload.amount,
+                "category": payload.category,
+                "type": payload.type or "expense_variable",
+                "payment_method": payload.paymentMethod or "Cartão de Crédito Pessoal",
+                "installment": payload.installment,
+                "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
+                "date": date_val,
+                "timestamp": agora_br,
+                "created_at": agora_br.isoformat()
+            }
+            doc_ref.set(doc_data)
+            return doc_data
+        except Exception as e:
+            logger.error(f"Erro ao salvar transação: {e}")
+            raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
 
     doc_data = {
         "id": tx_id,
@@ -301,18 +349,9 @@ def create_transaction(
         "installment": payload.installment,
         "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
         "date": date_val,
-        "timestamp": datetime.now(timezone.utc),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "timestamp": agora_br,
+        "created_at": agora_br.isoformat()
     }
-
-    if firebase.db is not None:
-        try:
-            _, ref = firebase.db.collection("finances").add(doc_data)
-            doc_data["id"] = ref.id
-        except Exception as e:
-            logger.error(f"Erro ao salvar transação: {e}")
-            raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
-
     return doc_data
 
 
@@ -322,6 +361,7 @@ def update_transaction(
     payload: TransactionUpdateDTO,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
     update_data: Dict[str, Any] = {}
     if payload.description is not None:
         update_data["description"] = payload.description
@@ -342,9 +382,60 @@ def update_transaction(
 
     if firebase.db is not None:
         try:
-            firebase.db.collection("finances").document(tx_id).update(update_data)
+            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
+            if tx_id.startswith("proj_"):
+                parts = tx_id.split("_")
+                if len(parts) >= 4:
+                    origin_id = parts[1]
+                    target_year = int(parts[2])
+                    target_month = int(parts[3])
+                else:
+                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
+
+                orig_doc = firebase.db.collection("finances").document(origin_id).get()
+                if not orig_doc.exists:
+                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
+
+                orig_data = orig_doc.to_dict() or {}
+                doc_user = orig_data.get("userId") or orig_data.get("user_id") or "daniel"
+                if doc_user != effective_user:
+                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
+
+                new_doc_ref = firebase.db.collection("finances").document()
+                new_data = {
+                    "id": new_doc_ref.id,
+                    "userId": effective_user,
+                    "user_id": effective_user,
+                    "description": payload.description if payload.description is not None else orig_data.get("description", ""),
+                    "amount": payload.amount if payload.amount is not None else float(orig_data.get("amount", 0.0)),
+                    "category": payload.category if payload.category is not None else orig_data.get("category", "Outros"),
+                    "type": payload.type if payload.type is not None else orig_data.get("type", "expense_fixed"),
+                    "payment_method": payload.paymentMethod if payload.paymentMethod is not None else (orig_data.get("payment_method") or "Cartão de Crédito Pessoal"),
+                    "date": payload.date if payload.date is not None else f"{target_year}-{target_month:02d}-05T12:00:00Z",
+                    "originId": origin_id,
+                    "isRecurring": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                new_doc_ref.set(new_data)
+                return {"success": True, "id": new_doc_ref.id, "materialized": True, **new_data}
+
+            # 2. Transação física existente
+            doc_ref = firebase.db.collection("finances").document(tx_id)
+            doc_snap = doc_ref.get()
+            if not doc_snap.exists:
+                raise HTTPException(status_code=404, detail="Transação não encontrada")
+
+            doc_data = doc_snap.to_dict() or {}
+            doc_user = doc_data.get("userId") or doc_data.get("user_id") or "daniel"
+            if doc_user != effective_user:
+                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
+
+            doc_ref.update(update_data)
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Erro ao atualizar transação {tx_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao atualizar transação: {str(e)}")
 
     return {"success": True, "id": tx_id, **update_data}
 
@@ -353,11 +444,62 @@ def delete_transaction(
     tx_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
     if firebase.db is not None:
         try:
-            firebase.db.collection("finances").document(tx_id).delete()
+            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
+            if tx_id.startswith("proj_"):
+                parts = tx_id.split("_")
+                if len(parts) >= 4:
+                    origin_id = parts[1]
+                    target_year = int(parts[2])
+                    target_month = int(parts[3])
+                else:
+                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
+
+                orig_doc = firebase.db.collection("finances").document(origin_id).get()
+                if not orig_doc.exists:
+                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
+
+                orig_data = orig_doc.to_dict() or {}
+                doc_user = orig_data.get("userId") or orig_data.get("user_id") or "daniel"
+                if doc_user != effective_user:
+                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
+
+                tombstone_ref = firebase.db.collection("finances").document()
+                tombstone_data = {
+                    "id": tombstone_ref.id,
+                    "userId": effective_user,
+                    "user_id": effective_user,
+                    "description": orig_data.get("description", ""),
+                    "amount": 0.0,
+                    "category": orig_data.get("category", "Outros"),
+                    "type": "expense_fixed",
+                    "originId": origin_id,
+                    "active": False,
+                    "date": f"{target_year}-{target_month:02d}-05T12:00:00Z",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                tombstone_ref.set(tombstone_data)
+                return {"success": True, "id": tx_id, "excluded": True}
+
+            # 2. Transação física existente
+            doc_ref = firebase.db.collection("finances").document(tx_id)
+            doc_snap = doc_ref.get()
+            if not doc_snap.exists:
+                raise HTTPException(status_code=404, detail="Transação não encontrada")
+
+            doc_data = doc_snap.to_dict() or {}
+            doc_user = doc_data.get("userId") or doc_data.get("user_id") or "daniel"
+            if doc_user != effective_user:
+                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
+
+            doc_ref.delete()
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Erro ao deletar transação {tx_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar transação: {str(e)}")
 
     return {"success": True, "id": tx_id}
 
@@ -460,6 +602,7 @@ def update_category(
     if firebase.db is not None:
         try:
             firebase.db.collection("finance_categories").document(cat_id).update(update_data)
+            _invalidar_cache_categorias(x_user_id)
         except Exception as e:
             logger.error(f"Erro ao atualizar categoria {cat_id}: {e}")
 
@@ -504,6 +647,7 @@ def delete_category(
                     tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
                     for tx_doc in tx_docs:
                         tx_doc.reference.update({"category": "Outros"})
+            _invalidar_cache_categorias(effective_user)
         except Exception as e:
             logger.error(f"Erro ao deletar categoria {cat_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Erro ao deletar categoria: {str(e)}")
@@ -710,8 +854,20 @@ def get_finance_trends(
     user_docs = []
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finances").stream()
-            for doc in docs:
+            col = firebase.db.collection("finances")
+            raw_docs = []
+            if hasattr(col, "where"):
+                try:
+                    raw_docs = list(col.where("userId", "==", effective_user).stream())
+                except Exception:
+                    pass
+            if not raw_docs and hasattr(col, "stream"):
+                try:
+                    raw_docs = list(col.stream())
+                except Exception:
+                    pass
+
+            for doc in raw_docs:
                 data = doc.to_dict() or {}
                 if (data.get("userId") or data.get("user_id") or "daniel") == effective_user:
                     user_docs.append((doc, data))

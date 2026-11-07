@@ -77,7 +77,7 @@ class ConversationCacheService:
     def clear_cache(cls, domain: Optional[QueryVolatility] = None):
         """Limpa o cache L1 da memória."""
         with cls._lock:
-            if domain:
+            if domain is not None:
                 keys_to_del = [k for k, v in cls._l1_cache.items() if v.domain == domain]
                 for k in keys_to_del:
                     del cls._l1_cache[k]
@@ -428,8 +428,19 @@ class ConversationCacheService:
             ttl_seconds=ttl_seconds
         )
 
-        # 1. Grava em L1 (Memória)
+        # Não cacheia respostas se houve mutação/escrita via tools
+        try:
+            from services.execution_audit import ExecutionAuditContext
+            if ExecutionAuditContext.get_events():
+                return False
+        except Exception:
+            pass
+
+        # 1. Grava em L1 (Memória) com limite LRU max 500
         with cls._lock:
+            if len(cls._l1_cache) >= 500 and cache_key not in cls._l1_cache:
+                oldest_key = next(iter(cls._l1_cache))
+                del cls._l1_cache[oldest_key]
             cls._l1_cache[cache_key] = entry
 
         # 2. Grava em L2 (Firestore) de forma não-bloqueante/fail-safe
@@ -486,8 +497,4 @@ class ConversationCacheService:
                 "tokens_saved_estimated": 0
             }
 
-    @classmethod
-    def clear_cache(cls):
-        """Limpa o cache em memória (usado principalmente em testes)."""
-        with cls._lock:
-            cls._l1_cache.clear()
+

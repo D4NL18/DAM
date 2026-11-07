@@ -71,30 +71,8 @@ export class AuthService {
         }
         return false;
       }),
-      catchError(() => {
-        // Fallback resiliente com credenciais genéricas de desenvolvimento
-        const isMaster = (cleanUser.toLowerCase() === 'admin' || cleanUser.toLowerCase() === 'admin_user') && (cleanPass === 'Admin@123' || cleanPass === 'password');
-        const isUser = (cleanUser.toLowerCase() === 'user' || cleanUser.toLowerCase() === 'guest_user') && (cleanPass === 'User@123' || cleanPass === 'password');
-
-        if (isMaster) {
-          const user: User = {
-            userId: 'admin',
-            name: 'Admin',
-            role: 'admin',
-            token: 'local-session-admin'
-          };
-          this.setUser(user);
-          return of(true);
-        } else if (isUser) {
-          const user: User = {
-            userId: 'user',
-            name: 'User',
-            role: 'user',
-            token: 'local-session-user'
-          };
-          this.setUser(user);
-          return of(true);
-        }
+      catchError((err) => {
+        console.error('Falha na autenticação corporativa:', err);
         return of(false);
       })
     );

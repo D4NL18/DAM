@@ -5,9 +5,9 @@
       <p class="page-subtitle">Métricas consolidadas a partir do Apple Health no Firestore</p>
     </div>
     <div class="period-selector">
-      <button class="period-btn">Hoje</button>
-      <button class="period-btn active">Semana</button>
-      <button class="period-btn">Mês</button>
+      <button class="period-btn" [class.active]="selectedPeriod === 'hoje'" (click)="setPeriod('hoje')">Hoje</button>
+      <button class="period-btn" [class.active]="selectedPeriod === 'semana'" (click)="setPeriod('semana')">Semana</button>
+      <button class="period-btn" [class.active]="selectedPeriod === 'mes'" (click)="setPeriod('mes')">Mês</button>
     </div>
   </div>
 

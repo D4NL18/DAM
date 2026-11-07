@@ -206,9 +206,9 @@
 
       <!-- ABA 1: LEMBRETES ATIVOS -->
       <ng-container *ngIf="activeRemindersTab === 'ativos'">
-        <div class="reminders-list" *ngIf="summary.reminders.length > 0; else noReminders">
+        <div class="reminders-list" *ngIf="filteredReminders.length > 0; else noReminders">
           <div 
-            *ngFor="let rem of summary.reminders" 
+            *ngFor="let rem of filteredReminders" 
             class="reminder-item" 
             [class.completed]="rem.completed"
             (click)="toggleReminder(rem.id)">
@@ -239,9 +239,9 @@
 
       <!-- ABA 2: HISTÓRICO (PASSADOS E CONCLUÍDOS) -->
       <ng-container *ngIf="activeRemindersTab === 'historico'">
-        <div class="reminders-list" *ngIf="summary.reminderHistory && summary.reminderHistory.length > 0; else noHistory">
+        <div class="reminders-list" *ngIf="filteredReminderHistory.length > 0; else noHistory">
           <div 
-            *ngFor="let rem of summary.reminderHistory" 
+            *ngFor="let rem of filteredReminderHistory" 
             class="reminder-item history-item"
             [class.completed]="rem.completed"
             (click)="toggleReminder(rem.id)">

@@ -24,6 +24,15 @@ import { catchError, of } from 'rxjs';
   styleUrl: './finance-dashboard.component.scss'
 })
 export class FinanceDashboardComponent implements OnInit {
+  private escapeHtml(str: any): string {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   dashboardData: FinanceDashboardData | null = null;
   loading = true;
   chartOption: EChartsOption = {};
@@ -284,14 +293,14 @@ export class FinanceDashboardComponent implements OnInit {
         textStyle: { color: '#ffffff', fontSize: 12 },
         formatter: (params: any) => {
           if (!params || !params.length) return '';
-          const monthTitle = params[0].axisValue;
+          const monthTitle = this.escapeHtml(params[0].axisValue);
           let html = `<div style="font-family: inherit; padding: 2px;"><strong>${monthTitle}</strong><br/>`;
           params.forEach((p: any) => {
             const valFormatted = this.hideValues
               ? '*****'
               : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.value);
             html += `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background-color:${p.color};"></span>` +
-                    `${p.seriesName}: <strong>${valFormatted}</strong><br/>`;
+                    `${this.escapeHtml(p.seriesName)}: <strong>${valFormatted}</strong><br/>`;
           });
           html += `</div>`;
           return html;
@@ -499,7 +508,7 @@ export class FinanceDashboardComponent implements OnInit {
             ? '••••••'
             : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(params.value);
           return `<div style="font-family: inherit; font-size: 13px;">
-                    <strong>${params.name}</strong><br/>
+                    <strong>${this.escapeHtml(params.name)}</strong><br/>
                     ${valFormatted} (${params.percent}%)
                   </div>`;
         },
@@ -567,7 +576,7 @@ export class FinanceDashboardComponent implements OnInit {
       type: tx.type,
       paymentMethod: tx.paymentMethod || 'Cartão de Crédito Pessoal',
       installment: tx.installment || '',
-      owner: (tx.owner && tx.owner !== 'Christian') ? tx.owner : '',
+      owner: tx.owner || '',
       date: tx.date ? tx.date.substring(0, 10) : new Date().toISOString().substring(0, 10)
     };
     this.showTransactionModal = true;

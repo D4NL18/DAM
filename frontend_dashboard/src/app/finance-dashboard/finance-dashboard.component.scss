@@ -987,7 +987,7 @@
 /* --- Floating Summary Bar --- */
 .floating-summary-bar {
   position: fixed;
-  bottom: 0;
+  bottom: 56px;
   left: 0;
   right: 0;
   background: #ffffff;
@@ -999,6 +999,11 @@
   justify-content: center;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
   z-index: 40;
+
+  @media (min-width: 768px) {
+    bottom: 0;
+    left: 256px;
+  }
 
   .expand-chevron {
     background: transparent;

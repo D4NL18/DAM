@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AgendaApiService, AgendaSummary, CalendarEvent } from '../services/agenda-api.service';
+import { AgendaApiService, AgendaSummary, CalendarEvent, ReminderItem } from '../services/agenda-api.service';
 
 @Component({
   selector: 'app-agenda-dashboard',
@@ -67,18 +67,69 @@ export class AgendaDashboardComponent implements OnInit {
       this.daysOfWeek.push({
         dayName: weekNames[i],
         dayNumber: current.getDate(),
-        active: current.toDateString() === today.toDateString(),
+        active: false,
         hasEvents: false
       });
     }
   }
 
+  get selectedDay(): { dayName: string; dayNumber: number; active: boolean; hasEvents: boolean } | undefined {
+    return this.daysOfWeek.find(d => d.active);
+  }
+
   get filteredEvents(): CalendarEvent[] {
     if (!this.summary) return [];
-    if (this.selectedFilter === 'todos') {
-      return this.summary.upcomingEvents;
+    let list = this.summary.upcomingEvents || [];
+
+    const activeDay = this.selectedDay;
+    if (activeDay) {
+      const diaPrefix = activeDay.dayNumber.toString().padStart(2, '0') + '/';
+      list = list.filter(ev => {
+        if (!ev.startTime) return false;
+        if (ev.startTime.startsWith(diaPrefix)) return true;
+        const isToday = this.isTodayNumber(activeDay.dayNumber);
+        return !ev.startTime.includes('/') && isToday;
+      });
     }
-    return this.summary.upcomingEvents.filter(ev => ev.category === this.selectedFilter);
+
+    if (this.selectedFilter === 'todos') {
+      return list;
+    }
+    return list.filter(ev => ev.category === this.selectedFilter);
+  }
+
+  get filteredReminders(): ReminderItem[] {
+    if (!this.summary) return [];
+    const list = this.summary.reminders || [];
+    const activeDay = this.selectedDay;
+    if (!activeDay) return list;
+
+    const diaPrefix = activeDay.dayNumber.toString().padStart(2, '0') + '/';
+    return list.filter(r => {
+      if (!r.dueTime) return true;
+      if (r.dueTime.startsWith(diaPrefix)) return true;
+      const isToday = this.isTodayNumber(activeDay.dayNumber);
+      return !r.dueTime.includes('/') && isToday;
+    });
+  }
+
+  get filteredReminderHistory(): ReminderItem[] {
+    if (!this.summary) return [];
+    const list = this.summary.reminderHistory || [];
+    const activeDay = this.selectedDay;
+    if (!activeDay) return list;
+
+    const diaPrefix = activeDay.dayNumber.toString().padStart(2, '0') + '/';
+    return list.filter(r => {
+      if (!r.dueTime) return true;
+      if (r.dueTime.startsWith(diaPrefix)) return true;
+      const isToday = this.isTodayNumber(activeDay.dayNumber);
+      return !r.dueTime.includes('/') && isToday;
+    });
+  }
+
+  private isTodayNumber(dayNum: number): boolean {
+    return new Date().getDate() === dayNum;
   }
 
   activeRemindersTab: 'ativos' | 'historico' = 'ativos';
@@ -90,6 +141,7 @@ export class AgendaDashboardComponent implements OnInit {
   setPeriod(period: 'hoje' | 'semana' | 'mes'): void {
     if (this.selectedPeriod === period) return;
     this.selectedPeriod = period;
+    this.daysOfWeek.forEach(d => d.active = false);
     this.loadAgenda();
   }
 
@@ -117,7 +169,10 @@ export class AgendaDashboardComponent implements OnInit {
   }
 
   selectDay(selectedDay: { dayName: string; dayNumber: number; active: boolean; hasEvents: boolean }): void {
+    const wasActive = selectedDay.active;
     this.daysOfWeek.forEach(d => d.active = false);
-    selectedDay.active = true;
+    if (!wasActive) {
+      selectedDay.active = true;
+    }
   }
 }

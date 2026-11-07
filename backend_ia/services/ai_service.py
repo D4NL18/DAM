@@ -1,9 +1,11 @@
 import logging
+import re
+import unicodedata
 import google.generativeai as genai
 from config.settings import settings
 from repositories.chat_repository import ChatRepository
 from services.tools.health_tool import consultar_saude
-from services.tools.finance_tool import registrar_gasto, consultar_resumo_gastos
+from services.tools.finance_tool import registrar_gasto, registrar_receita, consultar_resumo_gastos
 from services.tools.calendar_tool import agendar_evento, consultar_agenda, editar_evento, excluir_evento
 from services.tools.vehicle_tool import consultar_status_veiculo, acionar_travas_veiculo, cadastrar_ou_atualizar_veiculo
 from services.tools.esports_tool import consultar_jogos_cs2
@@ -64,6 +66,7 @@ from services.tools.work_hours_tool import (
 from services.tools.anime_tracker_tool import (
     adicionar_anime_watchlist,
     consultar_proximo_episodio,
+    consultar_meu_episodio_anime,
     listar_meus_animes,
     atualizar_progresso_anime,
     marcar_anime_concluido,
@@ -105,13 +108,132 @@ from services.prompts.prompt_composer import PromptComposer
 from services.cache_service import ConversationCacheService
 from services.tools_dispatcher import ToolsDispatcher
 from services.media_optimizer import MediaOptimizer
+from services.execution_audit import ExecutionAuditContext
 import base64
-from typing import Optional
+from typing import Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class AIService:
+    # P-1111: Modelo primário 'gemini-flash-latest' e cadeia determinística de fallback
+    PRIMARY_MODEL = "gemini-flash-latest"
+    GEMINI_MODEL_CHAIN = [
+        "gemini-flash-latest",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+    ]
+
+    # P-0804: Calibração determinística de temperatura para eliminar alucinações e manter foco estrito
+    DEFAULT_GENERATION_CONFIG = {
+        "temperature": 0.0,
+        "top_p": 0.1,
+        "top_k": 1,
+    }
+
+    _FINANCE_WRITE_INTENT_RE = re.compile(
+        r"\b("
+        r"cadastr(a|e|ar|ei)|lanc(a|e|ar|ei)|registr(a|e|ar|ei)|adicion(a|e|ar|ei)|"
+        r"gast(ei|o)|compr(ei|a)|paguei|recebi|reembolso"
+        r")\b.*\b("
+        r"reais|r\$|\d+|financeiro|gasto|despesa|receita|mercado|ifood|uber|farmacia|"
+        r"cartao|pix|debito|credito|conta|luz|agua|internet|aluguel"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    _FAKE_FINANCE_CONFIRMATION_RE = re.compile(
+        r"\b("
+        r"cadastrei|registrei|lancei|cadastrad[oa] com sucesso|registrad[oa] com sucesso|"
+        r"lancad[oa] com sucesso|lancamento realizado|gasto registrado|despesa cadastrada|"
+        r"receita registrada|adicionei o gasto|adicionei a despesa"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        if not text:
+            return ""
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower()
+
+    @classmethod
+    def _verify_and_enforce_honest_feedback(
+        cls,
+        user_text: str,
+        recent_context: str,
+        detected_domains: Optional[Set[str]],
+        final_text: Optional[str],
+    ) -> Tuple[Optional[str], bool]:
+        """
+        P-0805: Auditoria pós-geração para impedir confirmações falsas (alucinação de sucesso)
+        e garantir que erros reais de ferramentas sejam exibidos de forma transparente.
+        Retorna (texto_final_auditado, houve_substituicao_por_erro).
+        """
+        if not final_text:
+            return final_text, False
+
+        norm_final = cls._normalize_text(final_text)
+
+        # 1. Se alguma tool falhou explicitamente no turno, verifica se o LLM ocultou o erro
+        failures = ExecutionAuditContext.get_failures()
+        if failures:
+            last_failure_msg = failures[-1]["message"]
+            claims_fake_success = bool(cls._FAKE_FINANCE_CONFIRMATION_RE.search(norm_final))
+            mentions_error_honestly = any(
+                marker in norm_final
+                for marker in (
+                    "nao foi cadastrad",
+                    "nao esta disponivel",
+                    "metodo de pagamento nao identificado",
+                    "erro ao salvar",
+                    "erro:",
+                    "falha",
+                    "invalido",
+                )
+            )
+            if claims_fake_success or not mentions_error_honestly:
+                logger.warning(
+                    f"[AI SERVICE AUDIT P-0805] O LLM omitiu ou mascarou falha da tool "
+                    f"'{failures[-1]['tool']}'. Substituindo resposta pelo feedback de erro real."
+                )
+                return last_failure_msg, True
+
+        # 2. Se o usuário pediu para cadastrar algo no financeiro e o LLM afirmou que cadastrou,
+        # mas nenhuma tool financeira (registrar_gasto / registrar_receita) teve sucesso no turno:
+        combined_user_context = cls._normalize_text(f"{recent_context} {user_text}".strip())
+        norm_user = cls._normalize_text(user_text)
+
+        is_finance_write_request = bool(
+            cls._FINANCE_WRITE_INTENT_RE.search(norm_user)
+            or (
+                detected_domains
+                and "finance" in detected_domains
+                and cls._FINANCE_WRITE_INTENT_RE.search(combined_user_context)
+            )
+        )
+        claims_finance_registered = bool(cls._FAKE_FINANCE_CONFIRMATION_RE.search(norm_final))
+
+        if is_finance_write_request and claims_finance_registered:
+            if not ExecutionAuditContext.has_successful_execution({"registrar_gasto", "registrar_receita"}):
+                logger.error(
+                    f"[AI SERVICE AUDIT P-0805] Alucinação de cadastro financeiro bloqueada! "
+                    f"O modelo afirmou que cadastrou para '{user_text[:60]}', mas registrar_gasto/registrar_receita "
+                    f"NÃO foi executada com sucesso."
+                )
+                honest_error = (
+                    "❌ **Erro — O lançamento NÃO foi cadastrado:** A gravação no módulo financeiro **não foi gravada** "
+                    "(nenhuma confirmação de escrita foi registrada no banco de dados). "
+                    "Verifique se informou a descrição, o valor em reais e o método de pagamento "
+                    "(*Cartão de Crédito Pessoal*, *Cartão de Crédito Secundário* ou *Cartão de Débito/Pix*) "
+                    "e tente novamente."
+                )
+                return honest_error, True
+
+        return final_text, False
+
     @staticmethod
     def setup():
         if not settings.GEMINI_API_KEY:
@@ -126,6 +248,9 @@ class AIService:
         media_base64: Optional[str] = None, 
         media_mimetype: Optional[str] = None
     ) -> str:
+        # 0. Reseta o contexto de auditoria de execução de ferramentas do turno (P-0805)
+        ExecutionAuditContext.reset()
+
         # 1. Guardrail de Segurança: Checagem de Prompt Injection / Jailbreak
         is_injection, injection_reason = GuardrailsService.detect_prompt_injection(user_text)
         if is_injection:
@@ -200,17 +325,7 @@ class AIService:
             detected_domains = ToolsDispatcher.detect_domains(user_text, context_text=recent_context)
             system_instruction = PromptComposer.compose_system_instruction(agora, domains=detected_domains)
 
-            model = genai.GenerativeModel(
-                model_name='gemini-3.6-flash',
-                tools=selected_tools,
-                system_instruction=system_instruction
-            )
-            
-            chat = model.start_chat(
-                history=history,
-                enable_automatic_function_calling=True if selected_tools else False
-            )
-            
+            part = None
             if media_base64 and media_mimetype:
                 # Sanitiza Base64 (remove prefixos data URI e quebras de linha/espaços)
                 clean_b64 = media_base64
@@ -226,51 +341,91 @@ class AIService:
                     "mime_type": clean_mimetype,
                     "data": media_bytes
                 }
-                response = chat.send_message([part, user_text])
-            else:
-                response = chat.send_message(safe_prompt)
 
-            # 7. Resiliência e Auto-Healing contra MALFORMED_FUNCTION_CALL (P-1108)
+            # 7. Cadeia de Modelos com Fallback Determinístico (P-1111) + Auto-Healing (P-1108) + Temperatura Calibrada (P-0804)
             final_text = None
-            is_malformed_call = False
+            last_error = None
 
-            if hasattr(response, "candidates") and response.candidates:
-                candidate = response.candidates[0]
-                finish_reason = getattr(candidate, "finish_reason", None)
-                if finish_reason == 10 or str(finish_reason).upper().endswith("MALFORMED_FUNCTION_CALL"):
-                    is_malformed_call = True
-
-            if not is_malformed_call:
+            for model_name in AIService.GEMINI_MODEL_CHAIN:
                 try:
-                    final_text = response.text
-                except (ValueError, AttributeError) as ve:
-                    logger.warning(f"[AI SERVICE] response.text indisponível (possível chamada com tools ausentes): {ve}")
-                    is_malformed_call = True
+                    model = genai.GenerativeModel(
+                        model_name=model_name,
+                        tools=selected_tools,
+                        system_instruction=system_instruction,
+                        generation_config=AIService.DEFAULT_GENERATION_CONFIG
+                    )
 
-            if is_malformed_call:
-                logger.warning(
-                    f"[AI SERVICE AUTO-HEALING] Chamada com tools={len(selected_tools) if selected_tools else 0} falhou para '{user_text[:50]}...'. "
-                    "Retentando automaticamente com catálogo completo de ferramentas e prompt irrestrito..."
-                )
-                fallback_tools = ToolsDispatcher.get_all_tools()
-                fallback_instruction = PromptComposer.compose_system_instruction(agora, domains=None)
-                fallback_model = genai.GenerativeModel(
-                    model_name='gemini-3.6-flash',
-                    tools=fallback_tools,
-                    system_instruction=fallback_instruction
-                )
-                fallback_chat = fallback_model.start_chat(
-                    history=history,
-                    enable_automatic_function_calling=True
-                )
-                if media_base64 and media_mimetype:
-                    retry_resp = fallback_chat.send_message([part, user_text])
-                else:
-                    retry_resp = fallback_chat.send_message(safe_prompt)
-                final_text = retry_resp.text
+                    chat = model.start_chat(
+                        history=history,
+                        enable_automatic_function_calling=True if selected_tools else False
+                    )
 
-            # 8. Salva no cache se elegível (PC-08 / P-1106)
-            if final_text:
+                    if part is not None:
+                        response = chat.send_message([part, user_text])
+                    else:
+                        response = chat.send_message(safe_prompt)
+
+                    is_malformed_call = False
+                    if hasattr(response, "candidates") and response.candidates:
+                        candidate = response.candidates[0]
+                        finish_reason = getattr(candidate, "finish_reason", None)
+                        if finish_reason == 10 or str(finish_reason).upper().endswith("MALFORMED_FUNCTION_CALL"):
+                            is_malformed_call = True
+
+                    if not is_malformed_call:
+                        try:
+                            final_text = response.text
+                        except (ValueError, AttributeError) as ve:
+                            logger.warning(f"[AI SERVICE] response.text indisponível em '{model_name}' (possível chamada com tools ausentes): {ve}")
+                            is_malformed_call = True
+
+                    if is_malformed_call:
+                        logger.warning(
+                            f"[AI SERVICE AUTO-HEALING] Chamada em '{model_name}' com tools={len(selected_tools) if selected_tools else 0} falhou para '{user_text[:50]}...'. "
+                            "Retentando automaticamente com catálogo completo de ferramentas e prompt irrestrito..."
+                        )
+                        fallback_tools = ToolsDispatcher.get_all_tools()
+                        fallback_instruction = PromptComposer.compose_system_instruction(agora, domains=None)
+                        fallback_model = genai.GenerativeModel(
+                            model_name=model_name,
+                            tools=fallback_tools,
+                            system_instruction=fallback_instruction,
+                            generation_config=AIService.DEFAULT_GENERATION_CONFIG
+                        )
+                        fallback_chat = fallback_model.start_chat(
+                            history=history,
+                            enable_automatic_function_calling=True
+                        )
+                        if part is not None:
+                            retry_resp = fallback_chat.send_message([part, user_text])
+                        else:
+                            retry_resp = fallback_chat.send_message(safe_prompt)
+                        final_text = retry_resp.text
+
+                    if model_name != AIService.PRIMARY_MODEL:
+                        logger.info(f"[AI SERVICE FALLBACK] Resposta gerada com sucesso pelo modelo de fallback '{model_name}'.")
+                    break
+                except Exception as model_err:
+                    last_error = model_err
+                    logger.warning(
+                        f"[AI SERVICE FALLBACK] Falha ao utilizar modelo '{model_name}': {model_err}. "
+                        "Tentando próximo modelo da cadeia de fallback..."
+                    )
+                    continue
+
+            if final_text is None and last_error is not None:
+                raise last_error
+
+            # 8. Auditoria Anti-Alucinação de Escrita e Feedback de Erro Honesto (P-0805)
+            final_text, was_error_override = AIService._verify_and_enforce_honest_feedback(
+                user_text=user_text,
+                recent_context=recent_context,
+                detected_domains=detected_domains,
+                final_text=final_text,
+            )
+
+            # 9. Salva no cache apenas se elegível e não for um erro interceptado (PC-08 / P-1106)
+            if final_text and not was_error_override:
                 ConversationCacheService.save_response(
                     remote_jid=remote_jid, 
                     query=user_text, 

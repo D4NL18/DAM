@@ -69,6 +69,7 @@ from services.tools.work_hours_tool import (
 from services.tools.anime_tracker_tool import (
     adicionar_anime_watchlist,
     consultar_proximo_episodio,
+    consultar_meu_episodio_anime,
     listar_meus_animes,
     atualizar_progresso_anime,
     marcar_anime_concluido,
@@ -135,7 +136,7 @@ class ToolsDispatcher:
         "alexa": [acionar_rotina_alexa, falar_na_alexa],
         "nutrition": [consultar_lista_substituicao, avaliar_substituicao_alimento],
         "anime": [
-            adicionar_anime_watchlist, consultar_proximo_episodio, listar_meus_animes,
+            adicionar_anime_watchlist, consultar_proximo_episodio, consultar_meu_episodio_anime, listar_meus_animes,
             atualizar_progresso_anime, marcar_anime_concluido, grade_semanal_animes,
             sincronizar_perfil_anilist, consultar_novas_temporadas, explorar_temporada_animes
         ],
@@ -162,7 +163,9 @@ class ToolsDispatcher:
     INTENT_REGEXES = {
         "finance": re.compile(
             r"\b(gast(ei|os?|ando)|compr(ei|as?)|paguei|pagamentos?|debito|credito|pix|despesas?|faturas?|saldo|financas|financeiro|categorias?|quanto gastei|resumo (financeiro|de (despesas|gastos)|dos valores)|valores de gastos|"
-            r"reembolso|reembolsos|recebi|receita|receitas|estorno|estornos|salario|salário|renda|devolucao|devolução|entrada)\b",
+            r"reembolso|reembolsos|recebi|receita|receitas|estorno|estornos|salario|salário|renda|devolucao|devolução|entrada)\b|"
+            r"\b(cadastr(a|e|ar|ei|ou|o)|lanc(a|e|ar|ei|ou|amento|amentos)|registr(a|e|ar|ei|ou)|adicion(a|e|ar|ei))\b.*?\b(financas|financeiro|gasto|gastos|despesa|despesas|receita|receitas|conta|cartao|pix|debito|credito|reais|real|r\$|mercado|supermercado|ifood|uber|farmacia|aluguel|condominio|luz|agua|internet|gasolina|combustivel|restaurante|lazer)\b|"
+            r"\b(cartao\s+(pessoal|secundario|compartilhado|de\s+credito|de\s+debito)|no\s+cartao)\b",
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(
@@ -205,7 +208,12 @@ class ToolsDispatcher:
             re.IGNORECASE
         ),
         "anime": re.compile(
-            r"\b(anime|animes|anilist|proximo episodio|manga|otaku|crunchyroll|temporada de anime)\b",
+            r"\b(anime|animes|anilist|proximo episodio|manga|otaku|crunchyroll|temporada de anime|"
+            r"qual\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"em\s+qual\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"em\s+que\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"qual\s+o?\s*meu\s+progresso\s+(em|no|de)|"
+            r"quantos\s+eps?\s+(eu\s+)?ja\s+vi)\b",
             re.IGNORECASE
         ),
         "vault": re.compile(
@@ -280,7 +288,7 @@ class ToolsDispatcher:
             sticky_domains = {"wishlist", "calendar_notes", "finance"}
             for d in sticky_domains:
                 if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
-                    if not matched or d in {"wishlist", "calendar_notes"}:
+                    if not matched or d in {"wishlist", "calendar_notes", "finance"}:
                         matched.append(d)
 
         return matched

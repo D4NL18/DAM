@@ -44,8 +44,10 @@ def dividir_conta_restaurante(
 
     if taxa_servico is not None:
         taxa_servico_percent = taxa_servico
-    if taxa_servico is not None:
-        taxa_servico_percent = taxa_servico
+    if taxa_servico is not None:
+
+        taxa_servico_percent = taxa_servico
+
     parsed_participants = []
     subtotal_geral = 0.0
 
@@ -152,9 +154,11 @@ def dividir_conta_restaurante(
     linhas.append(f"💵 *TOTAL DA CONTA:* {_format_currency(total_geral_conta)}")
 
     if chave_pix and chave_pix.strip():
-        linhas.append("━━━━━━━━━━━━━━━━━━━━━━")
-        linhas.append("📱 *Chave Pix para Pagamento:*")
-        linhas.append(f"`{chave_pix.strip()}`")
-        linhas.append("_(Copie a chave acima para efetuar a transferência)_")
+        linhas.extend([
+            "━━━━━━━━━━━━━━━━━━━━━━",
+            "📱 *Chave Pix para Pagamento:*",
+            f"`{chave_pix.strip()}`",
+            "_(Copie a chave acima para efetuar a transferência)_"
+        ])
 
     return "\n".join(linhas).strip()

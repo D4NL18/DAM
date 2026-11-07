@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 
 UTC_OFFSET_SUFFIX = "+00:00"
+FMT_DATETIME_SHORT = "%d/%m %H:%M"
 
 @router.get("/finance/monthly-summary")
 def get_finance_monthly_summary(
@@ -81,8 +82,8 @@ def get_finance_monthly_summary(
                         "category": category,
                         "type": tx_type
                     })
-        except Exception as e:
-            logger.error(f"Erro ao consultar finances no Firestore: {e}")
+        except Exception:
+            logger.exception("Erro ao consultar finances no Firestore")
 
     # Ordena as transações mais recentes
     recent_txs.sort(key=lambda x: x.get("date", ""), reverse=True)
@@ -138,8 +139,8 @@ def get_health_summary(
                         sleep_hours = float(m_data[0].get("total_sleep") or m_data[0].get("qty") or 0.0)
 
                 metrics_list.append({"id": doc.id, "created_at": payload.get("created_at")})
-        except Exception as e:
-            logger.error(f"Erro ao consultar health_metrics no Firestore: {e}")
+        except Exception:
+            logger.exception("Erro ao consultar health_metrics no Firestore")
 
     return {
         "stepCount": step_count,
@@ -207,7 +208,7 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
                     duracao = (e_dt - s_dt).total_seconds() / 3600.0
                     meeting_hours += duracao
                     if period in ["semana", "mes"]:
-                        hora_inicio = s_dt.strftime("%d/%m %H:%M")
+                        hora_inicio = s_dt.strftime(FMT_DATETIME_SHORT)
                         hora_fim = e_dt.strftime("%H:%M")
                     else:
                         hora_inicio = s_dt.strftime("%H:%M")
@@ -234,8 +235,8 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
                     "category": cat,
                     "status": "confirmed"
                 })
-        except Exception as e:
-            logger.error(f"Erro ao buscar Google Calendar no endpoint da agenda: {e}")
+        except Exception:
+            logger.exception("Erro ao buscar Google Calendar no endpoint da agenda")
 
     # Lembretes reais da coleção 'notes_reminders'
     lembretes_ativos = []
@@ -301,10 +302,10 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
                 try:
                     if "T" in data_hora_raw:
                         dt = datetime.fromisoformat(data_hora_raw.replace("Z", UTC_OFFSET_SUFFIX))
-                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                        due_time_fmt = dt.strftime(FMT_DATETIME_SHORT)
                     elif len(data_hora_raw) >= 16 and data_hora_raw[4] == '-' and data_hora_raw[7] == '-':
                         dt = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
-                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                        due_time_fmt = dt.strftime(FMT_DATETIME_SHORT)
                 except Exception:
                     due_time_fmt = data_hora_raw
 

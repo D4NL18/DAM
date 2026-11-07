@@ -434,6 +434,6 @@ class AIService:
                 )
 
             return final_text
-        except Exception as e:
-            logger.error(f"Erro no Gemini: {e}")
+        except Exception:
+            logger.exception("Erro no Gemini")
             return "Desculpe, meus servidores estão indisponíveis no momento. Tente novamente mais tarde."

@@ -44,8 +44,35 @@ class ChatRepository:
                 doc_data["messageId"] = message_id
 
             firebase.db.collection(ChatRepository.COLLECTION).add(doc_data)
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao salvar chat log no Firestore")
+
+    @staticmethod
+    def _filtrar_mensagens_alvo(docs_query, target_date: str) -> list:
+        mensagens = []
+        for d in docs_query:
+            data = d.to_dict() or {}
+            ts = data.get("timestamp")
+            if not ts:
+                continue
+            dt_br = to_brasilia(ts) if hasattr(ts, "astimezone") else ts
+            dt_str = dt_br.strftime("%Y-%m-%d") if hasattr(dt_br, "strftime") else str(dt_br)[:10]
+
+            if dt_str == target_date:
+                texto = (data.get("text") or "").strip()
+                from_me = bool(data.get("fromMe"))
+                if not ChatRepository._is_daily_briefing_message(texto, from_me):
+                    mensagens.append((dt_br, from_me, texto))
+        return mensagens
+
+    @staticmethod
+    def _formatar_linhas_compactadas(mensagens_alvo: list) -> str:
+        linhas = []
+        for _, from_me, txt in mensagens_alvo:
+            autor = "DAM" if from_me else "User"
+            resumo_linha = txt[:200] + "..." if len(txt) > 200 else txt
+            linhas.append(f"[{autor}]: {resumo_linha}")
+        return " | ".join(linhas)
 
     @staticmethod
     def compact_and_archive_history(
@@ -77,38 +104,12 @@ class ChatRepository:
                 .stream()
             )
 
-            mensagens_alvo = []
-            for d in docs_query:
-                data = d.to_dict()
-                ts = data.get("timestamp")
-                if not ts:
-                    continue
-                dt_br = to_brasilia(ts) if hasattr(ts, "astimezone") else ts
-                dt_str = dt_br.strftime("%Y-%m-%d") if hasattr(dt_br, "strftime") else str(dt_br)[:10]
-
-                if dt_str == target_date:
-                    texto = (data.get("text") or "").strip()
-                    from_me = bool(data.get("fromMe"))
-                    # Exclui o resumo matinal diário
-                    if ChatRepository._is_daily_briefing_message(texto, from_me):
-                        continue
-                    mensagens_alvo.append((dt_br, from_me, texto))
-
+            mensagens_alvo = ChatRepository._filtrar_mensagens_alvo(docs_query, target_date)
             if not mensagens_alvo:
                 return {"status": "empty", "message_count": 0, "date": target_date}
 
-            # Ordena cronologicamente
             mensagens_alvo.sort(key=lambda x: x[0])
-
-            # Compacta em formato estruturado
-            linhas_compactadas = []
-            for _, from_me, txt in mensagens_alvo:
-                autor = "DAM" if from_me else "User"
-                # Limita linhas longas
-                resumo_linha = txt[:200] + "..." if len(txt) > 200 else txt
-                linhas_compactadas.append(f"[{autor}]: {resumo_linha}")
-
-            compacted_text = " | ".join(linhas_compactadas)
+            compacted_text = ChatRepository._formatar_linhas_compactadas(mensagens_alvo)
             doc_id = f"{remote_jid}__{target_date}".replace("/", "_")
 
             payload = {
@@ -192,6 +193,6 @@ class ChatRepository:
                 logger.debug(f"Nenhum histórico compactado recuperado ou erro silencioso: {ce}")
 
             return history
-        except Exception as e:
+        except Exception:
             logger.exception("Erro ao recuperar histórico recente no Firestore")
             return []

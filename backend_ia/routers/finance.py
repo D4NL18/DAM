@@ -1,1084 +1,1084 @@
-import logging
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Header, HTTPException, Query, status
-from pydantic import BaseModel
-from config import firebase
-from config.timezone import TZ_BRASILIA
-
-
-logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/api/v1/finance", tags=["Finance"])
-
-DEFAULT_PAYMENT_METHOD = "Cartão de Crédito Pessoal"
-UTC_OFFSET_SUFFIX = "+00:00"
-
-def _invalidar_cache_categorias(user_id: Optional[str] = None):
-    try:
-        from services.tools.finance_tool import invalidar_cache_categorias
-        invalidar_cache_categorias(user_id)
-    except Exception:
-        pass
-
-
-DEFAULT_CATEGORIES = [
-    {"id": "cat-mercado", "name": "Mercado", "color": "#2563eb"},
-    {"id": "cat-carro", "name": "Carro", "color": "#eab308"},
-    {"id": "cat-oliver", "name": "Oliver", "color": "#86efac"},
-    {"id": "cat-casa", "name": "Casa", "color": "#15803d"},
-    {"id": "cat-familia", "name": "Família", "color": "#22c55e"},
-    {"id": "cat-farmacia", "name": "Farmácia", "color": "#a855f7"},
-    {"id": "cat-karen", "name": "Karen", "color": "#f472b6"},
-    {"id": "cat-gatos", "name": "Gatos", "color": "#7e22ce"},
-    {"id": "cat-lazer", "name": "Lazer", "color": "#06b6d4"},
-    {"id": "cat-mercadinho", "name": "Mercadinho", "color": "#f97316"},
-    {"id": "cat-ifood", "name": "iFood", "color": "#ef4444"},
-    {"id": "cat-receitas", "name": "Receitas", "color": "#10b981"},
-    {"id": "cat-outros", "name": "Outros", "color": "#64748b"}
-]
-
-DEFAULT_CARDS = [
-    {"id": "card-credito-pessoal", "name": DEFAULT_PAYMENT_METHOD, "type": "credito"},
-    {"id": "card-credito-secundario", "name": "Cartão de Crédito Secundário", "type": "credito"},
-    {"id": "card-debito-pix", "name": "Cartão de Débito / Pix", "type": "debito"}
-]
-
-class TransactionCreateDTO(BaseModel):
-    description: str
-    amount: float
-    category: str
-    type: Optional[str] = "expense_variable"
-    paymentMethod: Optional[str] = DEFAULT_PAYMENT_METHOD
-    installment: Optional[str] = None
-    owner: Optional[str] = None
-    date: Optional[str] = None
-
-class TransactionUpdateDTO(BaseModel):
-    description: Optional[str] = None
-    amount: Optional[float] = None
-    category: Optional[str] = None
-    type: Optional[str] = None
-    paymentMethod: Optional[str] = None
-    installment: Optional[str] = None
-    owner: Optional[str] = None
-    date: Optional[str] = None
-
-class CategoryDTO(BaseModel):
-    name: str
-    color: str
-
-class CardDTO(BaseModel):
-    name: str
-    type: str
-
-def _get_category_color(category_name: str, custom_categories: List[Dict[str, Any]]) -> str:
-    for cat in custom_categories:
-        if cat.get("name", "").lower() == category_name.lower():
-            return cat.get("color", "#64748b")
-    for cat in DEFAULT_CATEGORIES:
-        if cat.get("name", "").lower() == category_name.lower():
-            return cat.get("color", "#64748b")
-    return "#64748b"
-
-@router.get("/dashboard")
-def get_finance_dashboard(
-    year: int = Query(default=datetime.now().year),
-    month: int = Query(default=datetime.now().month),
-    type: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    """Retorna dados agregados para o dashboard avançado de finanças com projeção de despesas fixas (P-0904)."""
-    effective_user = x_user_id.strip() if isinstance(x_user_id, str) and x_user_id else "daniel"
-    type_filter = type if isinstance(type, str) else None
-    cat_filter = category if isinstance(category, str) else None
-    target_year = year if isinstance(year, int) else datetime.now().year
-    target_month = month if isinstance(month, int) else datetime.now().month
-
-    total_income = 0.0
-    total_fixed = 0.0
-    total_variable = 0.0
-    
-    category_map: Dict[str, float] = {}
-    transactions: List[Dict[str, Any]] = []
-
-    # Busca categorias customizadas do usuário para mapear cores
-    user_cats = []
-    if firebase.db is not None:
-        try:
-            cat_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
-            for cd in cat_docs:
-                cdata = cd.to_dict() or {}
-                if (cdata.get("userId") or "daniel") == effective_user:
-                    user_cats.append({
-                        "id": cd.id,
-                        "name": cdata.get("name", ""),
-                        "color": cdata.get("color", "#64748b")
-                    })
-        except Exception as e:
-            logger.warning(f"Erro ao buscar categorias customizadas: {e}")
-
-    all_categories = user_cats if user_cats else DEFAULT_CATEGORIES
-
-    user_docs = []
-    if firebase.db is not None:
-        try:
-            col = firebase.db.collection("finances")
-            raw_docs = []
-            if hasattr(col, "where"):
-                try:
-                    q_stream = col.where("userId", "==", effective_user).stream()
-                    raw_docs = list(q_stream)
-                except Exception:
-                    pass
-            if not raw_docs and hasattr(col, "stream"):
-                try:
-                    raw_docs = list(col.stream())
-                except Exception:
-                    pass
-
-            for doc in raw_docs:
-                data = doc.to_dict() or {}
-                doc_user = data.get("userId") or data.get("user_id") or "daniel"
-                if doc_user == effective_user:
-                    user_docs.append((doc, data))
-        except Exception as e:
-            logger.exception("Erro ao processar finanças no Firestore")
-
-    current_month_tx_ids = set()
-    current_month_origin_ids = set()
-    current_month_descriptions = set()
-
-    # 1. Processa transações fiscais cadastradas no mês consultado
-    for doc, data in user_docs:
-        date_str = data.get("date") or data.get("created_at") or ""
-        valido = True
-        dt_obj = None
-        if date_str:
-            try:
-                clean_date = date_str.replace("Z", UTC_OFFSET_SUFFIX)
-                dt_obj = datetime.fromisoformat(clean_date)
-                if dt_obj.year != target_year or dt_obj.month != target_month:
-                    valido = False
-            except Exception:
-                pass
-
-        if not valido:
-            continue
-
-        amount = float(data.get("amount") or 0.0)
-        tx_type = data.get("type") or "expense_variable"
-        cat = data.get("category") or "Outros"
-
-        current_month_tx_ids.add(doc.id)
-        if data.get("originId"):
-            current_month_origin_ids.add(data.get("originId"))
-        d_norm = (data.get("description") or "").strip().lower()
-        if d_norm:
-            current_month_descriptions.add(d_norm)
-
-        if tx_type == "income":
-            total_income += amount
-        elif tx_type == "expense_fixed":
-            total_fixed += amount
-        else:
-            total_variable += amount
-
-        incluir = True
-        if type_filter and type_filter != "total" and tx_type != type_filter:
-            incluir = False
-        if cat_filter and cat.lower() != cat_filter.lower():
-            incluir = False
-
-        if incluir:
-            if tx_type != "income":
-                category_map[cat] = category_map.get(cat, 0.0) + amount
-
-            transactions.append({
-                "id": doc.id,
-                "date": date_str or datetime.now(timezone.utc).isoformat(),
-                "description": data.get("description") or "Sem descrição",
-                "amount": amount,
-                "category": cat,
-                "categoryColor": _get_category_color(cat, all_categories),
-                "type": tx_type,
-                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
-                "installment": data.get("installment"),
-                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
-                "isRecurring": bool(data.get("isRecurring", False)),
-                "originId": data.get("originId")
-            })
-
-    # 2. Projeção Dinâmica em Tempo de Leitura de Despesas Fixas Recorrentes (P-0904)
-    target_month_val = target_year * 12 + target_month
-    for doc, data in user_docs:
-        tx_type = data.get("type") or "expense_variable"
-        if tx_type != "expense_fixed":
-            continue
-        if data.get("active") is False:
-            continue
-
-        date_str = data.get("date") or data.get("created_at") or ""
-        dt_obj = None
-        if date_str:
-            try:
-                dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
-            except Exception:
-                pass
-
-        if dt_obj:
-            doc_month_val = dt_obj.year * 12 + dt_obj.month
-            if doc_month_val > target_month_val:
-                continue
-
-        # Deduplicação: não projetar se já existir no mês alvo por ID, originId ou descrição
-        d_norm = (data.get("description") or "").strip().lower()
-        if doc.id in current_month_tx_ids:
-            continue
-        if doc.id in current_month_origin_ids:
-            continue
-        if d_norm and d_norm in current_month_descriptions:
-            continue
-
-        amount = float(data.get("amount") or 0.0)
-        cat = data.get("category") or "Outros"
-        total_fixed += amount
-
-        incluir = True
-        if type_filter and type_filter != "total" and type_filter != "expense_fixed":
-            incluir = False
-        if cat_filter and cat.lower() != cat_filter.lower():
-            incluir = False
-
-        if incluir:
-            category_map[cat] = category_map.get(cat, 0.0) + amount
-            proj_id = f"proj_{doc.id}_{target_year}_{target_month}"
-            proj_date = f"{target_year}-{target_month:02d}-05T12:00:00Z"
-            transactions.append({
-                "id": proj_id,
-                "date": proj_date,
-                "description": data.get("description") or "Sem descrição",
-                "amount": amount,
-                "category": cat,
-                "categoryColor": _get_category_color(cat, all_categories),
-                "type": "expense_fixed",
-                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
-                "installment": data.get("installment"),
-                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
-                "isRecurring": True,
-                "originId": doc.id
-            })
-
-    transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
-
-    total_spent = total_fixed + total_variable
-    balance = total_income - total_spent
-    target_sum = sum(category_map.values()) or 1.0
-
-    expenses_by_category = [
-        {
-            "category": cat_name,
-            "amount": round(val, 2),
-            "percentage": round((val / target_sum) * 100.0, 1),
-            "color": _get_category_color(cat_name, all_categories)
-        }
-        for cat_name, val in sorted(category_map.items(), key=lambda x: x[1], reverse=True)
-    ]
-
-    return {
-        "totalSpent": round(total_spent, 2),
-        "totalIncome": round(total_income, 2),
-        "totalFixed": round(total_fixed, 2),
-        "totalVariable": round(total_variable, 2),
-        "balance": round(balance, 2),
-        "currency": "BRL",
-        "expensesByCategory": expenses_by_category,
-        "transactions": transactions
-    }
-
-@router.post("/transactions", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
-def create_transaction(
-    payload: TransactionCreateDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-
-    # Validação P-0902: Se for receita, o valor deve ser estritamente positivo
-    if payload.type == "income" and payload.amount <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="O valor da receita deve ser estritamente maior que zero."
-        )
-
-    tx_id = str(uuid.uuid4())
-    agora_br = datetime.now(TZ_BRASILIA)
-    date_val = payload.date if payload.date else agora_br.isoformat()
-
-    if firebase.db is not None:
-        try:
-            col = firebase.db.collection("finances")
-            if hasattr(col, "add") and hasattr(col.add, "return_value") and isinstance(col.add.return_value, tuple):
-                doc_ref = col.add.return_value[1]
-            else:
-                doc_ref = col.document()
-
-            doc_id = getattr(doc_ref, "id", None) or tx_id
-            doc_data = {
-                "id": doc_id,
-                "userId": effective_user,
-                "user_id": effective_user,
-                "description": payload.description,
-                "amount": payload.amount,
-                "category": payload.category,
-                "type": payload.type or "expense_variable",
-                "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
-                "installment": payload.installment,
-                "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
-                "date": date_val,
-                "timestamp": agora_br,
-                "created_at": agora_br.isoformat()
-            }
-            if hasattr(doc_ref, "set"):
-                doc_ref.set(doc_data)
-            return doc_data
-        except Exception:
-            logger.exception("Erro ao salvar transação")
-            raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
-
-    doc_data = {
-        "id": tx_id,
-        "userId": effective_user,
-        "user_id": effective_user,
-        "description": payload.description,
-        "amount": payload.amount,
-        "category": payload.category,
-        "type": payload.type or "expense_variable",
-        "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
-        "installment": payload.installment,
-        "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
-        "date": date_val,
-        "timestamp": agora_br,
-        "created_at": agora_br.isoformat()
-    }
-    return doc_data
-
-
-@router.put("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def update_transaction(
-    tx_id: str,
-    payload: TransactionUpdateDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    update_data: Dict[str, Any] = {}
-    if payload.description is not None:
-        update_data["description"] = payload.description
-    if payload.amount is not None:
-        update_data["amount"] = payload.amount
-    if payload.category is not None:
-        update_data["category"] = payload.category
-    if payload.type is not None:
-        update_data["type"] = payload.type
-    if payload.paymentMethod is not None:
-        update_data["payment_method"] = payload.paymentMethod
-    if payload.installment is not None:
-        update_data["installment"] = payload.installment
-    if payload.owner is not None:
-        update_data["owner"] = payload.owner
-    if payload.date is not None:
-        update_data["date"] = payload.date
-
-    if firebase.db is not None:
-        try:
-            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
-            if tx_id.startswith("proj_"):
-                parts = tx_id.split("_")
-                if len(parts) >= 4:
-                    origin_id = parts[1]
-                    target_year = int(parts[2])
-                    target_month = int(parts[3])
-                else:
-                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
-
-                orig_doc = firebase.db.collection("finances").document(origin_id).get()
-                if not orig_doc.exists:
-                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
-
-                raw_orig = orig_doc.to_dict()
-                if isinstance(raw_orig, dict):
-                    orig_data = raw_orig
-                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
-                else:
-                    orig_data = {}
-                    doc_user = effective_user
-
-                if doc_user != effective_user:
-                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
-
-                new_doc_ref = firebase.db.collection("finances").document()
-                new_data = {
-                    "id": new_doc_ref.id,
-                    "userId": effective_user,
-                    "user_id": effective_user,
-                    "description": payload.description if payload.description is not None else orig_data.get("description", ""),
-                    "amount": payload.amount if payload.amount is not None else float(orig_data.get("amount", 0.0)),
-                    "category": payload.category if payload.category is not None else orig_data.get("category", "Outros"),
-                    "type": payload.type if payload.type is not None else orig_data.get("type", "expense_fixed"),
-                    "payment_method": payload.paymentMethod if payload.paymentMethod is not None else (orig_data.get("payment_method") or DEFAULT_PAYMENT_METHOD),
-                    "date": payload.date if payload.date is not None else f"{target_year}-{target_month:02d}-05T12:00:00Z",
-                    "originId": origin_id,
-                    "isRecurring": False,
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                new_doc_ref.set(new_data)
-                return {"success": True, "id": new_doc_ref.id, "materialized": True, **new_data}
-
-            # 2. Transação física existente
-            doc_ref = firebase.db.collection("finances").document(tx_id)
-            doc_snap = doc_ref.get()
-            if not doc_snap.exists:
-                raise HTTPException(status_code=404, detail="Transação não encontrada")
-
-            raw_doc = doc_snap.to_dict()
-            if isinstance(raw_doc, dict):
-                doc_data = raw_doc
-                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
-            else:
-                doc_data = {}
-                doc_user = effective_user
-
-            if doc_user != effective_user:
-                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
-
-            doc_ref.update(update_data)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception("Erro ao atualizar transação")
-            raise HTTPException(status_code=500, detail=f"Erro ao atualizar transação: {str(e)}")
-
-    return {"success": True, "id": tx_id, **update_data}
-
-@router.delete("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def delete_transaction(
-    tx_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    if firebase.db is not None:
-        try:
-            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
-            if tx_id.startswith("proj_"):
-                parts = tx_id.split("_")
-                if len(parts) >= 4:
-                    origin_id = parts[1]
-                    target_year = int(parts[2])
-                    target_month = int(parts[3])
-                else:
-                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
-
-                orig_doc = firebase.db.collection("finances").document(origin_id).get()
-                if not orig_doc.exists:
-                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
-
-                raw_orig = orig_doc.to_dict()
-                if isinstance(raw_orig, dict):
-                    orig_data = raw_orig
-                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
-                else:
-                    orig_data = {}
-                    doc_user = effective_user
-
-                if doc_user != effective_user:
-                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
-
-                tombstone_ref = firebase.db.collection("finances").document()
-                tombstone_data = {
-                    "id": tombstone_ref.id,
-                    "userId": effective_user,
-                    "user_id": effective_user,
-                    "description": orig_data.get("description", ""),
-                    "amount": 0.0,
-                    "category": orig_data.get("category", "Outros"),
-                    "type": "expense_fixed",
-                    "originId": origin_id,
-                    "active": False,
-                    "date": f"{target_year}-{target_month:02d}-05T12:00:00Z",
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                tombstone_ref.set(tombstone_data)
-                return {"success": True, "id": tx_id, "excluded": True}
-
-            # 2. Transação física existente
-            doc_ref = firebase.db.collection("finances").document(tx_id)
-            doc_snap = doc_ref.get()
-            if not doc_snap.exists:
-                raise HTTPException(status_code=404, detail="Transação não encontrada")
-
-            raw_doc = doc_snap.to_dict()
-            if isinstance(raw_doc, dict):
-                doc_data = raw_doc
-                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
-            else:
-                doc_data = {}
-                doc_user = effective_user
-
-            if doc_user != effective_user:
-                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
-
-            doc_ref.delete()
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception("Erro ao deletar transação")
-            raise HTTPException(status_code=500, detail=f"Erro ao deletar transação: {str(e)}")
-
-    return {"success": True, "id": tx_id}
-
-# --- Gestão de Categorias ---
-
-def _inicializar_categorias_padrao_se_necessario(effective_user: str, user_cats: List[Dict[str, Any]]) -> None:
-    if user_cats or firebase.db is None:
-        return
-    try:
-        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
-        settings_doc = settings_ref.get()
-        is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
-        if not is_initialized:
-            batch = firebase.db.batch()
-            for def_cat in DEFAULT_CATEGORIES:
-                if def_cat["name"].lower() == "christian":
-                    continue
-                doc_ref = firebase.db.collection("finance_categories").document()
-                cat_item = {
-                    "id": doc_ref.id,
-                    "userId": effective_user,
-                    "name": def_cat["name"],
-                    "color": def_cat["color"],
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                batch.set(doc_ref, cat_item)
-                user_cats.append({
-                    "id": doc_ref.id,
-                    "name": def_cat["name"],
-                    "color": def_cat["color"]
-                })
-            settings_ref.set({"categories_initialized": True}, merge=True)
-            batch.commit()
-    except Exception:
-        logger.exception("Erro ao semear categorias padrão")
-
-def _remover_categoria_legada_e_migrar(effective_user: str, cat_id: str, deleted_names: List[str]) -> None:
-    clean_name = cat_id.replace("cat-", "").strip().lower()
-    query_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
-    for doc in query_docs:
-        data = doc.to_dict() or {}
-        d_id = str(data.get("id", "")).lower()
-        d_name = str(data.get("name", "")).lower()
-        if doc.id == cat_id or d_id == cat_id.lower() or d_name == clean_name or (cat_id == "cat-christian" and d_name == "christian"):
-            deleted_names.append(data.get("name", ""))
-            doc.reference.delete()
-
-    firebase.db.collection("finance_user_settings").document(effective_user).set(
-        {"categories_initialized": True}, merge=True
-    )
-
-    for cat_name in deleted_names:
-        if cat_name and cat_name != "Outros":
-            tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
-            for tx_doc in tx_docs:
-                tx_doc.reference.update({"category": "Outros"})
-    _invalidar_cache_categorias(effective_user)
-
-def _inicializar_cartoes_padrao_se_necessario(effective_user: str, user_cards: List[Dict[str, Any]]) -> None:
-    if user_cards or firebase.db is None:
-        return
-    try:
-        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
-        settings_doc = settings_ref.get()
-        is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
-        if not is_initialized:
-            batch = firebase.db.batch()
-            for def_card in DEFAULT_CARDS:
-                doc_ref = firebase.db.collection("finance_cards").document()
-                card_item = {
-                    "id": doc_ref.id,
-                    "userId": effective_user,
-                    "name": def_card["name"],
-                    "type": def_card["type"],
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                batch.set(doc_ref, card_item)
-                user_cards.append({
-                    "id": doc_ref.id,
-                    "name": def_card["name"],
-                    "type": def_card["type"]
-                })
-            settings_ref.set({"cards_initialized": True}, merge=True)
-            batch.commit()
-    except Exception:
-        logger.exception("Erro ao inicializar cartões padrão")
-
-@router.get("/categories")
-def get_categories(
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> List[Dict[str, Any]]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    user_cats = []
-
-    if firebase.db is not None:
-        try:
-            docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
-            for doc in docs:
-                data = doc.to_dict() or {}
-                # Filtrar qualquer remanescente de 'Christian'
-                if str(data.get("name", "")).strip().lower() == "christian":
-                    doc.reference.delete()
-                    continue
-                user_cats.append({
-                    "id": doc.id,
-                    "name": data.get("name", ""),
-                    "color": data.get("color", "#64748b")
-                })
-        except Exception as e:
-            logger.exception("Erro ao ler categorias no Firestore")
-
-    # Se o usuário ainda não tem categorias salvas, semear defaults limpos (sem Christian)
-    if not user_cats and firebase.db is not None:
-        try:
-            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
-            settings_doc = settings_ref.get()
-            is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
-            if not is_initialized:
-                batch = firebase.db.batch()
-                for def_cat in DEFAULT_CATEGORIES:
-                    if def_cat["name"].lower() == "christian":
-                        continue
-                    doc_ref = firebase.db.collection("finance_categories").document()
-                    cat_item = {
-                        "id": doc_ref.id,
-                        "userId": effective_user,
-                        "name": def_cat["name"],
-                        "color": def_cat["color"],
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    batch.set(doc_ref, cat_item)
-                    user_cats.append({
-                        "id": doc_ref.id,
-                        "name": def_cat["name"],
-                        "color": def_cat["color"]
-                    })
-                settings_ref.set({"categories_initialized": True}, merge=True)
-                batch.commit()
-        except Exception as e:
-            logger.exception("Erro ao semear categorias padrão")
-
-    return user_cats if user_cats else [c for c in DEFAULT_CATEGORIES if c["name"].lower() != "christian"]
-
-@router.post("/categories", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
-def create_category(
-    payload: CategoryDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    doc_data = {
-        "userId": effective_user,
-        "name": payload.name.strip(),
-        "color": payload.color.strip(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-
-    if firebase.db is not None:
-        try:
-            doc_ref = firebase.db.collection("finance_categories").document()
-            doc_data["id"] = doc_ref.id
-            doc_ref.set(doc_data)
-            firebase.db.collection("finance_user_settings").document(effective_user).set(
-                {"categories_initialized": True}, merge=True
-            )
-        except Exception as e:
-            logger.exception("Erro ao adicionar categoria")
-            raise HTTPException(status_code=500, detail="Erro ao adicionar categoria.")
-
-    return doc_data
-
-@router.put("/categories/{cat_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def update_category(
-    cat_id: str,
-    payload: CategoryDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    update_data = {
-        "name": payload.name.strip(),
-        "color": payload.color.strip()
-    }
-
-    if firebase.db is not None:
-        try:
-            firebase.db.collection("finance_categories").document(cat_id).update(update_data)
-            _invalidar_cache_categorias(x_user_id)
-        except Exception:
-            logger.exception("Erro ao atualizar categoria")
-
-    return {"success": True, "id": cat_id, **update_data}
-
-@router.delete("/categories/{cat_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def delete_category(
-    cat_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    deleted_names = []
-
-    if firebase.db is not None:
-        try:
-            # 1. Tentar deletar diretamente pelo ID do documento
-            doc_ref = firebase.db.collection("finance_categories").document(cat_id)
-            doc_snap = doc_ref.get()
-            if doc_snap.exists:
-                deleted_names.append(doc_snap.to_dict().get("name", ""))
-                doc_ref.delete()
-
-            _remover_categoria_legada_e_migrar(effective_user, cat_id, deleted_names)
-        except Exception as e:
-            logger.exception("Erro ao deletar categoria")
-            raise HTTPException(status_code=500, detail=f"Erro ao deletar categoria: {str(e)}")
-
-    return {"success": True, "id": cat_id, "deleted_names": deleted_names}
-
-# --- Gestão de Cartões ---
-
-@router.get("/cards")
-def get_cards(
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> List[Dict[str, Any]]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    user_cards = []
-
-    if firebase.db is not None:
-        try:
-            docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
-            for doc in docs:
-                data = doc.to_dict() or {}
-                user_cards.append({
-                    "id": doc.id,
-                    "name": data.get("name", ""),
-                    "type": data.get("type", "credito")
-                })
-        except Exception:
-            logger.exception("Erro ao ler cartões no Firestore")
-
-    # Inicializar cartões padrão se usuário não tiver nenhum salvo
-    if not user_cards and firebase.db is not None:
-        try:
-            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
-            settings_doc = settings_ref.get()
-            is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
-            if not is_initialized:
-                batch = firebase.db.batch()
-                for def_card in DEFAULT_CARDS:
-                    doc_ref = firebase.db.collection("finance_cards").document()
-                    card_item = {
-                        "id": doc_ref.id,
-                        "userId": effective_user,
-                        "name": def_card["name"],
-                        "type": def_card["type"],
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    batch.set(doc_ref, card_item)
-                    user_cards.append({
-                        "id": doc_ref.id,
-                        "name": def_card["name"],
-                        "type": def_card["type"]
-                    })
-                settings_ref.set({"cards_initialized": True}, merge=True)
-                batch.commit()
-        except Exception as e:
-            logger.exception("Erro ao inicializar cartões padrão")
-
-    return user_cards if user_cards else DEFAULT_CARDS
-
-@router.post("/cards", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
-def create_card(
-    payload: CardDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    doc_data = {
-        "userId": effective_user,
-        "name": payload.name.strip(),
-        "type": payload.type.strip(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-
-    if firebase.db is not None:
-        try:
-            doc_ref = firebase.db.collection("finance_cards").document()
-            doc_data["id"] = doc_ref.id
-            doc_ref.set(doc_data)
-            firebase.db.collection("finance_user_settings").document(effective_user).set(
-                {"cards_initialized": True}, merge=True
-            )
-        except Exception as e:
-            logger.exception("Erro ao cadastrar cartão")
-            raise HTTPException(status_code=500, detail="Erro ao cadastrar cartão.")
-
-    return doc_data
-
-@router.put("/cards/{card_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def update_card(
-    card_id: str,
-    payload: CardDTO,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    update_data = {
-        "name": payload.name.strip(),
-        "type": payload.type.strip()
-    }
-
-    if firebase.db is not None:
-        try:
-            firebase.db.collection("finance_cards").document(card_id).update(update_data)
-        except Exception:
-            logger.exception("Erro ao atualizar cartão")
-
-    return {"success": True, "id": card_id, **update_data}
-
-@router.delete("/cards/{card_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
-def delete_card(
-    card_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    if firebase.db is not None:
-        try:
-            doc_ref = firebase.db.collection("finance_cards").document(card_id)
-            if doc_ref.get().exists:
-                doc_ref.delete()
-            else:
-                clean_name = card_id.replace("card-", "").strip().lower()
-                query_docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
-                for doc in query_docs:
-                    data = doc.to_dict() or {}
-                    d_id = str(data.get("id", "")).lower()
-                    d_name = str(data.get("name", "")).lower()
-                    if doc.id == card_id or d_id == card_id.lower() or d_name == clean_name:
-                        doc.reference.delete()
-
-            firebase.db.collection("finance_user_settings").document(effective_user).set(
-                {"cards_initialized": True}, merge=True
-            )
-        except Exception as e:
-            logger.exception("Erro ao deletar cartão")
-            raise HTTPException(status_code=500, detail=f"Erro ao deletar cartão: {str(e)}")
-
-    return {"success": True, "id": card_id}
-
-# --- Evolução Temporal e Tendências (FG-07) ---
-
-MONTH_NAMES_SHORT = [
-    "", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-    "Jul", "Ago", "Set", "Out", "Nov", "Dez"
-]
-
-@router.get("/trends")
-def get_finance_trends(
-    period: str = Query(default="12m"),
-    startDate: Optional[str] = Query(None),
-    endDate: Optional[str] = Query(None),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    """Retorna séries históricas mensais de receitas e gastos para o período solicitado."""
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    now = datetime.now(timezone.utc)
-
-    if period == "current_month":
-        num_months = 1
-        period_label = "Mês atual"
-    elif period == "3m":
-        num_months = 3
-        period_label = "Últimos 3 meses"
-    elif period == "6m":
-        num_months = 6
-        period_label = "Últimos 6 meses"
-    else:  # default "12m" ou custom
-        num_months = 12
-        period_label = "Últimos 12 meses"
-
-    # Monta a série cronológica de meses (do mais antigo para o atual)
-    series_map: Dict[str, Dict[str, Any]] = {}
-    series_list: List[Dict[str, Any]] = []
-
-    for i in range(num_months - 1, -1, -1):
-        y = now.year
-        m = now.month - i
-        while m <= 0:
-            m += 12
-            y -= 1
-        key = f"{y}-{m:02d}"
-        label = f"{MONTH_NAMES_SHORT[m]} {y}"
-        item = {
-            "label": label,
-            "year": y,
-            "month": m,
-            "income": 0.0,
-            "expenses": 0.0,
-            "balance": 0.0
-        }
-        series_map[key] = item
-        series_list.append(item)
-
-    # Período anterior para comparação
-    prev_series_keys = set()
-    for i in range(num_months * 2 - 1, num_months - 1, -1):
-        y = now.year
-        m = now.month - i
-        while m <= 0:
-            m += 12
-            y -= 1
-        prev_series_keys.add(f"{y}-{m:02d}")
-
-    total_income = 0.0
-    total_expenses = 0.0
-    prev_income = 0.0
-    prev_expenses = 0.0
-
-    user_docs = []
-    if firebase.db is not None:
-        try:
-            col = firebase.db.collection("finances")
-            raw_docs = []
-            if hasattr(col, "where"):
-                try:
-                    raw_docs = list(col.where("userId", "==", effective_user).stream())
-                except Exception:
-                    pass
-            if not raw_docs and hasattr(col, "stream"):
-                try:
-                    raw_docs = list(col.stream())
-                except Exception:
-                    pass
-
-            for doc in raw_docs:
-                data = doc.to_dict() or {}
-                if (data.get("userId") or data.get("user_id") or "daniel") == effective_user:
-                    user_docs.append((doc, data))
-        except Exception as e:
-            logger.exception("Erro ao agregar tendências financeiras no Firestore")
-
-    fixed_docs_in_series: Dict[str, set] = {k: set() for k in series_map}
-    fixed_candidates = []
-
-    for doc, data in user_docs:
-        date_str = data.get("date") or data.get("created_at") or ""
-        if not date_str:
-            continue
-
-        try:
-            dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
-            doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
-        except Exception:
-            continue
-
-        amount = float(data.get("amount") or 0.0)
-        tx_type = data.get("type") or "expense_variable"
-
-        if tx_type == "expense_fixed" and data.get("active") is not False:
-            fixed_candidates.append((doc, data, dt_obj))
-
-        # Período corrente da série
-        if doc_key in series_map:
-            if tx_type == "income":
-                series_map[doc_key]["income"] += amount
-                total_income += amount
-            else:
-                series_map[doc_key]["expenses"] += amount
-                total_expenses += amount
-                if tx_type == "expense_fixed":
-                    desc_norm = (data.get("description") or "").strip().lower()
-                    fixed_docs_in_series[doc_key].add(doc.id)
-                    if data.get("originId"):
-                        fixed_docs_in_series[doc_key].add(data.get("originId"))
-                    if desc_norm:
-                        fixed_docs_in_series[doc_key].add(desc_norm)
-
-        # Período comparativo anterior
-        elif doc_key in prev_series_keys:
-            if tx_type == "income":
-                prev_income += amount
-            else:
-                prev_expenses += amount
-
-    # Projetar despesas fixas para os nós mensais da série histórica (P-0904)
-    for key, item in series_map.items():
-        y = item["year"]
-        m = item["month"]
-        target_month_val = y * 12 + m
-
-        for fix_doc, fix_data, dt_fix in fixed_candidates:
-            fix_month_val = dt_fix.year * 12 + dt_fix.month
-            if fix_month_val > target_month_val:
-                continue
-
-            desc_norm = (fix_data.get("description") or "").strip().lower()
-            existing_set = fixed_docs_in_series.get(key, set())
-            if fix_doc.id in existing_set or (desc_norm and desc_norm in existing_set):
-                continue
-            if fix_data.get("originId") and fix_data.get("originId") in existing_set:
-                continue
-
-            fix_amount = float(fix_data.get("amount") or 0.0)
-            item["expenses"] += fix_amount
-            total_expenses += fix_amount
-            existing_set.add(fix_doc.id)
-            if desc_norm:
-                existing_set.add(desc_norm)
-
-    for item in series_list:
-        item["income"] = round(item["income"], 2)
-        item["expenses"] = round(item["expenses"], 2)
-        item["balance"] = round(item["income"] - item["expenses"], 2)
-
-    total_income = round(total_income, 2)
-    total_expenses = round(total_expenses, 2)
-    period_balance = round(total_income - total_expenses, 2)
-
-    has_prev = prev_income > 0 or prev_expenses > 0
-    income_change = round(((total_income - prev_income) / prev_income) * 100, 1) if prev_income > 0 else 0.0
-    expense_change = round(((total_expenses - prev_expenses) / prev_expenses) * 100, 1) if prev_expenses > 0 else 0.0
-
-    return {
-        "period": period,
-        "periodLabel": period_label,
-        "totalIncome": total_income,
-        "totalExpenses": total_expenses,
-        "periodBalance": period_balance,
-        "currency": "BRL",
-        "comparison": {
-            "hasPreviousPeriod": has_prev,
-            "incomeChangePct": income_change,
-            "expenseChangePct": expense_change,
-            "comparisonText": f"comparado com os {num_months} meses anteriores" if has_prev else "Sem período anterior"
-        },
-        "series": series_list
-    }
-
-
-@router.post("/maintenance/sanitize")
-def sanitize_legacy_finance_data(
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
-) -> Dict[str, Any]:
-    """Endpoint de auto-cura para sanear registros corrompidos legados (P-0903)."""
-    effective_user = x_user_id.strip() if x_user_id else "daniel"
-    from services.finance_migration_service import sanear_transacoes_legadas
-    result = sanear_transacoes_legadas(effective_user)
-    return {
-        "data": result,
-        "meta": {
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    }
-
-
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, Header, HTTPException, Query, status
+from pydantic import BaseModel
+from config import firebase
+from config.timezone import TZ_BRASILIA
+
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1/finance", tags=["Finance"])
+
+DEFAULT_PAYMENT_METHOD = "Cartão de Crédito Pessoal"
+UTC_OFFSET_SUFFIX = "+00:00"
+
+def _invalidar_cache_categorias(user_id: Optional[str] = None):
+    try:
+        from services.tools.finance_tool import invalidar_cache_categorias
+        invalidar_cache_categorias(user_id)
+    except Exception:
+        pass
+
+
+DEFAULT_CATEGORIES = [
+    {"id": "cat-mercado", "name": "Mercado", "color": "#2563eb"},
+    {"id": "cat-carro", "name": "Carro", "color": "#eab308"},
+    {"id": "cat-oliver", "name": "Oliver", "color": "#86efac"},
+    {"id": "cat-casa", "name": "Casa", "color": "#15803d"},
+    {"id": "cat-familia", "name": "Família", "color": "#22c55e"},
+    {"id": "cat-farmacia", "name": "Farmácia", "color": "#a855f7"},
+    {"id": "cat-karen", "name": "Karen", "color": "#f472b6"},
+    {"id": "cat-gatos", "name": "Gatos", "color": "#7e22ce"},
+    {"id": "cat-lazer", "name": "Lazer", "color": "#06b6d4"},
+    {"id": "cat-mercadinho", "name": "Mercadinho", "color": "#f97316"},
+    {"id": "cat-ifood", "name": "iFood", "color": "#ef4444"},
+    {"id": "cat-receitas", "name": "Receitas", "color": "#10b981"},
+    {"id": "cat-outros", "name": "Outros", "color": "#64748b"}
+]
+
+DEFAULT_CARDS = [
+    {"id": "card-credito-pessoal", "name": DEFAULT_PAYMENT_METHOD, "type": "credito"},
+    {"id": "card-credito-secundario", "name": "Cartão de Crédito Secundário", "type": "credito"},
+    {"id": "card-debito-pix", "name": "Cartão de Débito / Pix", "type": "debito"}
+]
+
+class TransactionCreateDTO(BaseModel):
+    description: str
+    amount: float
+    category: str
+    type: Optional[str] = "expense_variable"
+    paymentMethod: Optional[str] = DEFAULT_PAYMENT_METHOD
+    installment: Optional[str] = None
+    owner: Optional[str] = None
+    date: Optional[str] = None
+
+class TransactionUpdateDTO(BaseModel):
+    description: Optional[str] = None
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    type: Optional[str] = None
+    paymentMethod: Optional[str] = None
+    installment: Optional[str] = None
+    owner: Optional[str] = None
+    date: Optional[str] = None
+
+class CategoryDTO(BaseModel):
+    name: str
+    color: str
+
+class CardDTO(BaseModel):
+    name: str
+    type: str
+
+def _get_category_color(category_name: str, custom_categories: List[Dict[str, Any]]) -> str:
+    for cat in custom_categories:
+        if cat.get("name", "").lower() == category_name.lower():
+            return cat.get("color", "#64748b")
+    for cat in DEFAULT_CATEGORIES:
+        if cat.get("name", "").lower() == category_name.lower():
+            return cat.get("color", "#64748b")
+    return "#64748b"
+
+@router.get("/dashboard")
+def get_finance_dashboard(
+    year: int = Query(default=datetime.now().year),
+    month: int = Query(default=datetime.now().month),
+    type: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    """Retorna dados agregados para o dashboard avançado de finanças com projeção de despesas fixas (P-0904)."""
+    effective_user = x_user_id.strip() if isinstance(x_user_id, str) and x_user_id else "daniel"
+    type_filter = type if isinstance(type, str) else None
+    cat_filter = category if isinstance(category, str) else None
+    target_year = year if isinstance(year, int) else datetime.now().year
+    target_month = month if isinstance(month, int) else datetime.now().month
+
+    total_income = 0.0
+    total_fixed = 0.0
+    total_variable = 0.0
+    
+    category_map: Dict[str, float] = {}
+    transactions: List[Dict[str, Any]] = []
+
+    # Busca categorias customizadas do usuário para mapear cores
+    user_cats = []
+    if firebase.db is not None:
+        try:
+            cat_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
+            for cd in cat_docs:
+                cdata = cd.to_dict() or {}
+                if (cdata.get("userId") or "daniel") == effective_user:
+                    user_cats.append({
+                        "id": cd.id,
+                        "name": cdata.get("name", ""),
+                        "color": cdata.get("color", "#64748b")
+                    })
+        except Exception as e:
+            logger.warning(f"Erro ao buscar categorias customizadas: {e}")
+
+    all_categories = user_cats if user_cats else DEFAULT_CATEGORIES
+
+    user_docs = []
+    if firebase.db is not None:
+        try:
+            col = firebase.db.collection("finances")
+            raw_docs = []
+            if hasattr(col, "where"):
+                try:
+                    q_stream = col.where("userId", "==", effective_user).stream()
+                    raw_docs = list(q_stream)
+                except Exception:
+                    pass
+            if not raw_docs and hasattr(col, "stream"):
+                try:
+                    raw_docs = list(col.stream())
+                except Exception:
+                    pass
+
+            for doc in raw_docs:
+                data = doc.to_dict() or {}
+                doc_user = data.get("userId") or data.get("user_id") or "daniel"
+                if doc_user == effective_user:
+                    user_docs.append((doc, data))
+        except Exception:
+            logger.exception("Erro ao processar finanças no Firestore")
+
+    current_month_tx_ids = set()
+    current_month_origin_ids = set()
+    current_month_descriptions = set()
+
+    # 1. Processa transações fiscais cadastradas no mês consultado
+    for doc, data in user_docs:
+        date_str = data.get("date") or data.get("created_at") or ""
+        valido = True
+        dt_obj = None
+        if date_str:
+            try:
+                clean_date = date_str.replace("Z", UTC_OFFSET_SUFFIX)
+                dt_obj = datetime.fromisoformat(clean_date)
+                if dt_obj.year != target_year or dt_obj.month != target_month:
+                    valido = False
+            except Exception:
+                pass
+
+        if not valido:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        tx_type = data.get("type") or "expense_variable"
+        cat = data.get("category") or "Outros"
+
+        current_month_tx_ids.add(doc.id)
+        if data.get("originId"):
+            current_month_origin_ids.add(data.get("originId"))
+        d_norm = (data.get("description") or "").strip().lower()
+        if d_norm:
+            current_month_descriptions.add(d_norm)
+
+        if tx_type == "income":
+            total_income += amount
+        elif tx_type == "expense_fixed":
+            total_fixed += amount
+        else:
+            total_variable += amount
+
+        incluir = True
+        if type_filter and type_filter != "total" and tx_type != type_filter:
+            incluir = False
+        if cat_filter and cat.lower() != cat_filter.lower():
+            incluir = False
+
+        if incluir:
+            if tx_type != "income":
+                category_map[cat] = category_map.get(cat, 0.0) + amount
+
+            transactions.append({
+                "id": doc.id,
+                "date": date_str or datetime.now(timezone.utc).isoformat(),
+                "description": data.get("description") or "Sem descrição",
+                "amount": amount,
+                "category": cat,
+                "categoryColor": _get_category_color(cat, all_categories),
+                "type": tx_type,
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
+                "installment": data.get("installment"),
+                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
+                "isRecurring": bool(data.get("isRecurring", False)),
+                "originId": data.get("originId")
+            })
+
+    # 2. Projeção Dinâmica em Tempo de Leitura de Despesas Fixas Recorrentes (P-0904)
+    target_month_val = target_year * 12 + target_month
+    for doc, data in user_docs:
+        tx_type = data.get("type") or "expense_variable"
+        if tx_type != "expense_fixed":
+            continue
+        if data.get("active") is False:
+            continue
+
+        date_str = data.get("date") or data.get("created_at") or ""
+        dt_obj = None
+        if date_str:
+            try:
+                dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
+            except Exception:
+                pass
+
+        if dt_obj:
+            doc_month_val = dt_obj.year * 12 + dt_obj.month
+            if doc_month_val > target_month_val:
+                continue
+
+        # Deduplicação: não projetar se já existir no mês alvo por ID, originId ou descrição
+        d_norm = (data.get("description") or "").strip().lower()
+        if doc.id in current_month_tx_ids:
+            continue
+        if doc.id in current_month_origin_ids:
+            continue
+        if d_norm and d_norm in current_month_descriptions:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        cat = data.get("category") or "Outros"
+        total_fixed += amount
+
+        incluir = True
+        if type_filter and type_filter != "total" and type_filter != "expense_fixed":
+            incluir = False
+        if cat_filter and cat.lower() != cat_filter.lower():
+            incluir = False
+
+        if incluir:
+            category_map[cat] = category_map.get(cat, 0.0) + amount
+            proj_id = f"proj_{doc.id}_{target_year}_{target_month}"
+            proj_date = f"{target_year}-{target_month:02d}-05T12:00:00Z"
+            transactions.append({
+                "id": proj_id,
+                "date": proj_date,
+                "description": data.get("description") or "Sem descrição",
+                "amount": amount,
+                "category": cat,
+                "categoryColor": _get_category_color(cat, all_categories),
+                "type": "expense_fixed",
+                "paymentMethod": data.get("payment_method") or data.get("paymentMethod") or DEFAULT_PAYMENT_METHOD,
+                "installment": data.get("installment"),
+                "owner": (data.get("owner") or "") if (data.get("owner") or "") != "Christian" else "",
+                "isRecurring": True,
+                "originId": doc.id
+            })
+
+    transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+    total_spent = total_fixed + total_variable
+    balance = total_income - total_spent
+    target_sum = sum(category_map.values()) or 1.0
+
+    expenses_by_category = [
+        {
+            "category": cat_name,
+            "amount": round(val, 2),
+            "percentage": round((val / target_sum) * 100.0, 1),
+            "color": _get_category_color(cat_name, all_categories)
+        }
+        for cat_name, val in sorted(category_map.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return {
+        "totalSpent": round(total_spent, 2),
+        "totalIncome": round(total_income, 2),
+        "totalFixed": round(total_fixed, 2),
+        "totalVariable": round(total_variable, 2),
+        "balance": round(balance, 2),
+        "currency": "BRL",
+        "expensesByCategory": expenses_by_category,
+        "transactions": transactions
+    }
+
+@router.post("/transactions", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
+def create_transaction(
+    payload: TransactionCreateDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+
+    # Validação P-0902: Se for receita, o valor deve ser estritamente positivo
+    if payload.type == "income" and payload.amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="O valor da receita deve ser estritamente maior que zero."
+        )
+
+    tx_id = str(uuid.uuid4())
+    agora_br = datetime.now(TZ_BRASILIA)
+    date_val = payload.date if payload.date else agora_br.isoformat()
+
+    if firebase.db is not None:
+        try:
+            col = firebase.db.collection("finances")
+            if hasattr(col, "add") and hasattr(col.add, "return_value") and isinstance(col.add.return_value, tuple):
+                doc_ref = col.add.return_value[1]
+            else:
+                doc_ref = col.document()
+
+            doc_id = getattr(doc_ref, "id", None) or tx_id
+            doc_data = {
+                "id": doc_id,
+                "userId": effective_user,
+                "user_id": effective_user,
+                "description": payload.description,
+                "amount": payload.amount,
+                "category": payload.category,
+                "type": payload.type or "expense_variable",
+                "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
+                "installment": payload.installment,
+                "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
+                "date": date_val,
+                "timestamp": agora_br,
+                "created_at": agora_br.isoformat()
+            }
+            if hasattr(doc_ref, "set"):
+                doc_ref.set(doc_data)
+            return doc_data
+        except Exception:
+            logger.exception("Erro ao salvar transação")
+            raise HTTPException(status_code=500, detail="Erro ao gravar transação no banco de dados.")
+
+    doc_data = {
+        "id": tx_id,
+        "userId": effective_user,
+        "user_id": effective_user,
+        "description": payload.description,
+        "amount": payload.amount,
+        "category": payload.category,
+        "type": payload.type or "expense_variable",
+        "payment_method": payload.paymentMethod or DEFAULT_PAYMENT_METHOD,
+        "installment": payload.installment,
+        "owner": payload.owner if payload.owner and payload.owner != "Christian" else None,
+        "date": date_val,
+        "timestamp": agora_br,
+        "created_at": agora_br.isoformat()
+    }
+    return doc_data
+
+
+@router.put("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def update_transaction(
+    tx_id: str,
+    payload: TransactionUpdateDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    update_data: Dict[str, Any] = {}
+    if payload.description is not None:
+        update_data["description"] = payload.description
+    if payload.amount is not None:
+        update_data["amount"] = payload.amount
+    if payload.category is not None:
+        update_data["category"] = payload.category
+    if payload.type is not None:
+        update_data["type"] = payload.type
+    if payload.paymentMethod is not None:
+        update_data["payment_method"] = payload.paymentMethod
+    if payload.installment is not None:
+        update_data["installment"] = payload.installment
+    if payload.owner is not None:
+        update_data["owner"] = payload.owner
+    if payload.date is not None:
+        update_data["date"] = payload.date
+
+    if firebase.db is not None:
+        try:
+            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
+            if tx_id.startswith("proj_"):
+                parts = tx_id.split("_")
+                if len(parts) >= 4:
+                    origin_id = parts[1]
+                    target_year = int(parts[2])
+                    target_month = int(parts[3])
+                else:
+                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
+
+                orig_doc = firebase.db.collection("finances").document(origin_id).get()
+                if not orig_doc.exists:
+                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
+
+                raw_orig = orig_doc.to_dict()
+                if isinstance(raw_orig, dict):
+                    orig_data = raw_orig
+                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
+                else:
+                    orig_data = {}
+                    doc_user = effective_user
+
+                if doc_user != effective_user:
+                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
+
+                new_doc_ref = firebase.db.collection("finances").document()
+                new_data = {
+                    "id": new_doc_ref.id,
+                    "userId": effective_user,
+                    "user_id": effective_user,
+                    "description": payload.description if payload.description is not None else orig_data.get("description", ""),
+                    "amount": payload.amount if payload.amount is not None else float(orig_data.get("amount", 0.0)),
+                    "category": payload.category if payload.category is not None else orig_data.get("category", "Outros"),
+                    "type": payload.type if payload.type is not None else orig_data.get("type", "expense_fixed"),
+                    "payment_method": payload.paymentMethod if payload.paymentMethod is not None else (orig_data.get("payment_method") or DEFAULT_PAYMENT_METHOD),
+                    "date": payload.date if payload.date is not None else f"{target_year}-{target_month:02d}-05T12:00:00Z",
+                    "originId": origin_id,
+                    "isRecurring": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                new_doc_ref.set(new_data)
+                return {"success": True, "id": new_doc_ref.id, "materialized": True, **new_data}
+
+            # 2. Transação física existente
+            doc_ref = firebase.db.collection("finances").document(tx_id)
+            doc_snap = doc_ref.get()
+            if not doc_snap.exists:
+                raise HTTPException(status_code=404, detail="Transação não encontrada")
+
+            raw_doc = doc_snap.to_dict()
+            if isinstance(raw_doc, dict):
+                doc_data = raw_doc
+                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
+            else:
+                doc_data = {}
+                doc_user = effective_user
+
+            if doc_user != effective_user:
+                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
+
+            doc_ref.update(update_data)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Erro ao atualizar transação")
+            raise HTTPException(status_code=500, detail=f"Erro ao atualizar transação: {str(e)}")
+
+    return {"success": True, "id": tx_id, **update_data}
+
+@router.delete("/transactions/{tx_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def delete_transaction(
+    tx_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    if firebase.db is not None:
+        try:
+            # 1. Tratar transação recorrente projetada (proj_{orig_id}_{year}_{month})
+            if tx_id.startswith("proj_"):
+                parts = tx_id.split("_")
+                if len(parts) >= 4:
+                    origin_id = parts[1]
+                    target_year = int(parts[2])
+                    target_month = int(parts[3])
+                else:
+                    raise HTTPException(status_code=400, detail="Formato de ID projetado inválido")
+
+                orig_doc = firebase.db.collection("finances").document(origin_id).get()
+                if not orig_doc.exists:
+                    raise HTTPException(status_code=404, detail="Transação original recorrente não encontrada")
+
+                raw_orig = orig_doc.to_dict()
+                if isinstance(raw_orig, dict):
+                    orig_data = raw_orig
+                    doc_user = orig_data.get("userId") or orig_data.get("user_id") or effective_user
+                else:
+                    orig_data = {}
+                    doc_user = effective_user
+
+                if doc_user != effective_user:
+                    raise HTTPException(status_code=403, detail="Acesso não autorizado")
+
+                tombstone_ref = firebase.db.collection("finances").document()
+                tombstone_data = {
+                    "id": tombstone_ref.id,
+                    "userId": effective_user,
+                    "user_id": effective_user,
+                    "description": orig_data.get("description", ""),
+                    "amount": 0.0,
+                    "category": orig_data.get("category", "Outros"),
+                    "type": "expense_fixed",
+                    "originId": origin_id,
+                    "active": False,
+                    "date": f"{target_year}-{target_month:02d}-05T12:00:00Z",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                tombstone_ref.set(tombstone_data)
+                return {"success": True, "id": tx_id, "excluded": True}
+
+            # 2. Transação física existente
+            doc_ref = firebase.db.collection("finances").document(tx_id)
+            doc_snap = doc_ref.get()
+            if not doc_snap.exists:
+                raise HTTPException(status_code=404, detail="Transação não encontrada")
+
+            raw_doc = doc_snap.to_dict()
+            if isinstance(raw_doc, dict):
+                doc_data = raw_doc
+                doc_user = doc_data.get("userId") or doc_data.get("user_id") or effective_user
+            else:
+                doc_data = {}
+                doc_user = effective_user
+
+            if doc_user != effective_user:
+                raise HTTPException(status_code=403, detail="Acesso não autorizado a esta transação")
+
+            doc_ref.delete()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Erro ao deletar transação")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar transação: {str(e)}")
+
+    return {"success": True, "id": tx_id}
+
+# --- Gestão de Categorias ---
+
+def _inicializar_categorias_padrao_se_necessario(effective_user: str, user_cats: List[Dict[str, Any]]) -> None:
+    if user_cats or firebase.db is None:
+        return
+    try:
+        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+        settings_doc = settings_ref.get()
+        is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
+        if not is_initialized:
+            batch = firebase.db.batch()
+            for def_cat in DEFAULT_CATEGORIES:
+                if def_cat["name"].lower() == "christian":
+                    continue
+                doc_ref = firebase.db.collection("finance_categories").document()
+                cat_item = {
+                    "id": doc_ref.id,
+                    "userId": effective_user,
+                    "name": def_cat["name"],
+                    "color": def_cat["color"],
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                batch.set(doc_ref, cat_item)
+                user_cats.append({
+                    "id": doc_ref.id,
+                    "name": def_cat["name"],
+                    "color": def_cat["color"]
+                })
+            settings_ref.set({"categories_initialized": True}, merge=True)
+            batch.commit()
+    except Exception:
+        logger.exception("Erro ao semear categorias padrão")
+
+def _remover_categoria_legada_e_migrar(effective_user: str, cat_id: str, deleted_names: List[str]) -> None:
+    clean_name = cat_id.replace("cat-", "").strip().lower()
+    query_docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
+    for doc in query_docs:
+        data = doc.to_dict() or {}
+        d_id = str(data.get("id", "")).lower()
+        d_name = str(data.get("name", "")).lower()
+        if doc.id == cat_id or d_id == cat_id.lower() or d_name == clean_name or (cat_id == "cat-christian" and d_name == "christian"):
+            deleted_names.append(data.get("name", ""))
+            doc.reference.delete()
+
+    firebase.db.collection("finance_user_settings").document(effective_user).set(
+        {"categories_initialized": True}, merge=True
+    )
+
+    for cat_name in deleted_names:
+        if cat_name and cat_name != "Outros":
+            tx_docs = firebase.db.collection("finances").where("userId", "==", effective_user).where("category", "==", cat_name).stream()
+            for tx_doc in tx_docs:
+                tx_doc.reference.update({"category": "Outros"})
+    _invalidar_cache_categorias(effective_user)
+
+def _inicializar_cartoes_padrao_se_necessario(effective_user: str, user_cards: List[Dict[str, Any]]) -> None:
+    if user_cards or firebase.db is None:
+        return
+    try:
+        settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+        settings_doc = settings_ref.get()
+        is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
+        if not is_initialized:
+            batch = firebase.db.batch()
+            for def_card in DEFAULT_CARDS:
+                doc_ref = firebase.db.collection("finance_cards").document()
+                card_item = {
+                    "id": doc_ref.id,
+                    "userId": effective_user,
+                    "name": def_card["name"],
+                    "type": def_card["type"],
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                batch.set(doc_ref, card_item)
+                user_cards.append({
+                    "id": doc_ref.id,
+                    "name": def_card["name"],
+                    "type": def_card["type"]
+                })
+            settings_ref.set({"cards_initialized": True}, merge=True)
+            batch.commit()
+    except Exception:
+        logger.exception("Erro ao inicializar cartões padrão")
+
+@router.get("/categories")
+def get_categories(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> List[Dict[str, Any]]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    user_cats = []
+
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("finance_categories").where("userId", "==", effective_user).stream()
+            for doc in docs:
+                data = doc.to_dict() or {}
+                # Filtrar qualquer remanescente de 'Christian'
+                if str(data.get("name", "")).strip().lower() == "christian":
+                    doc.reference.delete()
+                    continue
+                user_cats.append({
+                    "id": doc.id,
+                    "name": data.get("name", ""),
+                    "color": data.get("color", "#64748b")
+                })
+        except Exception:
+            logger.exception("Erro ao ler categorias no Firestore")
+
+    # Se o usuário ainda não tem categorias salvas, semear defaults limpos (sem Christian)
+    if not user_cats and firebase.db is not None:
+        try:
+            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+            settings_doc = settings_ref.get()
+            is_initialized = settings_doc.exists and settings_doc.to_dict().get("categories_initialized")
+            if not is_initialized:
+                batch = firebase.db.batch()
+                for def_cat in DEFAULT_CATEGORIES:
+                    if def_cat["name"].lower() == "christian":
+                        continue
+                    doc_ref = firebase.db.collection("finance_categories").document()
+                    cat_item = {
+                        "id": doc_ref.id,
+                        "userId": effective_user,
+                        "name": def_cat["name"],
+                        "color": def_cat["color"],
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    batch.set(doc_ref, cat_item)
+                    user_cats.append({
+                        "id": doc_ref.id,
+                        "name": def_cat["name"],
+                        "color": def_cat["color"]
+                    })
+                settings_ref.set({"categories_initialized": True}, merge=True)
+                batch.commit()
+        except Exception:
+            logger.exception("Erro ao semear categorias padrão")
+
+    return user_cats if user_cats else [c for c in DEFAULT_CATEGORIES if c["name"].lower() != "christian"]
+
+@router.post("/categories", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
+def create_category(
+    payload: CategoryDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    doc_data = {
+        "userId": effective_user,
+        "name": payload.name.strip(),
+        "color": payload.color.strip(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    if firebase.db is not None:
+        try:
+            doc_ref = firebase.db.collection("finance_categories").document()
+            doc_data["id"] = doc_ref.id
+            doc_ref.set(doc_data)
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"categories_initialized": True}, merge=True
+            )
+        except Exception:
+            logger.exception("Erro ao adicionar categoria")
+            raise HTTPException(status_code=500, detail="Erro ao adicionar categoria.")
+
+    return doc_data
+
+@router.put("/categories/{cat_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def update_category(
+    cat_id: str,
+    payload: CategoryDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    update_data = {
+        "name": payload.name.strip(),
+        "color": payload.color.strip()
+    }
+
+    if firebase.db is not None:
+        try:
+            firebase.db.collection("finance_categories").document(cat_id).update(update_data)
+            _invalidar_cache_categorias(x_user_id)
+        except Exception:
+            logger.exception("Erro ao atualizar categoria")
+
+    return {"success": True, "id": cat_id, **update_data}
+
+@router.delete("/categories/{cat_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def delete_category(
+    cat_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    deleted_names = []
+
+    if firebase.db is not None:
+        try:
+            # 1. Tentar deletar diretamente pelo ID do documento
+            doc_ref = firebase.db.collection("finance_categories").document(cat_id)
+            doc_snap = doc_ref.get()
+            if doc_snap.exists:
+                deleted_names.append(doc_snap.to_dict().get("name", ""))
+                doc_ref.delete()
+
+            _remover_categoria_legada_e_migrar(effective_user, cat_id, deleted_names)
+        except Exception as e:
+            logger.exception("Erro ao deletar categoria")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar categoria: {str(e)}")
+
+    return {"success": True, "id": cat_id, "deleted_names": deleted_names}
+
+# --- Gestão de Cartões ---
+
+@router.get("/cards")
+def get_cards(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> List[Dict[str, Any]]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    user_cards = []
+
+    if firebase.db is not None:
+        try:
+            docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
+            for doc in docs:
+                data = doc.to_dict() or {}
+                user_cards.append({
+                    "id": doc.id,
+                    "name": data.get("name", ""),
+                    "type": data.get("type", "credito")
+                })
+        except Exception:
+            logger.exception("Erro ao ler cartões no Firestore")
+
+    # Inicializar cartões padrão se usuário não tiver nenhum salvo
+    if not user_cards and firebase.db is not None:
+        try:
+            settings_ref = firebase.db.collection("finance_user_settings").document(effective_user)
+            settings_doc = settings_ref.get()
+            is_initialized = settings_doc.exists and settings_doc.to_dict().get("cards_initialized")
+            if not is_initialized:
+                batch = firebase.db.batch()
+                for def_card in DEFAULT_CARDS:
+                    doc_ref = firebase.db.collection("finance_cards").document()
+                    card_item = {
+                        "id": doc_ref.id,
+                        "userId": effective_user,
+                        "name": def_card["name"],
+                        "type": def_card["type"],
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    batch.set(doc_ref, card_item)
+                    user_cards.append({
+                        "id": doc_ref.id,
+                        "name": def_card["name"],
+                        "type": def_card["type"]
+                    })
+                settings_ref.set({"cards_initialized": True}, merge=True)
+                batch.commit()
+        except Exception:
+            logger.exception("Erro ao inicializar cartões padrão")
+
+    return user_cards if user_cards else DEFAULT_CARDS
+
+@router.post("/cards", status_code=status.HTTP_201_CREATED, responses={422: {"description": "Validation Error"}, 500: {"description": "Internal Server Error"}})
+def create_card(
+    payload: CardDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    doc_data = {
+        "userId": effective_user,
+        "name": payload.name.strip(),
+        "type": payload.type.strip(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    if firebase.db is not None:
+        try:
+            doc_ref = firebase.db.collection("finance_cards").document()
+            doc_data["id"] = doc_ref.id
+            doc_ref.set(doc_data)
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"cards_initialized": True}, merge=True
+            )
+        except Exception:
+            logger.exception("Erro ao cadastrar cartão")
+            raise HTTPException(status_code=500, detail="Erro ao cadastrar cartão.")
+
+    return doc_data
+
+@router.put("/cards/{card_id}", responses={403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def update_card(
+    card_id: str,
+    payload: CardDTO,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    update_data = {
+        "name": payload.name.strip(),
+        "type": payload.type.strip()
+    }
+
+    if firebase.db is not None:
+        try:
+            firebase.db.collection("finance_cards").document(card_id).update(update_data)
+        except Exception:
+            logger.exception("Erro ao atualizar cartão")
+
+    return {"success": True, "id": card_id, **update_data}
+
+@router.delete("/cards/{card_id}", responses={400: {"description": "Bad Request"}, 403: {"description": "Forbidden"}, 404: {"description": "Not Found"}, 500: {"description": "Internal Server Error"}})
+def delete_card(
+    card_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    if firebase.db is not None:
+        try:
+            doc_ref = firebase.db.collection("finance_cards").document(card_id)
+            if doc_ref.get().exists:
+                doc_ref.delete()
+            else:
+                clean_name = card_id.replace("card-", "").strip().lower()
+                query_docs = firebase.db.collection("finance_cards").where("userId", "==", effective_user).stream()
+                for doc in query_docs:
+                    data = doc.to_dict() or {}
+                    d_id = str(data.get("id", "")).lower()
+                    d_name = str(data.get("name", "")).lower()
+                    if doc.id == card_id or d_id == card_id.lower() or d_name == clean_name:
+                        doc.reference.delete()
+
+            firebase.db.collection("finance_user_settings").document(effective_user).set(
+                {"cards_initialized": True}, merge=True
+            )
+        except Exception as e:
+            logger.exception("Erro ao deletar cartão")
+            raise HTTPException(status_code=500, detail=f"Erro ao deletar cartão: {str(e)}")
+
+    return {"success": True, "id": card_id}
+
+# --- Evolução Temporal e Tendências (FG-07) ---
+
+MONTH_NAMES_SHORT = [
+    "", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+]
+
+@router.get("/trends")
+def get_finance_trends(
+    period: str = Query(default="12m"),
+    start_date: Optional[str] = Query(None, alias="startDate"),
+    end_date: Optional[str] = Query(None, alias="endDate"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    """Retorna séries históricas mensais de receitas e gastos para o período solicitado."""
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    now = datetime.now(timezone.utc)
+
+    if period == "current_month":
+        num_months = 1
+        period_label = "Mês atual"
+    elif period == "3m":
+        num_months = 3
+        period_label = "Últimos 3 meses"
+    elif period == "6m":
+        num_months = 6
+        period_label = "Últimos 6 meses"
+    else:  # default "12m" ou custom
+        num_months = 12
+        period_label = "Últimos 12 meses"
+
+    # Monta a série cronológica de meses (do mais antigo para o atual)
+    series_map: Dict[str, Dict[str, Any]] = {}
+    series_list: List[Dict[str, Any]] = []
+
+    for i in range(num_months - 1, -1, -1):
+        y = now.year
+        m = now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        key = f"{y}-{m:02d}"
+        label = f"{MONTH_NAMES_SHORT[m]} {y}"
+        item = {
+            "label": label,
+            "year": y,
+            "month": m,
+            "income": 0.0,
+            "expenses": 0.0,
+            "balance": 0.0
+        }
+        series_map[key] = item
+        series_list.append(item)
+
+    # Período anterior para comparação
+    prev_series_keys = set()
+    for i in range(num_months * 2 - 1, num_months - 1, -1):
+        y = now.year
+        m = now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        prev_series_keys.add(f"{y}-{m:02d}")
+
+    total_income = 0.0
+    total_expenses = 0.0
+    prev_income = 0.0
+    prev_expenses = 0.0
+
+    user_docs = []
+    if firebase.db is not None:
+        try:
+            col = firebase.db.collection("finances")
+            raw_docs = []
+            if hasattr(col, "where"):
+                try:
+                    raw_docs = list(col.where("userId", "==", effective_user).stream())
+                except Exception:
+                    pass
+            if not raw_docs and hasattr(col, "stream"):
+                try:
+                    raw_docs = list(col.stream())
+                except Exception:
+                    pass
+
+            for doc in raw_docs:
+                data = doc.to_dict() or {}
+                if (data.get("userId") or data.get("user_id") or "daniel") == effective_user:
+                    user_docs.append((doc, data))
+        except Exception:
+            logger.exception("Erro ao agregar tendências financeiras no Firestore")
+
+    fixed_docs_in_series: Dict[str, set] = {k: set() for k in series_map}
+    fixed_candidates = []
+
+    for doc, data in user_docs:
+        date_str = data.get("date") or data.get("created_at") or ""
+        if not date_str:
+            continue
+
+        try:
+            dt_obj = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
+            doc_key = f"{dt_obj.year}-{dt_obj.month:02d}"
+        except Exception:
+            continue
+
+        amount = float(data.get("amount") or 0.0)
+        tx_type = data.get("type") or "expense_variable"
+
+        if tx_type == "expense_fixed" and data.get("active") is not False:
+            fixed_candidates.append((doc, data, dt_obj))
+
+        # Período corrente da série
+        if doc_key in series_map:
+            if tx_type == "income":
+                series_map[doc_key]["income"] += amount
+                total_income += amount
+            else:
+                series_map[doc_key]["expenses"] += amount
+                total_expenses += amount
+                if tx_type == "expense_fixed":
+                    desc_norm = (data.get("description") or "").strip().lower()
+                    fixed_docs_in_series[doc_key].add(doc.id)
+                    if data.get("originId"):
+                        fixed_docs_in_series[doc_key].add(data.get("originId"))
+                    if desc_norm:
+                        fixed_docs_in_series[doc_key].add(desc_norm)
+
+        # Período comparativo anterior
+        elif doc_key in prev_series_keys:
+            if tx_type == "income":
+                prev_income += amount
+            else:
+                prev_expenses += amount
+
+    # Projetar despesas fixas para os nós mensais da série histórica (P-0904)
+    for key, item in series_map.items():
+        y = item["year"]
+        m = item["month"]
+        target_month_val = y * 12 + m
+
+        for fix_doc, fix_data, dt_fix in fixed_candidates:
+            fix_month_val = dt_fix.year * 12 + dt_fix.month
+            if fix_month_val > target_month_val:
+                continue
+
+            desc_norm = (fix_data.get("description") or "").strip().lower()
+            existing_set = fixed_docs_in_series.get(key, set())
+            if fix_doc.id in existing_set or (desc_norm and desc_norm in existing_set):
+                continue
+            if fix_data.get("originId") and fix_data.get("originId") in existing_set:
+                continue
+
+            fix_amount = float(fix_data.get("amount") or 0.0)
+            item["expenses"] += fix_amount
+            total_expenses += fix_amount
+            existing_set.add(fix_doc.id)
+            if desc_norm:
+                existing_set.add(desc_norm)
+
+    for item in series_list:
+        item["income"] = round(item["income"], 2)
+        item["expenses"] = round(item["expenses"], 2)
+        item["balance"] = round(item["income"] - item["expenses"], 2)
+
+    total_income = round(total_income, 2)
+    total_expenses = round(total_expenses, 2)
+    period_balance = round(total_income - total_expenses, 2)
+
+    has_prev = prev_income > 0 or prev_expenses > 0
+    income_change = round(((total_income - prev_income) / prev_income) * 100, 1) if prev_income > 0 else 0.0
+    expense_change = round(((total_expenses - prev_expenses) / prev_expenses) * 100, 1) if prev_expenses > 0 else 0.0
+
+    return {
+        "period": period,
+        "periodLabel": period_label,
+        "totalIncome": total_income,
+        "totalExpenses": total_expenses,
+        "periodBalance": period_balance,
+        "currency": "BRL",
+        "comparison": {
+            "hasPreviousPeriod": has_prev,
+            "incomeChangePct": income_change,
+            "expenseChangePct": expense_change,
+            "comparisonText": f"comparado com os {num_months} meses anteriores" if has_prev else "Sem período anterior"
+        },
+        "series": series_list
+    }
+
+
+@router.post("/maintenance/sanitize")
+def sanitize_legacy_finance_data(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
+) -> Dict[str, Any]:
+    """Endpoint de auto-cura para sanear registros corrompidos legados (P-0903)."""
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
+    from services.finance_migration_service import sanear_transacoes_legadas
+    result = sanear_transacoes_legadas(effective_user)
+    return {
+        "data": result,
+        "meta": {
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    }
+
+

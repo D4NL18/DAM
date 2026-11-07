@@ -56,7 +56,7 @@ def invalidar_cache_categorias(user_id: Optional[str] = None):
     """Invalida o cache L1 de categorias de usuários."""
     global _USER_CATEGORIES_CACHE
     if user_id:
-        keys_to_del = [k for k in list(_USER_CATEGORIES_CACHE.keys()) if k[0] == user_id]
+        keys_to_del = [k for k in _USER_CATEGORIES_CACHE if k[0] == user_id]
         for k in keys_to_del:
             _USER_CATEGORIES_CACHE.pop(k, None)
     else:
@@ -87,7 +87,7 @@ def _carregar_categorias_firestore(effective_user: str) -> List[Dict[str, Any]]:
                     "name": str(name).strip(),
                     "color": data.get("color", "#64748b")
                 })
-    except Exception as e:
+    except Exception:
         logger.warning(f"Erro ao buscar categorias customizadas para [{effective_user}]: {e}")
     return categories
 
@@ -231,8 +231,8 @@ def registrar_gasto(descricao: str, valor: float, categoria: str, metodo_pagamen
         ExecutionAuditContext.record_success("registrar_gasto", msg_ok)
         return msg_ok
 
-    except Exception as e:
-        logger.error(f"Erro ao registrar finanças: {e}")
+    except Exception:
+        logger.exception("Erro ao registrar finanças")
         msg_exc = "❌ Desculpe, ocorreu um erro ao salvar seu gasto no banco de dados. O lançamento NÃO foi cadastrado. Tente novamente mais tarde."
         ExecutionAuditContext.record_failure("registrar_gasto", msg_exc, reason="exception")
         return msg_exc
@@ -300,8 +300,8 @@ def registrar_receita(descricao: str, valor: float, metodo_recebimento: Optional
         )
         ExecutionAuditContext.record_success("registrar_receita", msg_ok)
         return msg_ok
-    except Exception as e:
-        logger.error(f"Erro ao registrar receita: {e}")
+    except Exception:
+        logger.exception("Erro ao registrar receita")
         msg_exc = "❌ Desculpe, ocorreu um erro ao salvar a receita no banco de dados. A receita NÃO foi cadastrada. Tente novamente mais tarde."
         ExecutionAuditContext.record_failure("registrar_receita", msg_exc, reason="exception")
         return msg_exc
@@ -412,6 +412,44 @@ def _transacao_no_periodo(dt: Optional[datetime], inicio: datetime, ano_alvo: in
     return dt.year == ano_alvo and dt.month == mes_alvo
 
 
+def _extrair_item_gasto(
+    data: dict,
+    user_id: str,
+    inicio: datetime,
+    ano_alvo: int,
+    mes_alvo: int,
+    dias_retroativos: Optional[int]
+) -> Optional[dict]:
+    """Valida se o documento é um gasto elegível e retorna dados normalizados."""
+    doc_user = data.get("userId") or data.get("user_id") or "daniel"
+    if doc_user != user_id or data.get("type") == "income":
+        return None
+
+    dt = _parse_data_transacao(data)
+    if not _transacao_no_periodo(dt, inicio, ano_alvo, mes_alvo, dias_retroativos):
+        return None
+
+    try:
+        valor = float(data.get("amount", 0.0))
+    except (ValueError, TypeError):
+        return None
+
+    if valor <= 0:
+        return None
+
+    metodo = data.get("payment_method") or data.get("paymentMethod") or "Outros"
+    metodo_norm = normalizar_metodo_pagamento(metodo) or metodo
+    cat_formatada = (data.get("category") or "Geral").strip().title()
+
+    return {
+        "description": data.get("description", "Sem descrição"),
+        "amount": valor,
+        "category": cat_formatada,
+        "payment_method": metodo_norm,
+        "date": dt.strftime("%d/%m/%Y") if dt else ""
+    }
+
+
 def _processar_lancamentos(
     docs: list,
     user_id: str,
@@ -430,41 +468,19 @@ def _processar_lancamentos(
         if not hasattr(doc, "to_dict"):
             continue
         data = doc.to_dict() or {}
-
-        doc_user = data.get("userId") or data.get("user_id") or "daniel"
-        if doc_user != user_id:
+        item = _extrair_item_gasto(data, user_id, inicio, ano_alvo, mes_alvo, dias_retroativos)
+        if not item:
             continue
 
-        if data.get("type") == "income":
-            continue
-
-        dt = _parse_data_transacao(data)
-        if not _transacao_no_periodo(dt, inicio, ano_alvo, mes_alvo, dias_retroativos):
-            continue
-
-        try:
-            valor = float(data.get("amount", 0.0))
-        except (ValueError, TypeError):
-            continue
-
-        if valor <= 0:
-            continue
-
+        valor = item["amount"]
         total_geral += valor
-        metodo = data.get("payment_method") or data.get("paymentMethod") or "Outros"
-        metodo_norm = normalizar_metodo_pagamento(metodo) or metodo
+        metodo_norm = item["payment_method"]
         por_cartao[metodo_norm] = por_cartao.get(metodo_norm, 0.0) + valor
 
-        cat_formatada = (data.get("category") or "Geral").strip().title()
+        cat_formatada = item["category"]
         por_categoria[cat_formatada] = por_categoria.get(cat_formatada, 0.0) + valor
 
-        todos_gastos.append({
-            "description": data.get("description", "Sem descrição"),
-            "amount": valor,
-            "category": cat_formatada,
-            "payment_method": metodo_norm,
-            "date": dt.strftime("%d/%m/%Y") if dt else ""
-        })
+        todos_gastos.append(item)
 
     return todos_gastos, por_cartao, por_categoria, total_geral
 
@@ -559,6 +575,6 @@ def consultar_resumo_gastos(
 
         return _formatar_resumo_macro(todos_gastos, por_cartao, por_categoria, total_geral, titulo_periodo)
 
-    except Exception as e:
-        logger.error(f"Erro ao consultar resumo financeiro: {e}")
+    except Exception:
+        logger.exception("Erro ao consultar resumo financeiro")
         return "Desculpe, ocorreu um erro ao consultar o resumo dos seus gastos. Tente novamente mais tarde."

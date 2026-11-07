@@ -233,7 +233,7 @@ class ConversationCacheService:
 
     @classmethod
     def _parse_game_relative_time(cls, clean: str, now: datetime) -> Optional[datetime]:
-        match_hoje = re.search(r"\bhoje\s*(?:\([^)]*\)\s*)?(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+        match_hoje = re.search(r"\bhoje(?:\s*\([^)]*\))?(?:\s+[àa]s|\s*:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_hoje:
             h, mi = match_hoje.groups()
             try:
@@ -241,7 +241,7 @@ class ConversationCacheService:
             except ValueError:
                 pass
 
-        match_amanha = re.search(r"\bamanh[aã]\s*(?:\([^)]*\)\s*)?(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+        match_amanha = re.search(r"\bamanh[aã](?:\s*\([^)]*\))?(?:\s+[àa]s|\s*:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_amanha:
             h, mi = match_amanha.groups()
             try:
@@ -266,7 +266,7 @@ class ConversationCacheService:
         now = _now_br()
         clean = " ".join(re.sub(r"[\*_`>#]", " ", text).split())
 
-        match_full = re.search(r"(\d{2})/(\d{2})(?:/(\d{4}))?\s*(?:às|as|:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
+        match_full = re.search(r"(\d{2})/(\d{2})(?:/(\d{4}))?(?:\s+[àa]s|\s*:)?\s*(\d{2}):(\d{2})", clean, re.IGNORECASE)
         if match_full:
             d, m, y, h, mi = match_full.groups()
             ano = int(y) if y else now.year

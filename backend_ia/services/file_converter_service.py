@@ -18,6 +18,7 @@ from reportlab.lib import colors
 logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+ERR_PDF_ENCRYPTED = "O documento PDF esta protegido por senha."
 
 
 class FileConverterService:
@@ -146,7 +147,7 @@ class FileConverterService:
         try:
             reader = PdfReader(io.BytesIO(pdf_bytes))
             if reader.is_encrypted:
-                raise ValueError("O documento PDF esta protegido por senha.")
+                raise ValueError(ERR_PDF_ENCRYPTED)
         except Exception as e:
             raise ValueError(f"PDF invalido ou corrompido: {e}")
 
@@ -168,15 +169,14 @@ class FileConverterService:
                 start, end = int(tokens[0]), int(tokens[1])
                 if start > end:
                     start, end = end, start
-                for page_num in range(start, end + 1):
-                    selected_pages.add(page_num)
+                selected_pages.update(range(start, end + 1))
             elif part.isdigit():
                 selected_pages.add(int(part))
             else:
                 raise ValueError(f"Numero de pagina invalido: '{part}'")
 
         # Valida limites
-        sorted_pages = sorted(list(selected_pages))
+        sorted_pages = sorted(selected_pages)
         for page_num in sorted_pages:
             if page_num < 1 or page_num > total_pages:
                 raise ValueError(
@@ -200,7 +200,7 @@ class FileConverterService:
         try:
             reader = PdfReader(io.BytesIO(pdf_bytes))
             if reader.is_encrypted:
-                raise ValueError("O documento PDF esta protegido por senha.")
+                raise ValueError(ERR_PDF_ENCRYPTED)
         except Exception as e:
             raise ValueError(f"PDF invalido ou corrompido: {e}")
 
@@ -334,7 +334,7 @@ class FileConverterService:
         try:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             if doc.is_encrypted:
-                raise ValueError("O documento PDF esta protegido por senha.")
+                raise ValueError(ERR_PDF_ENCRYPTED)
         except Exception as e:
             raise ValueError(f"PDF invalido ou corrompido: {e}")
 

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_EVENT_TITLE = "Sem título"
 SAO_PAULO_TZ_NAME = "America/Sao_Paulo"
 MSG_CALENDAR_NOT_CONFIGURED = "A integração com o Google Calendar ainda não foi configurada pelo administrador."
+UTC_OFFSET_SUFFIX = "+00:00"
 
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -26,8 +27,8 @@ def _get_calendar_service():
             creds_path, scopes=SCOPES)
         service = build('calendar', 'v3', credentials=creds)
         return service
-    except Exception as e:
-        logger.error(f"Erro ao autenticar Calendar: {e}")
+    except Exception:
+        logger.exception("Erro ao autenticar Calendar")
         return None
 
 def _resolve_calendar_target(target_user: str = "auto") -> Tuple[Optional[str], str, Optional[str]]:
@@ -99,7 +100,7 @@ def agendar_evento(
         return erro
 
     try:
-        inicio_dt = datetime.fromisoformat(inicio_iso.replace('Z', '+00:00'))
+        inicio_dt = datetime.fromisoformat(inicio_iso.replace('Z', UTC_OFFSET_SUFFIX))
         if inicio_dt.tzinfo is None:
             inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
         fim_dt = inicio_dt + timedelta(minutes=duracao_minutos)
@@ -133,7 +134,7 @@ def agendar_evento(
         return f"Evento '{titulo}' agendado com sucesso{agenda_indicador}!{extra_str} (Link: {created_event.get('htmlLink')})"
     
     except Exception as e:
-        logger.error(f"Erro ao criar evento: {e}")
+        logger.exception("Erro ao criar evento")
         return f"Não consegui agendar o evento devido a um erro: {e}"
 
 def consultar_agenda(dias: int = 1, dias_a_frente: int = None, usuario: str = "auto") -> str:
@@ -241,7 +242,7 @@ def _localizar_eventos_por_termo(
             orderBy='startTime'
         ).execute()
         items = events_result.get('items', [])
-    except Exception as e:
+    except Exception:
         logger.exception("Erro ao consultar eventos no Google Calendar")
         return []
 
@@ -304,6 +305,66 @@ def excluir_evento(
         return f"Ocorreu um erro ao tentar excluir o evento '{titulo}': {e}"
 
 
+def _aplicar_metadados_patch(novo_titulo: Optional[str], nova_descricao: Optional[str], nova_localizacao: Optional[str], patch_body: dict, alteracoes: list):
+    if novo_titulo:
+        patch_body['summary'] = novo_titulo
+        alteracoes.append(f"título para '{novo_titulo}'")
+    if nova_descricao is not None:
+        patch_body['description'] = nova_descricao
+        alteracoes.append("descrição atualizada")
+    if nova_localizacao is not None:
+        patch_body['location'] = nova_localizacao
+        alteracoes.append(f"local para '{nova_localizacao}'")
+
+
+def _calcular_duracao_original(alvo: dict) -> int:
+    try:
+        orig_start_str = alvo.get('start', {}).get('dateTime')
+        orig_end_str = alvo.get('end', {}).get('dateTime')
+        if orig_start_str and orig_end_str:
+            orig_start = datetime.fromisoformat(orig_start_str.replace('Z', UTC_OFFSET_SUFFIX))
+            orig_end = datetime.fromisoformat(orig_end_str.replace('Z', UTC_OFFSET_SUFFIX))
+            return max(15, int((orig_end - orig_start).total_seconds() / 60))
+    except Exception:
+        pass
+    return 60
+
+
+def _aplicar_horario_patch(
+    alvo: dict,
+    novo_inicio_iso: Optional[str],
+    nova_duracao_minutos: Optional[int],
+    patch_body: dict,
+    alteracoes: list
+) -> Optional[str]:
+    if novo_inicio_iso:
+        try:
+            inicio_dt = datetime.fromisoformat(novo_inicio_iso.replace('Z', UTC_OFFSET_SUFFIX))
+            if inicio_dt.tzinfo is None:
+                inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
+            duracao = nova_duracao_minutos if nova_duracao_minutos else _calcular_duracao_original(alvo)
+            fim_dt = inicio_dt + timedelta(minutes=duracao)
+            patch_body['start'] = {'dateTime': inicio_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+            patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+            alteracoes.append(f"horário para {inicio_dt.strftime('%d/%m/%Y às %H:%M')}")
+        except Exception:
+            logger.exception("Erro ao parsear novo horário")
+            return f"Formato de horário inválido: '{novo_inicio_iso}'."
+    elif nova_duracao_minutos:
+        try:
+            orig_start_str = alvo.get('start', {}).get('dateTime') or alvo.get('start', {}).get('date')
+            if orig_start_str:
+                orig_start = datetime.fromisoformat(orig_start_str.replace('Z', UTC_OFFSET_SUFFIX))
+                if orig_start.tzinfo is None:
+                    orig_start = orig_start.replace(tzinfo=TZ_BRASILIA)
+                fim_dt = orig_start + timedelta(minutes=nova_duracao_minutos)
+                patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+                alteracoes.append(f"duração para {nova_duracao_minutos} minutos")
+        except Exception:
+            logger.exception("Erro ao atualizar duração")
+    return None
+
+
 def editar_evento(
     termo_busca: str,
     novo_titulo: Optional[str] = None,
@@ -355,57 +416,10 @@ def editar_evento(
     patch_body = {}
     alteracoes = []
 
-    if novo_titulo:
-        patch_body['summary'] = novo_titulo
-        alteracoes.append(f"título para '{novo_titulo}'")
-
-    if nova_descricao is not None:
-        patch_body['description'] = nova_descricao
-        alteracoes.append("descrição atualizada")
-
-    if nova_localizacao is not None:
-        patch_body['location'] = nova_localizacao
-        alteracoes.append(f"local para '{nova_localizacao}'")
-
-    if novo_inicio_iso:
-        try:
-            inicio_dt = datetime.fromisoformat(novo_inicio_iso.replace('Z', '+00:00'))
-            if inicio_dt.tzinfo is None:
-                inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
-            if nova_duracao_minutos:
-                duracao = nova_duracao_minutos
-            else:
-                try:
-                    orig_start_str = alvo.get('start', {}).get('dateTime')
-                    orig_end_str = alvo.get('end', {}).get('dateTime')
-                    if orig_start_str and orig_end_str:
-                        orig_start = datetime.fromisoformat(orig_start_str.replace('Z', '+00:00'))
-                        orig_end = datetime.fromisoformat(orig_end_str.replace('Z', '+00:00'))
-                        duracao = max(15, int((orig_end - orig_start).total_seconds() / 60))
-                    else:
-                        duracao = 60
-                except Exception:
-                    duracao = 60
-
-            fim_dt = inicio_dt + timedelta(minutes=duracao)
-            patch_body['start'] = {'dateTime': inicio_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
-            patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
-            alteracoes.append(f"horário para {inicio_dt.strftime('%d/%m/%Y às %H:%M')}")
-        except Exception as e:
-            logger.error(f"Erro ao parsear novo horário: {e}")
-            return f"Formato de horário inválido: '{novo_inicio_iso}'."
-    elif nova_duracao_minutos:
-        try:
-            orig_start_str = alvo.get('start', {}).get('dateTime') or alvo.get('start', {}).get('date')
-            if orig_start_str:
-                orig_start = datetime.fromisoformat(orig_start_str.replace('Z', '+00:00'))
-                if orig_start.tzinfo is None:
-                    orig_start = orig_start.replace(tzinfo=TZ_BRASILIA)
-                fim_dt = orig_start + timedelta(minutes=nova_duracao_minutos)
-                patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
-                alteracoes.append(f"duração para {nova_duracao_minutos} minutos")
-        except Exception as e:
-            logger.error(f"Erro ao atualizar duração: {e}")
+    _aplicar_metadados_patch(novo_titulo, nova_descricao, nova_localizacao, patch_body, alteracoes)
+    erro_horario = _aplicar_horario_patch(alvo, novo_inicio_iso, nova_duracao_minutos, patch_body, alteracoes)
+    if erro_horario:
+        return erro_horario
     if not patch_body:
         return f"Nenhuma alteração foi solicitada para o evento '{titulo_antigo}'."
 

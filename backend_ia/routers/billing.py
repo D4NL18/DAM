@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 import base64
 import json
 from fastapi import APIRouter, Request, HTTPException, Header
@@ -28,8 +29,8 @@ async def gcp_billing_alert(
 
     try:
         body = await request.json()
-    except Exception as e:
-        logger.error(f"Erro ao parsear JSON do Pub/Sub: {e}")
+    except Exception:
+        logger.exception("Erro ao parsear JSON do Pub/Sub")
         return {"status": "error", "message": "Invalid JSON"}
 
     message = body.get("message", {})
@@ -41,8 +42,8 @@ async def gcp_billing_alert(
     try:
         decoded_str = base64.b64decode(data_b64).decode("utf-8")
         billing_info = json.loads(decoded_str)
-    except Exception as e:
-        logger.error(f"Erro ao decodificar payload Pub/Sub: {e}")
+    except Exception:
+        logger.exception("Erro ao decodificar payload Pub/Sub")
         return {"status": "error", "message": "Failed to decode PubSub data"}
 
     cost_amount = billing_info.get("costAmount", 0.0)
@@ -55,7 +56,6 @@ async def gcp_billing_alert(
     # Salva snapshot no Firestore para consulta da IA via chat
     try:
         from config import firebase
-        from datetime import timezone
         if firebase.db is not None:
             firebase.db.collection("gcp_billing_snapshots").document("latest").set({
                 "cost_amount": cost_amount,

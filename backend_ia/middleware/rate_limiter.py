@@ -33,22 +33,34 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             if not self._clients[client_ip]:
                 del self._clients[client_ip]
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        # Extrai IP do cliente (respeitando headers de proxy Cloud Run se presentes)
-        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        if not client_ip:
-            client_ip = request.client.host if request.client else "unknown"
+    def _sweep_clients_if_needed(self, window_seconds: float = 60.0):
+        # Previne crescimento desenfreado de memória (DoS via IP rotativo)
+        if len(self._clients) > 500:
+            agora = time.time()
+            stale = [ip for ip, reqs in self._clients.items() if not reqs or (agora - reqs[-1] > window_seconds)]
+            for ip in stale:
+                self._clients.pop(ip, None)
 
-        # Evita envenenamento de rate limit entre testes com TestClient compartilhado
-        is_test_client = client_ip in ["testclient", "127.0.0.1", "localhost", "unknown"]
+    async def dispatch(self, request: Request, call_next) -> Response:
+        # Identifica se é TestClient legítimo da suíte de testes (apenas se request.client.host == 'testclient')
+        conn_host = request.client.host if request.client else "unknown"
+        is_test_client = (conn_host == "testclient")
         if is_test_client and "x-test-rate-limit" not in request.headers:
             return await call_next(request)
+
+        # Extrai IP do cliente (respeitando headers de proxy se presentes)
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = conn_host
 
         agora = time.time()
         is_webhook = "/api/whatsapp/webhook" in request.url.path
         limite_atual = self.webhook_max_requests if is_webhook else self.max_requests
 
         self._cleanup_old_requests(client_ip)
+        self._sweep_clients_if_needed()
 
         requests_cliente = self._clients.setdefault(client_ip, [])
         if len(requests_cliente) >= limite_atual:

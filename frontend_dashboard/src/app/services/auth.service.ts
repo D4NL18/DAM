@@ -25,10 +25,10 @@ export interface LoginResponse {
 export class AuthService {
   private readonly STORAGE_KEY = 'dam_auth_user';
   private currentUserSubject = new BehaviorSubject<User | null>(this.loadUserFromStorage());
-  public currentUser$ = this.currentUserSubject.asObservable();
+  public readonly currentUser$ = this.currentUserSubject.asObservable();
 
   // URL do Backend Core Spring Boot
-  private authApiUrl = 'http://localhost:8080/api/auth';
+  private readonly authApiUrl = 'http://localhost:8080/api/auth';
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -59,7 +59,7 @@ export class AuthService {
       password: cleanPass
     }).pipe(
       map(res => {
-        if (res && res.authenticated) {
+        if (res?.authenticated) {
           const user: User = {
             userId: res.userId,
             name: res.name,
@@ -71,30 +71,8 @@ export class AuthService {
         }
         return false;
       }),
-      catchError(() => {
-        // Fallback resiliente com credenciais genéricas de desenvolvimento
-        const isMaster = (cleanUser.toLowerCase() === 'admin' || cleanUser.toLowerCase() === 'admin_user') && (cleanPass === 'Admin@123' || cleanPass === 'password');
-        const isUser = (cleanUser.toLowerCase() === 'user' || cleanUser.toLowerCase() === 'guest_user') && (cleanPass === 'User@123' || cleanPass === 'password');
-
-        if (isMaster) {
-          const user: User = {
-            userId: 'admin',
-            name: 'Admin',
-            role: 'admin',
-            token: 'local-session-admin'
-          };
-          this.setUser(user);
-          return of(true);
-        } else if (isUser) {
-          const user: User = {
-            userId: 'user',
-            name: 'User',
-            role: 'user',
-            token: 'local-session-user'
-          };
-          this.setUser(user);
-          return of(true);
-        }
+      catchError((err) => {
+        console.error('Falha na autenticação corporativa:', err);
         return of(false);
       })
     );

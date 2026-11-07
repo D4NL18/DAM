@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia a aplicação
 COPY . .
 
+# Cria usuário sem privilégios de root para segurança e conformidade OWASP
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Variável de ambiente PORT é injetada pelo Cloud Run
 ENV PORT=8080
 ENV TZ="America/Sao_Paulo"

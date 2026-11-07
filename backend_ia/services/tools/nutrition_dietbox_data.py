@@ -43,6 +43,15 @@ GRUPOS_ALIMENTARES: Dict[str, Dict[str, Any]] = {
 ALIMENTOS_DIETBOX: List[Dict[str, Any]] = [
     # ----------------- CARBOIDRATOS (150 Kcal) -----------------
     {
+        "nome_oficial": "Milho Verde Cozido",
+        "grupo": "carboidratos",
+        "medida_caseira": "1 Espiga média ou 3 colheres de sopa",
+        "quantidade_g_ml": 80.0,
+        "unidade": "g",
+        "aliases": ["milho", "milho verde", "espiga de milho"]
+    },
+
+    {
         "nome_oficial": "Arroz Branco Cozido",
         "grupo": "carboidratos",
         "medida_caseira": "4 Colheres de Sopa",
@@ -413,36 +422,80 @@ def normalizar_termo(texto: str) -> str:
     return " ".join(texto.lower().split())
 
 def buscar_alimento_dietbox(termo: str) -> Optional[Dict[str, Any]]:
+
     """Busca o alimento na lista oficial do Dietbox por nome oficial ou aliases com precisão."""
+
     termo_norm = normalizar_termo(termo)
+
     if not termo_norm:
+
         return None
-    
+
+
+
     # 1. Busca exata no nome oficial normalizado
+
     for alimento in ALIMENTOS_DIETBOX:
+
         if normalizar_termo(alimento["nome_oficial"]) == termo_norm:
+
             return alimento
-            
+
+
+
     # 2. Busca exata nos aliases
+
     for alimento in ALIMENTOS_DIETBOX:
+
         for alias in alimento.get("aliases", []):
+
             if normalizar_termo(alias) == termo_norm:
+
                 return alimento
 
-    # 3. Busca onde o nome oficial contém o termo digitado (ex: digitou 'arroz integral', acha 'arroz integral cozido')
+
+
+    # 3. Prioridade para alimentos cujo nome começa com o termo (ex: 'milho' -> 'Milho Verde Cozido' e não 'Óleo Vegetal de Milho')
+
     for alimento in ALIMENTOS_DIETBOX:
+
         nome_norm = normalizar_termo(alimento["nome_oficial"])
-        if termo_norm in nome_norm:
+
+        if nome_norm.startswith(termo_norm) or any(normalizar_termo(a).startswith(termo_norm) for a in alimento.get("aliases", [])):
+
             return alimento
 
-    # 4. Busca onde o alias contém o termo digitado (ex: digitou 'frango', acha alias 'file de frango')
+
+
+    # 4. Busca onde o termo é palavra inteira no nome oficial com fronteira de palavra
+
     for alimento in ALIMENTOS_DIETBOX:
+
+        nome_norm = normalizar_termo(alimento["nome_oficial"])
+
+        if re.search(rf"\b{re.escape(termo_norm)}\b", nome_norm):
+
+            return alimento
+
+
+
+    # 5. Busca onde o termo é palavra inteira em algum alias
+
+    for alimento in ALIMENTOS_DIETBOX:
+
         for alias in alimento.get("aliases", []):
+
             alias_norm = normalizar_termo(alias)
-            if len(termo_norm) >= 4 and termo_norm in alias_norm:
+
+            if re.search(rf"\b{re.escape(termo_norm)}\b", alias_norm):
+
                 return alimento
+
+
 
     return None
+
+
 
 def buscar_alimentos_por_grupo(grupo_key: str) -> List[Dict[str, Any]]:
     """Retorna todos os alimentos de um grupo específico."""

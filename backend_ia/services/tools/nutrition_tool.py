@@ -203,12 +203,10 @@ def consultar_lista_substituicao(alimento_ou_grupo: str) -> str:
 
         linhas = [
             f"📋 **Grupo: {nome_grupo}** (Média Calórica: {media_kcal_str})",
-            f"Total de opções prescritas: {len(alimentos_grupo)} alimentos\n",
-            "| Alimento | Medida Caseira | Qtd. (g/ml) |",
-            "| :--- | :--- | :--- |"
+            f"Total de opções prescritas: {len(alimentos_grupo)} alimentos\n"
         ]
         for a in alimentos_grupo:
-            linhas.append(f"| {a['nome_oficial']} | {a['medida_caseira']} | {a['quantidade_g_ml']:.2f} {a['unidade']} |")
+            linhas.append(f"• *{a['nome_oficial']}:* {a['medida_caseira']} ({a['quantidade_g_ml']:.0f} {a['unidade']})")
         
         return "\n".join(linhas)
 
@@ -314,18 +312,22 @@ def avaliar_substituicao_alimento(alimento_desejado: str, alimento_a_substituir:
     
     linhas_comparativo = []
     linhas_comparativo.append(f"**Item Solicitado:** {dados_ext['nome']}")
-    linhas_comparativo.append(f"- Calorias: ~{dados_ext['calorias_kcal']} Kcal")
-    linhas_comparativo.append(f"- Carboidratos: ~{dados_ext['carboidratos_g']}g")
-    linhas_comparativo.append(f"- Proteínas: ~{dados_ext['proteinas_g']}g")
-    linhas_comparativo.append(f"- Gorduras Totais: ~{dados_ext['gorduras_g']}g")
-    linhas_comparativo.append(f"- Sódio: ~{dados_ext['sodio_mg']}mg | Fibras: ~{dados_ext['fibras_g']}g")
+    linhas_comparativo.extend([
+        f"- Calorias: ~{dados_ext['calorias_kcal']} Kcal",
+        f"- Carboidratos: ~{dados_ext['carboidratos_g']}g",
+        f"- Proteínas: ~{dados_ext['proteinas_g']}g",
+        f"- Gorduras Totais: ~{dados_ext['gorduras_g']}g",
+        f"- Sódio: ~{dados_ext['sodio_mg']}mg | Fibras: ~{dados_ext['fibras_g']}g"
+    ])
 
     if item_substituto:
         grupo_sub = GRUPOS_ALIMENTARES.get(item_substituto["grupo"], {})
         media_kcal_sub = grupo_sub.get("media_calorica_kcal", 150.0)
-        linhas_comparativo.append(f"\n**Comparando com o item prescrito ({item_substituto['nome_oficial']}):**")
-        linhas_comparativo.append(f"- Porção da Dieta: {item_substituto['medida_caseira']} ({item_substituto['quantidade_g_ml']:.2f} {item_substituto['unidade']})")
-        linhas_comparativo.append(f"- Meta Calórica Prescrita do Grupo ({grupo_sub.get('nome', 'Grupo')}): {media_kcal_sub} Kcal")
+        linhas_comparativo.extend([
+            f"\n**Comparando com o item prescrito ({item_substituto['nome_oficial']}):**",
+            f"- Porção da Dieta: {item_substituto['medida_caseira']} ({item_substituto['quantidade_g_ml']:.2f} {item_substituto['unidade']})",
+            f"- Meta Calórica Prescrita do Grupo ({grupo_sub.get('nome', 'Grupo')}): {media_kcal_sub} Kcal"
+        ])
         
         diff_cal = dados_ext['calorias_kcal'] - media_kcal_sub
         sinal = "+" if diff_cal > 0 else ""

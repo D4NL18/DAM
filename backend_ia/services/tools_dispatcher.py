@@ -69,6 +69,7 @@ from services.tools.work_hours_tool import (
 from services.tools.anime_tracker_tool import (
     adicionar_anime_watchlist,
     consultar_proximo_episodio,
+    consultar_meu_episodio_anime,
     listar_meus_animes,
     atualizar_progresso_anime,
     marcar_anime_concluido,
@@ -135,7 +136,7 @@ class ToolsDispatcher:
         "alexa": [acionar_rotina_alexa, falar_na_alexa],
         "nutrition": [consultar_lista_substituicao, avaliar_substituicao_alimento],
         "anime": [
-            adicionar_anime_watchlist, consultar_proximo_episodio, listar_meus_animes,
+            adicionar_anime_watchlist, consultar_proximo_episodio, consultar_meu_episodio_anime, listar_meus_animes,
             atualizar_progresso_anime, marcar_anime_concluido, grade_semanal_animes,
             sincronizar_perfil_anilist, consultar_novas_temporadas, explorar_temporada_animes
         ],
@@ -154,7 +155,7 @@ class ToolsDispatcher:
 
     # Regex de saudações/conversas puramente casuais que não devem herdar ferramentas de contexto anterior
     CASUAL_GREETING_REGEX = re.compile(
-        r"^(oi+|ola+|bom dia.*|boa tarde.*|boa noite.*|obrigad[oa].*|valeu.*|tudo bem\??|quem e voce\??)$",
+        r"^(oi+|ola+|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|tudo bem\??|quem e voce\??)\b",
         re.IGNORECASE
     )
 
@@ -162,7 +163,9 @@ class ToolsDispatcher:
     INTENT_REGEXES = {
         "finance": re.compile(
             r"\b(gast(ei|os?|ando)|compr(ei|as?)|paguei|pagamentos?|debito|credito|pix|despesas?|faturas?|saldo|financas|financeiro|categorias?|quanto gastei|resumo (financeiro|de (despesas|gastos)|dos valores)|valores de gastos|"
-            r"reembolso|reembolsos|recebi|receita|receitas|estorno|estornos|salario|salário|renda|devolucao|devolução|entrada)\b",
+            r"reembolso|reembolsos|recebi|receita|receitas|estorno|estornos|salario|salário|renda|devolucao|devolução|entrada)\b|"
+            r"\b(cadastr(a|e|ar|ei|ou|o)|lanc(a|e|ar|ei|ou|amento|amentos)|registr(a|e|ar|ei|ou)|adicion(a|e|ar|ei))\b.*?\b(financas|financeiro|gasto|gastos|despesa|despesas|receita|receitas|conta|cartao|pix|debito|credito|reais|real|r\$|mercado|supermercado|ifood|uber|farmacia|aluguel|condominio|luz|agua|internet|gasolina|combustivel|restaurante|lazer)\b|"
+            r"\b(cartao\s+(pessoal|secundario|compartilhado|de\s+credito|de\s+debito)|no\s+cartao)\b",
             re.IGNORECASE
         ),
         "calendar_notes": re.compile(
@@ -205,7 +208,12 @@ class ToolsDispatcher:
             re.IGNORECASE
         ),
         "anime": re.compile(
-            r"\b(anime|animes|anilist|proximo episodio|manga|otaku|crunchyroll|temporada de anime)\b",
+            r"\b(anime|animes|anilist|proximo episodio|manga|otaku|crunchyroll|temporada de anime|"
+            r"qual\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"em\s+qual\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"em\s+que\s+ep(isodio)?\s+(eu\s+)?(to|estou|parei)|"
+            r"qual\s+o?\s*meu\s+progresso\s+(em|no|de)|"
+            r"quantos\s+eps?\s+(eu\s+)?ja\s+vi)\b",
             re.IGNORECASE
         ),
         "vault": re.compile(
@@ -265,6 +273,16 @@ class ToolsDispatcher:
         return sem_acento.lower()
 
     @classmethod
+    def _resolve_sticky_domains(cls, clean_text: str, context_text: str, matched: List[str]) -> None:
+        if not context_text or cls.CASUAL_GREETING_REGEX.match(clean_text.strip()):
+            return
+        ctx_clean = cls._normalize(context_text)
+        sticky_domains = {"wishlist", "calendar_notes", "finance"}
+        for d in sticky_domains:
+            if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
+                matched.append(d)
+
+    @classmethod
     def detect_domains(cls, text: str, context_text: str = "") -> List[str]:
         """Identifica quais domínios funcionais foram ativados pelo texto (e contexto conversacional se aplicável)."""
         matched = []
@@ -273,16 +291,7 @@ class ToolsDispatcher:
             if regex.search(clean_text):
                 matched.append(domain)
 
-        # Se houver contexto recente e a mensagem atual não for uma saudação casual,
-        # preserva continuidade para sessões multi-turn (ex: adicionando itens seguidos na wishlist/notas/finanças)
-        if context_text and not cls.CASUAL_GREETING_REGEX.match(clean_text.strip()):
-            ctx_clean = cls._normalize(context_text)
-            sticky_domains = {"wishlist", "calendar_notes", "finance"}
-            for d in sticky_domains:
-                if d not in matched and cls.INTENT_REGEXES[d].search(ctx_clean):
-                    if not matched or d in {"wishlist", "calendar_notes"}:
-                        matched.append(d)
-
+        cls._resolve_sticky_domains(clean_text, context_text, matched)
         return matched
 
     @classmethod

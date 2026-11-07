@@ -81,9 +81,13 @@ def _normalizar_unidade(unidade_str: str) -> Optional[str]:
     if not unidade_str:
         return None
     u = unidade_str.strip().lower()
-    u = re.sub(r'[\'\"º°]', '', u)
-    u = re.sub(r'\s+', ' ', u)
+    u = re.sub(r"""['"º°]""", "", u)
+    u = re.sub(r'^(?:graus?|deg(?:rees?)?)\s+', '', u)
+    u = re.sub(r'\s+', ' ', u).strip()
     return UNIT_ALIASES.get(u)
+
+
+
 
 
 def _avaliar_destaque_forno(temp_celsius: float, temp_origem_f: Optional[float] = None) -> str:
@@ -254,47 +258,21 @@ def interpretar_e_converter(texto: str) -> str:
     # Normaliza separadores de decimal: 3,5 -> 3.5 se for número
     t_num_fixed = re.sub(r'(\d+),(\d+)', r'\1.\2', t)
 
-    # Lista de preposições comuns de transição: 'em', 'para', 'to', 'em', 'pra', '->', '='
-    # Padrão 1: "350 f para c", "35 milhas em km", "10.5 ft to m", "2 xicaras em ml"
-    # Também suporta termos compostos como "colheres de sopa", "onça fluida", etc.
-    padrao_frase = re.search(
-        r'(\d+(?:\.\d+)?)\s*([a-záéíóúçº°\s_]+?)\s+(?:em|para|pra|to|equivale[am]?\s+a|->|=)\s+([a-záéíóúçº°\s_]+)',
-        t_num_fixed
-    )
+    t_clean = re.sub(r'^(?:converte?r?|transforma?r?|passa?r?|quanto\s+(?:é|vale|da|dá))\s+', '', t_num_fixed)
 
-    if padrao_frase:
-        val_str, u_orig_raw, u_dest_raw = padrao_frase.groups()
-        try:
-            val = float(val_str)
-            return converter_unidade(val, u_orig_raw.strip(), u_dest_raw.strip())
-        except ValueError:
-            pass
-
-    # Padrão 2: "converter 350 f em c", "converta 5 ft para m"
-    padrao_converter = re.search(
-        r'(?:converter?|transformar?|passar?|quanto\s+(?:é|vale|da|dá))\s+(\d+(?:\.\d+)?)\s*([a-záéíóúçº°\s_]+?)\s+(?:em|para|pra|to)\s+([a-záéíóúçº°\s_]+)',
-        t_num_fixed
-    )
-    if padrao_converter:
-        val_str, u_orig_raw, u_dest_raw = padrao_converter.groups()
-        try:
-            val = float(val_str)
-            return converter_unidade(val, u_orig_raw.strip(), u_dest_raw.strip())
-        except ValueError:
-            pass
-
-    # Padrão 3: Valor colado na unidade: "500g em oz", "100km em mi", "350f em c"
-    padrao_colado = re.search(
-        r'(\d+(?:\.\d+)?)\s*([a-zº°]+)\s+(?:em|para|pra|to)\s+([a-záéíóúçº°\s_]+)',
-        t_num_fixed
-    )
-    if padrao_colado:
-        val_str, u_orig_raw, u_dest_raw = padrao_colado.groups()
-        try:
-            val = float(val_str)
-            return converter_unidade(val, u_orig_raw.strip(), u_dest_raw.strip())
-        except ValueError:
-            pass
+    transicoes = [" equivale a ", " equivalem a ", " para ", " pra ", " em ", " to ", " -> ", " = "]
+    for tr in transicoes:
+        if tr in t_clean:
+            parts = t_clean.split(tr, 1)
+            part_orig = parts[0].strip()
+            part_dest = parts[1].strip()
+            m = re.match(r'^(-?\d+(?:\.\d+)?)\s*(.+)$', part_orig)
+            if m:
+                try:
+                    val = float(m.group(1))
+                    return converter_unidade(val, m.group(2).strip(), part_dest)
+                except ValueError:
+                    pass
 
     return (
         "Não consegui identificar claramente os valores e as unidades para conversão.\n"

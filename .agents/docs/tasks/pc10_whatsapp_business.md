@@ -14,7 +14,7 @@ O usuário criou uma conta dedicada no **WhatsApp Business** com o número:
 5. **RN-05 (Configurações de Ambiente):** Registrar `BOT_PHONE_NUMBER=5511777777777` como referência opcional de documentação em `settings.py` e `.env.example`, mantendo `ALLOWED_PHONE_NUMBER=5511999999999`.
 
 ## 3. Checklist de Implementação
-- [ ] Atualizar `.agents/context/ROADMAP.md` com a feature PC-10.
+- [ ] Atualizar `.agents/docs/ROADMAP.md` com a feature PC-10.
 - [ ] Atualizar testes unitários em `backend_ia/tests/test_webhook_isolation.py` cobrindo:
   - Descarte de mensagens com `fromMe: true` (eco do próprio bot).
   - Aceitação da mensagem vinda de `5511999999999` (e com oscilação do 9º dígito).

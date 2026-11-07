@@ -264,3 +264,91 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Deduplicação inteligente baseada em ID de documento, `originId` e descrições normalizadas para não duplicar despesas fixas já lançadas fisicamente no mês alvo.
   - Valores projetados compõem `totalFixed`, impactam `totalSpent`, são deduzidos do `balance`, compõem o Donut Chart (`expensesByCategory`) e a série histórica de tendências sem gerar escritas no Firestore.
 
+
+## GP-04.4 & PC-11.1: Títulos Bilíngues (Japonês e Inglês) de Animes no Resumo Diário e Cadeia de Modelos Gemini (`gemini-flash-latest` + Fallback) [P-0423, P-1111]
+- **Exibição Bilíngue de Animes no Resumo Diário (P-0423):**
+  - No Morning Briefing (`briefing_service.py`: `_formatar_titulo_anime_briefing`, `_obter_info_animes_briefing`, `_obter_animes_lancando_hoje` e `montar_resumo_matinal`), sempre que um anime possuir título em inglês (`titulo_ingles`) distinto do título em japonês/romaji (`titulo_romaji` / `titulo_principal`), o resumo diário exibe ambos os nomes no formato `Nome em Japonês (Nome em Inglês)` — tanto para lançamentos do dia quanto para o alerta de próximo lançamento (`⏰ *Próximo:*`).
+  - A sincronização e a renovação automática de episódios do AniList (`anime_tracker_tool.py`) preservam explicitamente `titulo_romaji`, `titulo_ingles` e `titulo_principal`.
+- **Modelo Primário `gemini-flash-latest` e Cadeia de Fallback Determinística (P-1111):**
+  - `AIService` (`backend_ia/services/ai_service.py`) e `menu_translator_tool.py` operam sempre com o modelo primário `gemini-flash-latest` e percorrem automaticamente a cadeia de fallback em ordem estrita:
+    1. `gemini-flash-latest` (Primário)
+    2. `gemini-3.8-flash` (Fallback 1)
+    3. `gemini-3.6-flash` (Fallback 2)
+    4. `gemini-3.5-flash` (Fallback 3)
+  - Mantida compatibilidade integral com o Auto-Healing de `MALFORMED_FUNCTION_CALL` (`P-1108`).
+
+
+## FG-08.1 & PC-11.2 — Calibração de Temperatura (`temperature=0.0`) e Auditoria Determinística Anti-Alucinação de Escrita (2026-11-07)
+- **Calibração Determinística do LLM (`P-0804`):**
+  - Configurado `AIService.DEFAULT_GENERATION_CONFIG = {"temperature": 0.0, "top_p": 0.1, "top_k": 1}` em `backend_ia/services/ai_service.py`, injetado em todas as instâncias de `genai.GenerativeModel` (incluindo fallback e auto-healing) para eliminar variações criativas/alucinações e manter respostas estritamente dentro do que foi pedido.
+- **Auditoria de Execução de Tools & Feedback Efetivo de Erro (`P-0805`):**
+  - Criado `ExecutionAuditContext` (`backend_ia/services/execution_audit.py` com `contextvars`) para rastrear execuções reais de ferramentas (`record_success` / `record_failure`) em cada turno de `AIService.process_message`.
+  - Instrumentadas as ferramentas `registrar_gasto` e `registrar_receita` (`backend_ia/services/tools/finance_tool.py`) para validar parâmetros, registrar sucesso ou falha no `ExecutionAuditContext` e retornar mensagens explícitas de erro (`"❌ ... O lançamento NÃO foi cadastrado"`).
+  - Expandido `ToolsDispatcher.INTENT_REGEXES["finance"]` e o contexto multi-turn sticky (`backend_ia/services/tools_dispatcher.py`) para capturar frases naturais de cadastro financeiro (`"cadastra 50 reais de mercado"`, `"lança R$ 80 da conta de luz"`, `"registra no financeiro"`, `"no cartão pessoal"`), evitando que o modelo seja chamado sem as tools financeiras.
+  - Implementado `AIService._verify_and_enforce_honest_feedback` (`backend_ia/services/ai_service.py`) que intercepta confirmações falsas do LLM quando `registrar_gasto`/`registrar_receita` não foi executada com sucesso ou quando uma tool falhou e o LLM tentou ocultar o erro, exibindo o feedback de erro real ao usuário e impedindo cache de respostas de erro.
+
+## ONDA 1 (P0 - Crítico) & Pedidos Imediatos do Usuário Concluídos (2026-11-07)
+- **Compactação e Indexação do Histórico de Chat (00:00 BRT):**
+  - Fuso de corte ajustado para `00:00:00` horário de Brasília (`TZ_BRASILIA`), eliminando a "amnésia das 21h BRT".
+  - Implementado `compact_and_archive_history` em `chat_repository.py`: filtra mensagens de dias anteriores, descarta mensagens de resumo matinal diário (`_is_daily_briefing_message`), compacta o histórico em diálogo estruturado e salva na coleção Firestore `chat_history_compacted` com chave `{remoteJid}__{target_date}`.
+  - Injeção contextual inteligente em `get_recent_history`: se houver resumo compactado do dia anterior, ele é injetado como primeiro turno (`user: [Histórico Anterior...]` / `model: Entendido...`) garantindo continuidade sem inflar tokens.
+- **Consulta de Progresso e Episódio de Animes ("Qual ep eu tô?"):**
+  - Implementada a tool `consultar_meu_episodio_anime(titulo)` em `anime_tracker_tool.py`, buscando na memória local e no Firestore por títulos em romaji, inglês ou nativo.
+  - Registrada no `ToolsDispatcher` com regexes naturais (`"qual ep eu to de X?"`, `"em qual episódio parei de X?"`) e no catálogo do `AIService`.
+- **Desacoplamento Assíncrono e Deduplicação no Webhook WhatsApp:**
+  - Operações síncronas pesadas em `webhook.py` (`AIService.process_message`, `TTSService.synthesize_speech`, `WhatsAppService.send_text`, `ChatRepository.save_log`) executadas via `await asyncio.to_thread(...)`, liberando a event loop do FastAPI.
+  - Deduplicação idempotente de `message_id` com LRU cache (1.000 IDs, TTL 10 min) para neutralizar retries da Evolution API.
+- **Proteção contra Spoofing de Rate Limit e Limpeza de Memória:**
+  - `RateLimiterMiddleware` não confia mais cegamente em `X-Forwarded-For: 127.0.0.1`, aceitando bypass apenas quando `request.client.host == "testclient"`.
+  - Implementada varredura periódica `_sweep_clients_if_needed` para descartar IPs inativos quando o mapa ultrapassa 500 entradas.
+- **Correções de Robustez e Inicialização:**
+  - `routers/billing.py`: correção de importação de `datetime` resolvendo `NameError` em alertas Pub/Sub.
+  - `file_converter_service.py`: importação lazy de `pdf2docx.Converter` para compatibilidade total de inicialização.
+  - `execution_audit.py`: criação do decorator universal `@audit_tool_execution(tool_name)` com detecção de marcadores de erro e exceções.
+
+
+## ONDA 2 (P1 - Alto) — Performance Firestore, Segurança REST e FinOps Cloud Run (2026-11-07)
+- **Eliminação de Full-Scans no Firestore:**
+  - `routers/finance.py`, `routers/dashboard.py` e `services/tools/finance_tool.py` utilizam estritamente `.where("userId", "==", effective_user)` em todas as queries de `finances`, `finance_categories` e `finance_cards`, neutralizando riscos de vazamento multi-tenant e reduzindo drasticamente custos de leitura de Firestore.
+- **Proteção Anti-IDOR e Semântica HTTP:**
+  - Em `PUT/DELETE /transactions/{tx_id}`, `/categories/{cat_id}` e `/cards/{card_id}`, verificação de propriedade obrigatória antes da mutação, retornando HTTP 403 Forbidden para tentativas de alteração entre usuários e HTTP 404 para registros inexistentes.
+  - Materialização automática de despesas fixas projetadas (`proj_{origin_id}_{ano}_{mes}`) e criação de tombstones de exclusão ao deletar ocorrências pontuais de despesas recorrentes.
+  - Sincronização estrita de identificadores: `doc_ref = col.document(); data["id"] = doc_ref.id; doc_ref.set(data)`.
+  - Invalidação seletiva de cache de categorias (`invalidar_cache_categorias(user_id)`) em mutações.
+- **Correção Contábil no Dashboard:**
+  - Em `routers/dashboard.py`, `type == "income"` foi isolado de `total_spent`, impedindo que entradas financeiras fossem somadas como gastos.
+- **FinOps Cloud Run Scale-to-Zero:**
+  - Removido o agendamento de ping contínuo `dam-anticoldstart` em `deploy_cloud_run.ps1`, restaurando `--min-instances=0` e aproveitando integralmente a gratuidade do Cloud Run Free Tier.
+  - `calcular_finops_scorecard` conectado dinamicamente a métricas em tempo real de `ConversationCacheService` e dados do Firestore.
+- **Cache LRU e Supressão em Mutações:**
+  - Eviction automático com limite de 500 entradas em `ConversationCacheService._l1_cache`.
+  - Supressão de cache quando há mutações registradas no `ExecutionAuditContext`.
+
+## ONDA 3 (P2 - Médio) — Consistência de Tools Utilitárias, IA e Dados (2026-11-07)
+- **Briefing Matinal Resiliente:**
+  - Validação e normalização de horários (`HH:MM` ou `8h` -> `08:00`), rejeitando horários inválidos como `25:00`.
+  - Consolidação de chamadas AniList em `montar_resumo_matinal` em uma única invocação de `_obter_info_animes_briefing(hoje)`.
+- **Google Calendar Fuso Horário e Edição Segura:**
+  - Fix de fuso horário `America/Sao_Paulo` (`TZ_BRASILIA`) para strings ISO sem timezone.
+  - Desacoplamento de `nova_duracao_minutos` de `novo_inicio_iso`, recalculando o término do evento a partir do início existente.
+- **Notas, Lembretes e Bissextos:**
+  - Tratamento de 29 de fevereiro em recorrências anuais, prevenindo `ValueError`.
+- **Nutrição Dietbox:**
+  - Priorização de termos simples/base sobre compostos (evitando que `milho` case com `Óleo Vegetal de Milho`).
+  - Adição de `Milho Verde Cozido` e formatação WhatsApp em marcadores limpos sem quebras de layout.
+- **Divisor de Restaurante & Conversor:**
+  - Parsing resiliente de separador de milhar brasileiro (`1.250,50` -> `1250.50`) e suporte a `taxa_servico`.
+  - Conversor de unidades suportando valores negativos (`-10 c` -> `14 °F`) e limpeza de prefixos de graus.
+- **Automação Residencial Alexa:**
+  - Regex com word boundaries (`\b(ar|ar-condicionado)\b`) prevenindo falsos positivos como "ligar armário".
+
+## ONDA 4 (P3 - Baixo & Frontend UI/UX) — Design System, A11y e Componentes Vivos (2026-11-07)
+- **Design System Mestre Stitch & Acessibilidade:**
+  - `.agents/docs/design/DESIGN_SYSTEM.md` formalizado com tokens CSS, paleta semântica, grid 8pt e os 8 estados interativos.
+  - `index.html` configurado com `<html lang="pt-BR">` e `styles.scss` com `:focus-visible` e `overflow-x: hidden`.
+- **Segurança e Anti-Backdoor em Autenticação:**
+  - `auth.service.ts` teve seu fallback cliente (`Admin@123` e `User@123`) totalmente expurgado, retornando erro limpo e seguro sem credenciais expostas no código cliente.
+- **Componentes Vivos e Reativos:**
+  - `health-dashboard`: botões "Hoje", "Semana", "Mês" conectados à re-consulta dinâmica no Firestore.
+  - `agenda-dashboard`: mini-calendário semanal com filtro atômico de eventos e lembretes da timeline pelo dia clicado.
+  - `finance-dashboard`: barra flutuante reposicionada com `left: 256px` no desktop e `bottom: 56px` no mobile, sanitização de tooltips ECharts contra injeções XSS e eliminação do filtro hardcoded `'Christian'`.

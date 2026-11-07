@@ -95,15 +95,19 @@ def agendar_evento(
 
     try:
         inicio_dt = datetime.fromisoformat(inicio_iso.replace('Z', '+00:00'))
+        if inicio_dt.tzinfo is None:
+            inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
         fim_dt = inicio_dt + timedelta(minutes=duracao_minutos)
 
         event = {
             'summary': titulo,
             'start': {
                 'dateTime': inicio_dt.isoformat(),
+                'timeZone': 'America/Sao_Paulo'
             },
             'end': {
                 'dateTime': fim_dt.isoformat(),
+                'timeZone': 'America/Sao_Paulo'
             },
         }
 
@@ -366,6 +370,8 @@ def editar_evento(
     if novo_inicio_iso:
         try:
             inicio_dt = datetime.fromisoformat(novo_inicio_iso.replace('Z', '+00:00'))
+            if inicio_dt.tzinfo is None:
+                inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
             if nova_duracao_minutos:
                 duracao = nova_duracao_minutos
             else:
@@ -382,13 +388,24 @@ def editar_evento(
                     duracao = 60
 
             fim_dt = inicio_dt + timedelta(minutes=duracao)
-            patch_body['start'] = {'dateTime': inicio_dt.isoformat()}
-            patch_body['end'] = {'dateTime': fim_dt.isoformat()}
+            patch_body['start'] = {'dateTime': inicio_dt.isoformat(), 'timeZone': 'America/Sao_Paulo'}
+            patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': 'America/Sao_Paulo'}
             alteracoes.append(f"horário para {inicio_dt.strftime('%d/%m/%Y às %H:%M')}")
         except Exception as e:
             logger.error(f"Erro ao parsear novo horário: {e}")
             return f"Formato de horário inválido: '{novo_inicio_iso}'."
-
+    elif nova_duracao_minutos:
+        try:
+            orig_start_str = alvo.get('start', {}).get('dateTime') or alvo.get('start', {}).get('date')
+            if orig_start_str:
+                orig_start = datetime.fromisoformat(orig_start_str.replace('Z', '+00:00'))
+                if orig_start.tzinfo is None:
+                    orig_start = orig_start.replace(tzinfo=TZ_BRASILIA)
+                fim_dt = orig_start + timedelta(minutes=nova_duracao_minutos)
+                patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': 'America/Sao_Paulo'}
+                alteracoes.append(f"duração para {nova_duracao_minutos} minutos")
+        except Exception as e:
+            logger.error(f"Erro ao atualizar duração: {e}")
     if not patch_body:
         return f"Nenhuma alteração foi solicitada para o evento '{titulo_antigo}'."
 

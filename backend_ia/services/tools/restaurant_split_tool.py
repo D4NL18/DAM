@@ -11,7 +11,8 @@ def _format_currency(value: float) -> str:
 def dividir_conta_restaurante(
     consumo_participantes: List[Dict[str, Any]], 
     taxa_servico_percent: float = 10.0, 
-    chave_pix: Optional[str] = None
+    chave_pix: Optional[str] = None,
+    taxa_servico: Optional[float] = None
 ) -> str:
     """
     Split restaurant bills fairly and proportionally among participants with tip/service fee calculation.
@@ -32,6 +33,8 @@ def dividir_conta_restaurante(
         return "Nenhum consumo informado para divisão da conta."
 
     # Normalizar percentual da taxa
+    if taxa_servico is not None:
+        taxa_servico_percent = taxa_servico
     try:
         taxa_percent = float(taxa_servico_percent)
         if taxa_percent < 0:
@@ -39,6 +42,10 @@ def dividir_conta_restaurante(
     except (ValueError, TypeError):
         taxa_percent = 10.0
 
+    if taxa_servico is not None:
+        taxa_servico_percent = taxa_servico
+    if taxa_servico is not None:
+        taxa_servico_percent = taxa_servico
     parsed_participants = []
     subtotal_geral = 0.0
 
@@ -53,8 +60,14 @@ def dividir_conta_restaurante(
             raw_valor = item.get("valor", 0.0)
             try:
                 if isinstance(raw_valor, str):
-                    raw_valor = raw_valor.replace("R$", "").replace(" ", "").replace(",", ".")
-                valor_float = round(float(raw_valor), 2)
+                    s = raw_valor.replace("R$", "").replace(" ", "").strip()
+                    if "," in s and "." in s:
+                        s = s.replace(".", "").replace(",", ".")
+                    elif "," in s:
+                        s = s.replace(",", ".")
+                    valor_float = round(float(s), 2)
+                else:
+                    valor_float = round(float(raw_valor), 2)
             except (ValueError, TypeError):
                 valor_float = 0.0
 

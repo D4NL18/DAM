@@ -224,7 +224,10 @@ def calcular_proxima_ocorrencia(data_hora_str: str, recorrencia: Optional[str], 
             dia = min(dt.day, max_dias)
             dt = dt.replace(year=ano, month=mes, day=dia)
         elif rec == "anual":
-            dt = dt.replace(year=dt.year + 1)
+            try:
+                dt = dt.replace(year=dt.year + 1)
+            except ValueError:
+                dt = dt.replace(year=dt.year + 1, day=28)
 
     return dt.strftime("%Y-%m-%d %H:%M")
 

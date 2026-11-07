@@ -203,12 +203,10 @@ def consultar_lista_substituicao(alimento_ou_grupo: str) -> str:
 
         linhas = [
             f"📋 **Grupo: {nome_grupo}** (Média Calórica: {media_kcal_str})",
-            f"Total de opções prescritas: {len(alimentos_grupo)} alimentos\n",
-            "| Alimento | Medida Caseira | Qtd. (g/ml) |",
-            "| :--- | :--- | :--- |"
+            f"Total de opções prescritas: {len(alimentos_grupo)} alimentos\n"
         ]
         for a in alimentos_grupo:
-            linhas.append(f"| {a['nome_oficial']} | {a['medida_caseira']} | {a['quantidade_g_ml']:.2f} {a['unidade']} |")
+            linhas.append(f"• *{a['nome_oficial']}:* {a['medida_caseira']} ({a['quantidade_g_ml']:.0f} {a['unidade']})")
         
         return "\n".join(linhas)
 

@@ -1,3 +1,4 @@
+import re
 import logging
 import urllib.request
 import json
@@ -17,15 +18,15 @@ def determinar_acao_e_device(rotina: str, ambiente: Optional[str] = None) -> tup
     state = "close" if is_off else "open"
     
     # 1. Computador / PC
-    if "computador" in r or "pc" in r:
+    if re.search(r"\b(pc|computador)\b", r):
         return "pc", state
 
     # 2. TV
-    if "tv" in r or "televis" in r:
+    if re.search(r"\b(tv|televis[aã]o|televisor)\b", r):
         return "tv", state
 
     # 3. Ar-condicionado
-    if any(w in r for w in [" ar", "ar-", "ar condicionado", "climatizador"]) or r.startswith("ar"):
+    if re.search(r"\b(ar|ar-condicionado|ar condicionado|climatizador)\b", r):
         return "ar", state
 
     return r.replace("-", " "), state

@@ -107,9 +107,16 @@ def configurar_preferencias_briefing(
     user_name = UserContext.get_user_name()
     prefs = obter_preferencias_briefing(user_id)
 
+    VALID_BRIEFING_TOPICS = {"agenda", "lembretes", "saude", "veiculo", "furia", "esports", "animes", "clash", "financas", "streaming"}
     alteracoes = []
     if horario and horario.strip():
         h_limpo = horario.strip()
+        # Normalização de formatos como '8h', '08h' -> '08:00'
+        m_h = re.match(r"^([01]?\d|2[0-3])h$", h_limpo, re.IGNORECASE)
+        if m_h:
+            h_limpo = f"{int(m_h.group(1)):02d}:00"
+        elif not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", h_limpo):
+            return f"❌ Horário inválido ('{horario}'). Use o formato HH:MM (ex: '07:30', '08:00')."
         prefs["horario"] = h_limpo
         alteracoes.append(f"• Horário de envio: **{h_limpo}**")
 
@@ -229,6 +236,29 @@ def _obter_jogos_furia_hoje(data_hoje: Optional[datetime] = None) -> List[Dict[s
 
     return jogos_hoje
 
+def _formatar_titulo_anime_briefing(anime_dict: Dict[str, Any]) -> str:
+    """
+    P-0423: Formata o nome do anime para o resumo diário.
+    Quando o anime tiver nome em inglês distinto do nome em japonês/romaji,
+    exibe ambos no formato 'Nome em Japonês (Nome em Inglês)'.
+    """
+    titulo_jp = str(
+        anime_dict.get("titulo_romaji")
+        or anime_dict.get("titulo_principal")
+        or anime_dict.get("titulo")
+        or "Anime"
+    ).strip()
+    titulo_en = str(anime_dict.get("titulo_ingles") or "").strip()
+
+    if (
+        titulo_en
+        and titulo_en.lower() != "anime"
+        and titulo_en.lower() != titulo_jp.lower()
+        and f"({titulo_en.lower()})" not in titulo_jp.lower()
+    ):
+        return f"{titulo_jp} ({titulo_en})"
+    return titulo_jp
+
 def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     """Identifica animes cadastrados na watchlist do usuário que lançam episódio hoje."""
     hoje = _obter_data_brasilia(data_hoje)
@@ -263,14 +293,15 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
             airing_at = pep.get("airing_at")
             if airing_at:
                 dt_ep = datetime.fromtimestamp(airing_at, tz=timezone.utc).astimezone(TZ_BRASILIA)
+                titulo_fmt = _formatar_titulo_anime_briefing(a)
                 if dt_ep.strftime("%Y-%m-%d") == hoje_data_str:
                     animes_hoje.append({
-                        "titulo": a.get("titulo_principal", "Anime"),
+                        "titulo": titulo_fmt,
                         "episodio": pep.get("episodio", "?"),
                         "horario": dt_ep.strftime("%H:%M")
                     })
                 elif dt_ep > hoje:
-                    proximos_lancamentos.append((dt_ep, a.get("titulo_principal", "Anime"), pep.get("episodio", "?"), pep.get("data_formatada", "")))
+                    proximos_lancamentos.append((dt_ep, titulo_fmt, pep.get("episodio", "?"), pep.get("data_formatada", "")))
 
     if animes_hoje:
         linhas_animes = []
@@ -289,9 +320,13 @@ def _obter_info_animes_briefing(data_hoje: Optional[datetime] = None) -> str:
     return "• ℹ️ Nenhum episódio novo dos seus animes hoje."
 
 def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    """Mantido para compatibilidade com testes legados."""
+    """Mantido para compatibilidade com testes legados (respeitando P-0423)."""
     hoje = _obter_data_brasilia(data_hoje)
     hoje_data_str = hoje.strftime("%Y-%m-%d")
+    try:
+        _renovar_proximos_episodios_expirados()
+    except Exception:
+        pass
     animes_memoria = list(_MEMORY_WATCHLIST.values())
     if firebase.db is not None:
         try:
@@ -310,7 +345,7 @@ def _obter_animes_lancando_hoje(data_hoje: Optional[datetime] = None) -> List[Di
             dt_ep = datetime.fromtimestamp(pep["airing_at"], tz=timezone.utc).astimezone(TZ_BRASILIA)
             if dt_ep.strftime("%Y-%m-%d") == hoje_data_str:
                 animes_hoje.append({
-                    "titulo": a.get("titulo_principal", "Anime"),
+                    "titulo": _formatar_titulo_anime_briefing(a),
                     "episodio": pep.get("episodio", "?"),
                     "horario": dt_ep.strftime("%H:%M")
                 })
@@ -541,12 +576,7 @@ def montar_resumo_matinal(data_alvo: Optional[datetime] = None, user_id: Optiona
 
         # 6. Animes (apenas se configurado e Daniel tiver animes)
         if "animes" in topicos and target_user_id == "daniel":
-            animes_hoje = _obter_animes_lancando_hoje(hoje)
-            if animes_hoje:
-                linhas_animes = [f"• 🍿 **{an['titulo']}** (Ep. {an['episodio']}) às {an['horario']} (Crunchyroll)" for an in animes_hoje]
-                animes_txt = "\n".join(linhas_animes)
-            else:
-                animes_txt = _obter_info_animes_briefing(hoje)
+            animes_txt = _obter_info_animes_briefing(hoje)
             blocos.append(f"🎌 *Animes de Hoje:*\n{animes_txt}")
 
         # 7. Clash of Clans (apenas se configurado e Daniel)

@@ -32,8 +32,8 @@ Permitir que o usuário envie links de vídeos das redes sociais (TikTok, Instag
 ---
 
 ## 📝 Checklist de Implementação
-- [x] Contrato de API / Tools definido em `.agents/context/api-contracts/saved_videos.md`
-- [x] Modelagem de Dados NoSQL Firestore em `.agents/context/db/saved_videos.md` e atualização do `_INDEX.md`
+- [x] Contrato de API / Tools definido em `.agents/docs/api_contracts/saved_videos.md`
+- [x] Modelagem de Dados NoSQL Firestore em `.agents/docs/db/saved_videos.md` e atualização do `_INDEX.md`
 - [x] Testes TDD implementados em `backend_ia/tests/test_saved_videos.py` (20 testes)
 - [x] Repositório `backend_ia/repositories/saved_videos_repository.py` implementado
 - [x] Ferramentas em `backend_ia/services/tools/saved_videos_tool.py` implementadas

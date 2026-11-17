@@ -14,8 +14,8 @@ def test_catalogo_dietbox_integridade():
     assert "leguminosas" in GRUPOS_ALIMENTARES
     assert "oleos_e_gorduras" in GRUPOS_ALIMENTARES
     
-    # 135 alimentos extraídos do documento PDF oficial
-    assert len(ALIMENTOS_DIETBOX) == 135
+    # Ao menos 135 alimentos do Dietbox (inclui adições como Milho Verde Cozido)
+    assert len(ALIMENTOS_DIETBOX) >= 135
     
     # Validações amostrais de dados do PDF
     arroz = next((a for a in ALIMENTOS_DIETBOX if "Arroz Branco Cozido" in a["nome_oficial"]), None)

@@ -493,3 +493,184 @@ class TestStory5MultiUserIdempotency:
         assert f"{hoje_str}_lari" in _MEMORY_BRIEFING_LOGS
 
 
+
+
+# ==============================================================================
+# STORY 6: TÍTULOS BILÍNGUES JAPONÊS E INGLÊS NO RESUMO DIÁRIO (P-0423)
+# ==============================================================================
+class TestStory6TitulosBilinguesAnimes:
+    """P-0423: Exibição bilíngue Japonês (Inglês) de animes no Morning Briefing."""
+
+    def test_anime_lancando_hoje_exibe_titulo_japones_e_ingles(self):
+        """
+        P-0423: Quando um anime 'assistindo' que lança episódio hoje possui título em japonês/romaji
+        e título em inglês distintos, _obter_animes_lancando_hoje, _obter_info_animes_briefing e
+        montar_resumo_matinal devem exibir 'Ore dake Level Up na Ken (Solo Leveling)'.
+        """
+        from services.briefing_service import _obter_animes_lancando_hoje
+
+        dt_hoje = datetime(2026, 9, 8, 14, 30, tzinfo=TZ_BRASILIA)
+        airing_hoje = int(dt_hoje.astimezone(timezone.utc).timestamp())
+
+        _MEMORY_WATCHLIST["151807"] = {
+            "anilist_id": 151807,
+            "titulo_principal": "Ore dake Level Up na Ken",
+            "titulo_romaji": "Ore dake Level Up na Ken",
+            "titulo_ingles": "Solo Leveling",
+            "status_usuario": "assistindo",
+            "ultimo_episodio_visto": 7,
+            "proximo_episodio": {
+                "episodio": 8,
+                "airing_at": airing_hoje,
+                "data_formatada": "Terça-feira, 08/09/2026 às 14:30",
+                "tempo_restante_segundos": 3600
+            }
+        }
+
+        with patch("services.briefing_service.firebase.db", None), \
+             patch("services.briefing_service._renovar_proximos_episodios_expirados"):
+            lista_hoje = _obter_animes_lancando_hoje(dt_hoje)
+            info_briefing = _obter_info_animes_briefing(dt_hoje)
+            resumo_completo = montar_resumo_matinal(data_alvo=dt_hoje, user_id="daniel")
+
+        expected_bilingual = "Ore dake Level Up na Ken (Solo Leveling)"
+        assert len(lista_hoje) == 1
+        assert lista_hoje[0]["titulo"] == expected_bilingual
+        assert expected_bilingual in info_briefing
+        assert expected_bilingual in resumo_completo
+
+    def test_proximo_lancamento_exibe_titulo_japones_e_ingles_quando_nao_ha_hoje(self):
+        """
+        P-0423: Quando não há anime lançando hoje e o resumo exibe '⏰ *Próximo:*',
+        deve formatar com título em japonês e inglês:
+        'Seihantai na Kimi to Boku 2nd Season (You and I Are Polar Opposites Season 2)'.
+        """
+        dt_hoje = datetime(2026, 9, 8, 8, 0, tzinfo=TZ_BRASILIA)
+        dt_proximo = datetime(2026, 9, 12, 13, 0, tzinfo=TZ_BRASILIA)
+        airing_proximo = int(dt_proximo.astimezone(timezone.utc).timestamp())
+
+        _MEMORY_WATCHLIST["180001"] = {
+            "anilist_id": 180001,
+            "titulo_principal": "Seihantai na Kimi to Boku 2nd Season",
+            "titulo_ingles": "You and I Are Polar Opposites Season 2",
+            "status_usuario": "assistindo",
+            "ultimo_episodio_visto": 2,
+            "proximo_episodio": {
+                "episodio": 3,
+                "airing_at": airing_proximo,
+                "data_formatada": "Sábado, 12/09/2026 às 13:00",
+                "tempo_restante_segundos": 345600
+            }
+        }
+
+        with patch("services.briefing_service.firebase.db", None), \
+             patch("services.briefing_service._renovar_proximos_episodios_expirados"):
+            info_briefing = _obter_info_animes_briefing(dt_hoje)
+            resumo_completo = montar_resumo_matinal(data_alvo=dt_hoje, user_id="daniel")
+
+        expected_bilingual = "Seihantai na Kimi to Boku 2nd Season (You and I Are Polar Opposites Season 2)"
+        assert "⏰ *Próximo:*" in info_briefing
+        assert expected_bilingual in info_briefing
+        assert expected_bilingual in resumo_completo
+
+    def test_nao_duplica_titulo_quando_ingles_igual_ou_ausente(self):
+        """
+        P-0423: Quando titulo_ingles for igual ao título principal, None, vazio ou 'Anime',
+        não deve duplicar entre parênteses.
+        """
+        dt_hoje = datetime(2026, 9, 8, 15, 0, tzinfo=TZ_BRASILIA)
+        airing_hoje = int(dt_hoje.astimezone(timezone.utc).timestamp())
+
+        _MEMORY_WATCHLIST["frieren_sem_en"] = {
+            "anilist_id": 154587,
+            "titulo_principal": "Sousou no Frieren",
+            "titulo_ingles": None,
+            "status_usuario": "assistindo",
+            "proximo_episodio": {
+                "episodio": 5,
+                "airing_at": airing_hoje,
+                "data_formatada": "Terça-feira, 08/09/2026 às 15:00"
+            }
+        }
+        _MEMORY_WATCHLIST["dandadan_igual"] = {
+            "anilist_id": 171018,
+            "titulo_principal": "Dandadan",
+            "titulo_ingles": "Dandadan",
+            "status_usuario": "assistindo",
+            "proximo_episodio": {
+                "episodio": 6,
+                "airing_at": airing_hoje,
+                "data_formatada": "Terça-feira, 08/09/2026 às 15:00"
+            }
+        }
+
+        with patch("services.briefing_service.firebase.db", None), \
+             patch("services.briefing_service._renovar_proximos_episodios_expirados"):
+            info_briefing = _obter_info_animes_briefing(dt_hoje)
+
+        assert "**Sousou no Frieren**" in info_briefing
+        assert "Sousou no Frieren (Sousou no Frieren)" not in info_briefing
+        assert "Sousou no Frieren (Anime)" not in info_briefing
+        assert "**Dandadan**" in info_briefing
+        assert "Dandadan (Dandadan)" not in info_briefing
+
+    @patch("services.tools.anime_tracker_tool._consultar_anilist_graphql")
+    def test_renovar_proximos_episodios_preserva_titulos_romaji_e_ingles(self, mock_graphql):
+        """
+        P-0423: Em _renovar_proximos_episodios_expirados, quando um anime já existente em
+        _MEMORY_WATCHLIST é renovado via AniList GraphQL, o registro atualizado preserva
+        titulo_romaji / titulo_principal e titulo_ingles para exibição bilíngue.
+        """
+        from services.tools.anime_tracker_tool import _renovar_proximos_episodios_expirados
+
+        dt_futuro = datetime(2026, 9, 10, 12, 0, tzinfo=TZ_BRASILIA)
+        airing_futuro = int(dt_futuro.astimezone(timezone.utc).timestamp())
+
+        _MEMORY_WATCHLIST["166873"] = {
+            "anilist_id": 166873,
+            "titulo_principal": "Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            "status_usuario": "assistindo",
+            "ultimo_episodio_visto": 1,
+            "proximo_episodio": {
+                "episodio": 2,
+                "airing_at": 1000000000,
+                "data_formatada": "Domingo",
+                "tempo_restante_segundos": 0
+            }
+        }
+
+        mock_graphql.return_value = {
+            "MediaListCollection": {
+                "lists": [
+                    {
+                        "entries": [
+                            {
+                                "progress": 2,
+                                "media": {
+                                    "id": 166873,
+                                    "title": {
+                                        "romaji": "Mushoku Tensei III: Isekai Ittara Honki Dasu",
+                                        "english": "Mushoku Tensei: Jobless Reincarnation Season 3"
+                                    },
+                                    "status": "RELEASING",
+                                    "episodes": 12,
+                                    "nextAiringEpisode": {
+                                        "airingAt": airing_futuro,
+                                        "timeUntilAiring": 172800,
+                                        "episode": 3
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        with patch("services.tools.anime_tracker_tool.firebase.db", None):
+            _renovar_proximos_episodios_expirados(forcar=True)
+
+        registro = _MEMORY_WATCHLIST["166873"]
+        assert registro["titulo_principal"] == "Mushoku Tensei III: Isekai Ittara Honki Dasu"
+        assert registro.get("titulo_romaji") == "Mushoku Tensei III: Isekai Ittara Honki Dasu"
+        assert registro["titulo_ingles"] == "Mushoku Tensei: Jobless Reincarnation Season 3"

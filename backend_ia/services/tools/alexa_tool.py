@@ -1,3 +1,4 @@
+import re
 import logging
 import urllib.request
 import json
@@ -17,15 +18,15 @@ def determinar_acao_e_device(rotina: str, ambiente: Optional[str] = None) -> tup
     state = "close" if is_off else "open"
     
     # 1. Computador / PC
-    if "computador" in r or "pc" in r:
+    if re.search(r"\b(pc|computador)\b", r):
         return "pc", state
 
     # 2. TV
-    if "tv" in r or "televis" in r:
+    if re.search(r"\b(tv|televis[aã]o|televisor)\b", r):
         return "tv", state
 
     # 3. Ar-condicionado
-    if any(w in r for w in [" ar", "ar-", "ar condicionado", "climatizador"]) or r.startswith("ar"):
+    if re.search(r"\b(ar|ar-condicionado|ar condicionado|climatizador)\b", r):
         return "ar", state
 
     return r.replace("-", " "), state
@@ -86,10 +87,10 @@ def acionar_rotina_alexa(rotina: str, ambiente: Optional[str] = None) -> str:
                     f"ainda não foi criado no seu painel [voicemonkey.io](https://voicemonkey.io).\n"
                     f"👉 Crie um Monkey com o nome `{target_name}` e vincule à rotina no app da Alexa!"
                 )
-            logger.error(f"Erro HTTP ao chamar Voice Monkey API: {body}")
+            logger.warning(f"Erro HTTP ao chamar Voice Monkey API: {body}")
             return f"Erro ao comunicar com a Alexa ({body})."
         except Exception as e:
-            logger.error(f"Erro ao chamar Voice Monkey API: {e}")
+            logger.exception("Erro ao chamar Voice Monkey API")
             return f"Tentei acionar a rotina '{rotina}', mas ocorreu um erro: {e}"
 
     # Modo fallback / informativo se o token ainda não estiver no .env
@@ -132,10 +133,10 @@ def falar_na_alexa(mensagem: str, ambiente: Optional[str] = None) -> str:
                     f"Não encontrei o dispositivo de áudio **`{device_target}`** no seu Voice Monkey.\n"
                     f"Verifique o nome do Echo Dot no seu painel [voicemonkey.io](https://voicemonkey.io/devices)."
                 )
-            logger.error(f"Erro HTTP anúncio Voice Monkey: {body}")
+            logger.warning(f"Erro HTTP anúncio Voice Monkey: {body}")
             return f"Não consegui enviar o áudio para a Alexa: {body}"
         except Exception as e:
-            logger.error(f"Erro ao enviar anúncio para a Alexa: {e}")
+            logger.exception("Erro ao enviar anúncio para a Alexa")
             return f"Não consegui enviar o áudio para a Alexa: {e}"
 
     return (

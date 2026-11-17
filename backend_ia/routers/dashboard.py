@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Header
 from config import firebase
 from services.tools.calendar_tool import _get_calendar_service
 from services.tools.notes_tool import _obter_todos_itens, calcular_proxima_ocorrencia, concluir_lembrete, _atualizar_item
@@ -11,50 +11,79 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Dashboard"])
 
+UTC_OFFSET_SUFFIX = "+00:00"
+FMT_DATETIME_SHORT = "%d/%m %H:%M"
+
 @router.get("/finance/monthly-summary")
 def get_finance_monthly_summary(
     year: int = Query(default=datetime.now().year),
-    month: int = Query(default=datetime.now().month)
+    month: int = Query(default=datetime.now().month),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id")
 ) -> Dict[str, Any]:
     """
     Retorna o resumo financeiro mensal consultando diretamente a coleção 'finances' no Firestore.
-    Se a coleção estiver vazia, retorna listas zeradas sem mocks artificiais.
+    Filtra estritamente por userId e NÃO soma receitas (type='income') a total_spent.
     """
+    effective_user = x_user_id.strip() if x_user_id else "daniel"
     total_spent = 0.0
     category_map: Dict[str, float] = {}
     recent_txs: List[Dict[str, Any]] = []
 
     if firebase.db is not None:
         try:
-            docs = firebase.db.collection("finances").stream()
+            col = firebase.db.collection("finances")
+            try:
+                query = col.where("userId", "==", effective_user)
+                docs = list(query.stream())
+            except Exception:
+                docs = []
+            if not docs and hasattr(col, "stream"):
+                try:
+                    fallback_docs = list(col.stream())
+                    if fallback_docs:
+                        docs = fallback_docs
+                except Exception:
+                    pass
+
             for doc in docs:
                 data = doc.to_dict() or {}
+                doc_user = data.get("userId") or data.get("user_id") or effective_user
+                if doc_user != effective_user:
+                    continue
+
                 # Filtragem de ano e mês (campo 'date' ou 'created_at')
                 date_str = data.get("date") or data.get("created_at") or ""
                 valido = True
                 if date_str:
                     try:
-                        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(date_str.replace("Z", UTC_OFFSET_SUFFIX))
                         if dt.year != year or dt.month != month:
                             valido = False
                     except Exception:
-                        pass
+                        valido = False
+                else:
+                    valido = False
 
                 if valido:
                     amount = float(data.get("amount") or 0.0)
                     category = data.get("category") or "Outros"
-                    total_spent += amount
-                    category_map[category] = category_map.get(category, 0.0) + amount
+                    tx_type = data.get("type") or "expense_variable"
+
+                    # Apenas despesas compõem total_spent e category_map
+                    if tx_type != "income":
+                        total_spent += amount
+                        category_map[category] = category_map.get(category, 0.0) + amount
 
                     recent_txs.append({
                         "id": doc.id,
                         "date": date_str or datetime.now().isoformat(),
                         "description": data.get("description") or "Transação sem descrição",
                         "amount": amount,
-                        "category": category
+                        "category": category,
+                        "type": tx_type
                     })
-        except Exception as e:
-            logger.error(f"Erro ao consultar finances no Firestore: {e}")
+        except Exception:
+            logger.exception("Erro ao consultar finances no Firestore")
 
     # Ordena as transações mais recentes
     recent_txs.sort(key=lambda x: x.get("date", ""), reverse=True)
@@ -110,8 +139,8 @@ def get_health_summary(
                         sleep_hours = float(m_data[0].get("total_sleep") or m_data[0].get("qty") or 0.0)
 
                 metrics_list.append({"id": doc.id, "created_at": payload.get("created_at")})
-        except Exception as e:
-            logger.error(f"Erro ao consultar health_metrics no Firestore: {e}")
+        except Exception:
+            logger.exception("Erro ao consultar health_metrics no Firestore")
 
     return {
         "stepCount": step_count,
@@ -179,7 +208,7 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
                     duracao = (e_dt - s_dt).total_seconds() / 3600.0
                     meeting_hours += duracao
                     if period in ["semana", "mes"]:
-                        hora_inicio = s_dt.strftime("%d/%m %H:%M")
+                        hora_inicio = s_dt.strftime(FMT_DATETIME_SHORT)
                         hora_fim = e_dt.strftime("%H:%M")
                     else:
                         hora_inicio = s_dt.strftime("%H:%M")
@@ -206,8 +235,8 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
                     "category": cat,
                     "status": "confirmed"
                 })
-        except Exception as e:
-            logger.error(f"Erro ao buscar Google Calendar no endpoint da agenda: {e}")
+        except Exception:
+            logger.exception("Erro ao buscar Google Calendar no endpoint da agenda")
 
     # Lembretes reais da coleção 'notes_reminders'
     lembretes_ativos = []
@@ -258,7 +287,7 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
             if data_hora_raw and not recorrencia:
                 try:
                     if "T" in data_hora_raw:
-                        dt_check = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
+                        dt_check = datetime.fromisoformat(data_hora_raw.replace("Z", UTC_OFFSET_SUFFIX))
                     else:
                         dt_check = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
                     if dt_check.tzinfo is None:
@@ -272,11 +301,11 @@ def get_agenda_summary(period: str = Query(default="hoje")) -> Dict[str, Any]:
             if data_hora_raw:
                 try:
                     if "T" in data_hora_raw:
-                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", "+00:00"))
-                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                        dt = datetime.fromisoformat(data_hora_raw.replace("Z", UTC_OFFSET_SUFFIX))
+                        due_time_fmt = dt.strftime(FMT_DATETIME_SHORT)
                     elif len(data_hora_raw) >= 16 and data_hora_raw[4] == '-' and data_hora_raw[7] == '-':
                         dt = datetime.strptime(data_hora_raw[:16], "%Y-%m-%d %H:%M")
-                        due_time_fmt = dt.strftime("%d/%m %H:%M")
+                        due_time_fmt = dt.strftime(FMT_DATETIME_SHORT)
                 except Exception:
                     due_time_fmt = data_hora_raw
 

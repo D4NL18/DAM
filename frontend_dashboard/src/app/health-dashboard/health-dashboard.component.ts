@@ -15,15 +15,30 @@ import { catchError, of } from 'rxjs';
 export class HealthDashboardComponent implements OnInit {
   summary: HealthSummary | null = null;
   loading = true;
+  selectedPeriod: 'hoje' | 'semana' | 'mes' = 'semana';
   chartOption: EChartsOption = {};
 
   constructor(private healthApi: HealthApiService) {}
 
   ngOnInit(): void {
+    this.setPeriod(this.selectedPeriod);
+  }
+
+  setPeriod(period: 'hoje' | 'semana' | 'mes'): void {
+    this.selectedPeriod = period;
+    this.loading = true;
+
     const end = new Date();
     const start = new Date();
-    start.setDate(end.getDate() - 7);
-    
+
+    if (period === 'hoje') {
+      start.setHours(0, 0, 0, 0);
+    } else if (period === 'semana') {
+      start.setDate(end.getDate() - 7);
+    } else if (period === 'mes') {
+      start.setDate(end.getDate() - 30);
+    }
+
     const startStr = start.toISOString().split('T')[0];
     const endStr = end.toISOString().split('T')[0];
 

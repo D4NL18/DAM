@@ -1,5 +1,7 @@
 import logging
 import re
+import asyncio
+from collections import OrderedDict
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException, Header
 from typing import Optional
 from services.ai_service import AIService
@@ -12,6 +14,16 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+MIME_IMAGE_JPEG = "image/jpeg"
+MIME_AUDIO_OGG = "audio/ogg"
+MIME_APPLICATION_PDF = "application/pdf"
+
+# Cache LRU para deduplicação idempotente de message_id
+_PROCESSED_MESSAGE_IDS = OrderedDict()
+
+def _reset_processed_message_ids():
+    _PROCESSED_MESSAGE_IDS.clear()
 
 def normalize_digits(value: str) -> str:
     """Extrai apenas dígitos de uma string."""
@@ -88,6 +100,27 @@ def is_translation_content(text: str, ai_response: str) -> bool:
 
     return False
 
+def _falha_download_midia(text: str, media_base64: Optional[str]) -> bool:
+    if media_base64:
+        return False
+    avisos_midia = {
+        "Analyze this image.",
+        "Transcribe and respond to this audio.",
+        "Analise esta imagem enviada pelo usuário.",
+        "Transcreva e responda ao que o usuário solicitou neste áudio."
+    }
+    return text in avisos_midia or str(text).startswith("Process this document:")
+
+
+def _deve_enviar_audio(text: str, ai_response: str, media_mimetype: Optional[str], masked_jid: str) -> bool:
+    if is_translation_content(text, ai_response):
+        logger.info(f"--> [BACKGROUND] Tradução detectada para {masked_jid} (P-1003): envio forçado estritamente em formato de texto.")
+        return False
+    if media_mimetype and "audio" in media_mimetype:
+        return True
+    return TTSService.should_reply_with_audio(text)
+
+
 async def process_and_reply(
     remote_jid: str, 
     text: str, 
@@ -108,41 +141,25 @@ async def process_and_reply(
 
     try:
         # Se a mensagem dependia exclusivamente da mídia e o download falhou:
-        if not media_base64 and (
-            text in [
-                "Analyze this image.",
-                "Transcribe and respond to this audio.",
-                "Analise esta imagem enviada pelo usuário.",
-                "Transcreva e responda ao que o usuário solicitou neste áudio."
-            ]
-        ):
+        if _falha_download_midia(text, media_base64):
             logger.warning(f"--> [BACKGROUND] Download da mídia falhou para {masked_jid}. Enviando aviso ao usuário.")
             aviso = "Não consegui carregar o arquivo de mídia que você enviou no momento. Poderia tentar reenviar, por favor?"
-            WhatsAppService.send_text(remote_jid, aviso)
-            ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=aviso)
+            await asyncio.to_thread(WhatsAppService.send_text, remote_jid, aviso)
+            await asyncio.to_thread(ChatRepository.save_log, remote_jid=remote_jid, from_me=True, text=aviso)
             return
 
-        ai_response = AIService.process_message(remote_jid, text, media_base64, media_mimetype)
+        ai_response = await asyncio.to_thread(
+            AIService.process_message, remote_jid, text, media_base64, media_mimetype
+        )
         logger.info(f"--> [BACKGROUND] IA respondeu ({len(ai_response)} chars).")
 
-        # Verifica se deve responder em áudio
-        deve_enviar_audio = False
-        is_trans = is_translation_content(text, ai_response)
-
-        if is_trans:
-            logger.info(f"--> [BACKGROUND] Tradução detectada para {masked_jid} (P-1003): envio forçado estritamente em formato de texto.")
-            deve_enviar_audio = False
-        elif media_mimetype and "audio" in media_mimetype:
-            deve_enviar_audio = True
-        elif TTSService.should_reply_with_audio(text):
-            deve_enviar_audio = True
-
+        deve_enviar_audio = _deve_enviar_audio(text, ai_response, media_mimetype, masked_jid)
         enviado_com_sucesso = False
         if deve_enviar_audio:
             logger.info(f"--> [BACKGROUND] Sintetizando voz via TTSService para {masked_jid}...")
-            audio_bytes = TTSService.synthesize_speech(ai_response)
+            audio_bytes = await asyncio.to_thread(TTSService.synthesize_speech, ai_response)
             if audio_bytes:
-                resp = WhatsAppService.send_voice_note(remote_jid, audio_bytes)
+                resp = await asyncio.to_thread(WhatsAppService.send_voice_note, remote_jid, audio_bytes)
                 if resp is not None:
                     logger.info(f"--> [BACKGROUND] Áudio entregue via WhatsApp para {masked_jid}")
                     enviado_com_sucesso = True
@@ -151,12 +168,12 @@ async def process_and_reply(
 
         # Fallback para envio de texto caso áudio não tenha sido acionado ou tenha falhado
         if not enviado_com_sucesso:
-            resp = WhatsAppService.send_text(remote_jid, ai_response)
+            await asyncio.to_thread(WhatsAppService.send_text, remote_jid, ai_response)
             logger.info(f"--> [BACKGROUND] Mensagem de texto entregue via WhatsApp para {masked_jid}")
 
-        ChatRepository.save_log(remote_jid=remote_jid, from_me=True, text=ai_response)
-    except Exception as e:
-        logger.error(f"--> [BACKGROUND ERROR] Falha no processamento da mensagem: {e}")
+        await asyncio.to_thread(ChatRepository.save_log, remote_jid=remote_jid, from_me=True, text=ai_response)
+    except Exception:
+        logger.exception("--> [BACKGROUND ERROR] Falha no processamento da mensagem")
 
 
 @router.post("/api/whatsapp/webhook")
@@ -175,8 +192,8 @@ async def whatsapp_webhook(
 
     try:
         payload = await request.json()
-    except Exception as e:
-        logger.error(f"Erro ao parsear JSON do webhook: {e}")
+    except Exception:
+        logger.exception("Erro ao parsear JSON do webhook")
         return {"status": "error", "message": "Invalid JSON"}
 
     event = str(payload.get("event", "")).lower()
@@ -196,6 +213,8 @@ async def whatsapp_webhook(
     remote_jid = key.get("remoteJid", "")
     message_id = key.get("id")
     masked_jid = SecurityService.mask_phone(remote_jid)
+
+
 
     # Guard clause: ignora mensagens enviadas pelo próprio bot (anti-loop)
     if key.get("fromMe", False):
@@ -232,7 +251,7 @@ async def whatsapp_webhook(
         caption = img_info.get("caption") if isinstance(img_info, dict) else None
         text = caption or text or "Analyze this image."
         b64 = message.get("base64") or data.get("base64")
-        mimetype = img_info.get("mimetype", "image/jpeg") if isinstance(img_info, dict) else "image/jpeg"
+        mimetype = img_info.get("mimetype", MIME_IMAGE_JPEG) if isinstance(img_info, dict) else MIME_IMAGE_JPEG
         if not b64 and message_id:
             media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
             if media_data:
@@ -240,14 +259,14 @@ async def whatsapp_webhook(
                 mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "image/jpeg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else MIME_IMAGE_JPEG
 
     # Suporte Multimodal a Áudio (US-3.6)
     elif "audioMessage" in message or message_type == "audioMessage":
         audio_info = message.get("audioMessage", {})
         text = text or "Transcribe and respond to this audio."
         b64 = message.get("base64") or data.get("base64")
-        mimetype = audio_info.get("mimetype", "audio/ogg") if isinstance(audio_info, dict) else "audio/ogg"
+        mimetype = audio_info.get("mimetype", MIME_AUDIO_OGG) if isinstance(audio_info, dict) else MIME_AUDIO_OGG
         if not b64 and message_id:
             media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
             if media_data:
@@ -255,7 +274,7 @@ async def whatsapp_webhook(
                 mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "audio/ogg"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else MIME_AUDIO_OGG
 
     # Suporte a Documentos e Arquivos (US-09)
     elif "documentMessage" in message or message_type == "documentMessage":
@@ -264,7 +283,7 @@ async def whatsapp_webhook(
         caption = doc_info.get("caption") if isinstance(doc_info, dict) else None
         text = caption or text or f"Process this document: '{doc_filename}'."
         b64 = message.get("base64") or data.get("base64")
-        mimetype = doc_info.get("mimetype", "application/pdf") if isinstance(doc_info, dict) else "application/pdf"
+        mimetype = doc_info.get("mimetype", MIME_APPLICATION_PDF) if isinstance(doc_info, dict) else MIME_APPLICATION_PDF
         if not b64 and message_id:
             media_data = WhatsAppService.get_base64_from_media_message(message_id, data)
             if media_data:
@@ -272,7 +291,7 @@ async def whatsapp_webhook(
                 mimetype = media_data.get("mimetype") or mimetype
         if b64:
             media_base64 = b64
-            media_mimetype = mimetype.split(";")[0].strip() if mimetype else "application/pdf"
+            media_mimetype = mimetype.split(";")[0].strip() if mimetype else MIME_APPLICATION_PDF
 
 
     if not text:
@@ -281,6 +300,15 @@ async def whatsapp_webhook(
     # Anti-loop: se terminar com caractere invisível, foi enviado pelo próprio bot
     if text.endswith("\u200b"):
         return {"status": "ignored", "reason": "bot_echo_anti_loop"}
+
+    # Deduplicação idempotente por message_id antes de despachar processamento
+    if message_id and not message_id.startswith("MSG_"):
+        if message_id in _PROCESSED_MESSAGE_IDS:
+            logger.info(f"--> [WEBHOOK] Mensagem duplicada ignorada (id={message_id})")
+            return {"status": "ignored", "reason": "duplicate_message_id"}
+        _PROCESSED_MESSAGE_IDS[message_id] = True
+        if len(_PROCESSED_MESSAGE_IDS) > 2000:
+            _PROCESSED_MESSAGE_IDS.popitem(last=False)
 
     # Salva log da mensagem do usuário no banco
     ChatRepository.save_log(remote_jid=remote_jid, from_me=False, text=text, message_id=message_id)

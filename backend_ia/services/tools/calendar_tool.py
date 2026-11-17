@@ -10,6 +10,12 @@ from config.timezone import TZ_BRASILIA
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_EVENT_TITLE = "Sem título"
+SAO_PAULO_TZ_NAME = "America/Sao_Paulo"
+MSG_CALENDAR_NOT_CONFIGURED = "A integração com o Google Calendar ainda não foi configurada pelo administrador."
+UTC_OFFSET_SUFFIX = "+00:00"
+
+
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 def _get_calendar_service():
@@ -21,8 +27,8 @@ def _get_calendar_service():
             creds_path, scopes=SCOPES)
         service = build('calendar', 'v3', credentials=creds)
         return service
-    except Exception as e:
-        logger.error(f"Erro ao autenticar Calendar: {e}")
+    except Exception:
+        logger.exception("Erro ao autenticar Calendar")
         return None
 
 def _resolve_calendar_target(target_user: str = "auto") -> Tuple[Optional[str], str, Optional[str]]:
@@ -87,23 +93,27 @@ def agendar_evento(
     """
     service = _get_calendar_service()
     if not service:
-        return "A integração com o Google Calendar ainda não foi configurada pelo administrador."
+        return MSG_CALENDAR_NOT_CONFIGURED
 
     calendar_id, titular, erro = _resolve_calendar_target(usuario)
     if erro:
         return erro
 
     try:
-        inicio_dt = datetime.fromisoformat(inicio_iso.replace('Z', '+00:00'))
+        inicio_dt = datetime.fromisoformat(inicio_iso.replace('Z', UTC_OFFSET_SUFFIX))
+        if inicio_dt.tzinfo is None:
+            inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
         fim_dt = inicio_dt + timedelta(minutes=duracao_minutos)
 
         event = {
             'summary': titulo,
             'start': {
                 'dateTime': inicio_dt.isoformat(),
+                'timeZone': SAO_PAULO_TZ_NAME
             },
             'end': {
                 'dateTime': fim_dt.isoformat(),
+                'timeZone': SAO_PAULO_TZ_NAME
             },
         }
 
@@ -124,7 +134,7 @@ def agendar_evento(
         return f"Evento '{titulo}' agendado com sucesso{agenda_indicador}!{extra_str} (Link: {created_event.get('htmlLink')})"
     
     except Exception as e:
-        logger.error(f"Erro ao criar evento: {e}")
+        logger.exception("Erro ao criar evento")
         return f"Não consegui agendar o evento devido a um erro: {e}"
 
 def consultar_agenda(dias: int = 1, dias_a_frente: int = None, usuario: str = "auto") -> str:
@@ -170,14 +180,14 @@ def consultar_agenda(dias: int = 1, dias_a_frente: int = None, usuario: str = "a
 
         for event in events:
             start = event['start'].get('dateTime', event['start'].get('date'))
-            summary = event.get('summary', 'Sem título')
+            summary = event.get('summary', DEFAULT_EVENT_TITLE)
             loc = f" | Local: {event['location']}" if event.get('location') else ""
             desc = f" | Descrição: {event['description']}" if event.get('description') else ""
             resp += f"- {start}: {summary}{loc}{desc}\n"
         return resp
     
-    except Exception as e:
-        logger.error(f"Erro ao listar eventos: {e}")
+    except Exception:
+        logger.exception("Erro ao listar eventos")
         return f"Erro ao acessar a agenda de {titular}."
 
 
@@ -195,6 +205,21 @@ def _formatar_horario_evento(event: dict) -> str:
         return dt_str
 
 
+def _calcular_janela_busca(data_referencia: Optional[str], dias_busca: int) -> tuple[str, str]:
+    if data_referencia:
+        clean_date = data_referencia.split("T")[0] if "T" in data_referencia else data_referencia
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt_ref = datetime.strptime(clean_date, fmt)
+                t_min = dt_ref.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_BRASILIA).isoformat()
+                t_max = dt_ref.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=TZ_BRASILIA).isoformat()
+                return t_min, t_max
+            except ValueError:
+                pass
+    now_br = datetime.now(TZ_BRASILIA)
+    return now_br.isoformat(), (now_br + timedelta(days=dias_busca)).isoformat()
+
+
 def _localizar_eventos_por_termo(
     service,
     calendar_id: str,
@@ -206,27 +231,7 @@ def _localizar_eventos_por_termo(
     Localiza eventos no Google Calendar que contenham o termo no título ou descrição.
     """
     termo_clean = (termo or "").strip().lower()
-    
-    if data_referencia:
-        dt_ref = None
-        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"]:
-            try:
-                dt_ref = datetime.strptime(data_referencia.split("T")[0] if "T" in data_referencia else data_referencia, fmt)
-                break
-            except Exception:
-                pass
-
-        if dt_ref:
-            time_min = dt_ref.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=TZ_BRASILIA).isoformat()
-            time_max = dt_ref.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=TZ_BRASILIA).isoformat()
-        else:
-            now_br = datetime.now(TZ_BRASILIA)
-            time_min = now_br.isoformat()
-            time_max = (now_br + timedelta(days=dias_busca)).isoformat()
-    else:
-        now_br = datetime.now(TZ_BRASILIA)
-        time_min = now_br.isoformat()
-        time_max = (now_br + timedelta(days=dias_busca)).isoformat()
+    time_min, time_max = _calcular_janela_busca(data_referencia, dias_busca)
 
     try:
         events_result = service.events().list(
@@ -237,8 +242,8 @@ def _localizar_eventos_por_termo(
             orderBy='startTime'
         ).execute()
         items = events_result.get('items', [])
-    except Exception as e:
-        logger.error(f"Erro ao consultar eventos no Google Calendar: {e}")
+    except Exception:
+        logger.exception("Erro ao consultar eventos no Google Calendar")
         return []
 
     correspondentes = []
@@ -267,7 +272,7 @@ def excluir_evento(
     """
     service = _get_calendar_service()
     if not service:
-        return "A integração com o Google Calendar ainda não foi configurada pelo administrador."
+        return MSG_CALENDAR_NOT_CONFIGURED
 
     calendar_id, titular, erro = _resolve_calendar_target(usuario)
     if erro:
@@ -296,8 +301,68 @@ def excluir_evento(
         agenda_indicador = f" na agenda de {titular}" if titular != UserContext.get_user_name() else " da sua agenda"
         return f"O evento '{titulo}' ({horario_str}) foi cancelado e excluído com sucesso{agenda_indicador}!"
     except Exception as e:
-        logger.error(f"Erro ao excluir evento {event_id}: {e}")
+        logger.exception("Erro ao excluir evento")
         return f"Ocorreu um erro ao tentar excluir o evento '{titulo}': {e}"
+
+
+def _aplicar_metadados_patch(novo_titulo: Optional[str], nova_descricao: Optional[str], nova_localizacao: Optional[str], patch_body: dict, alteracoes: list):
+    if novo_titulo:
+        patch_body['summary'] = novo_titulo
+        alteracoes.append(f"título para '{novo_titulo}'")
+    if nova_descricao is not None:
+        patch_body['description'] = nova_descricao
+        alteracoes.append("descrição atualizada")
+    if nova_localizacao is not None:
+        patch_body['location'] = nova_localizacao
+        alteracoes.append(f"local para '{nova_localizacao}'")
+
+
+def _calcular_duracao_original(alvo: dict) -> int:
+    try:
+        orig_start_str = alvo.get('start', {}).get('dateTime')
+        orig_end_str = alvo.get('end', {}).get('dateTime')
+        if orig_start_str and orig_end_str:
+            orig_start = datetime.fromisoformat(orig_start_str.replace('Z', UTC_OFFSET_SUFFIX))
+            orig_end = datetime.fromisoformat(orig_end_str.replace('Z', UTC_OFFSET_SUFFIX))
+            return max(15, int((orig_end - orig_start).total_seconds() / 60))
+    except Exception:
+        pass
+    return 60
+
+
+def _aplicar_horario_patch(
+    alvo: dict,
+    novo_inicio_iso: Optional[str],
+    nova_duracao_minutos: Optional[int],
+    patch_body: dict,
+    alteracoes: list
+) -> Optional[str]:
+    if novo_inicio_iso:
+        try:
+            inicio_dt = datetime.fromisoformat(novo_inicio_iso.replace('Z', UTC_OFFSET_SUFFIX))
+            if inicio_dt.tzinfo is None:
+                inicio_dt = inicio_dt.replace(tzinfo=TZ_BRASILIA)
+            duracao = nova_duracao_minutos if nova_duracao_minutos else _calcular_duracao_original(alvo)
+            fim_dt = inicio_dt + timedelta(minutes=duracao)
+            patch_body['start'] = {'dateTime': inicio_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+            patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+            alteracoes.append(f"horário para {inicio_dt.strftime('%d/%m/%Y às %H:%M')}")
+        except Exception:
+            logger.exception("Erro ao parsear novo horário")
+            return f"Formato de horário inválido: '{novo_inicio_iso}'."
+    elif nova_duracao_minutos:
+        try:
+            orig_start_str = alvo.get('start', {}).get('dateTime') or alvo.get('start', {}).get('date')
+            if orig_start_str:
+                orig_start = datetime.fromisoformat(orig_start_str.replace('Z', UTC_OFFSET_SUFFIX))
+                if orig_start.tzinfo is None:
+                    orig_start = orig_start.replace(tzinfo=TZ_BRASILIA)
+                fim_dt = orig_start + timedelta(minutes=nova_duracao_minutos)
+                patch_body['end'] = {'dateTime': fim_dt.isoformat(), 'timeZone': SAO_PAULO_TZ_NAME}
+                alteracoes.append(f"duração para {nova_duracao_minutos} minutos")
+        except Exception:
+            logger.exception("Erro ao atualizar duração")
+    return None
 
 
 def editar_evento(
@@ -325,7 +390,7 @@ def editar_evento(
     """
     service = _get_calendar_service()
     if not service:
-        return "A integração com o Google Calendar ainda não foi configurada pelo administrador."
+        return MSG_CALENDAR_NOT_CONFIGURED
 
     calendar_id, titular, erro = _resolve_calendar_target(usuario)
     if erro:
@@ -351,44 +416,10 @@ def editar_evento(
     patch_body = {}
     alteracoes = []
 
-    if novo_titulo:
-        patch_body['summary'] = novo_titulo
-        alteracoes.append(f"título para '{novo_titulo}'")
-
-    if nova_descricao is not None:
-        patch_body['description'] = nova_descricao
-        alteracoes.append("descrição atualizada")
-
-    if nova_localizacao is not None:
-        patch_body['location'] = nova_localizacao
-        alteracoes.append(f"local para '{nova_localizacao}'")
-
-    if novo_inicio_iso:
-        try:
-            inicio_dt = datetime.fromisoformat(novo_inicio_iso.replace('Z', '+00:00'))
-            if nova_duracao_minutos:
-                duracao = nova_duracao_minutos
-            else:
-                try:
-                    orig_start_str = alvo.get('start', {}).get('dateTime')
-                    orig_end_str = alvo.get('end', {}).get('dateTime')
-                    if orig_start_str and orig_end_str:
-                        orig_start = datetime.fromisoformat(orig_start_str.replace('Z', '+00:00'))
-                        orig_end = datetime.fromisoformat(orig_end_str.replace('Z', '+00:00'))
-                        duracao = max(15, int((orig_end - orig_start).total_seconds() / 60))
-                    else:
-                        duracao = 60
-                except Exception:
-                    duracao = 60
-
-            fim_dt = inicio_dt + timedelta(minutes=duracao)
-            patch_body['start'] = {'dateTime': inicio_dt.isoformat()}
-            patch_body['end'] = {'dateTime': fim_dt.isoformat()}
-            alteracoes.append(f"horário para {inicio_dt.strftime('%d/%m/%Y às %H:%M')}")
-        except Exception as e:
-            logger.error(f"Erro ao parsear novo horário: {e}")
-            return f"Formato de horário inválido: '{novo_inicio_iso}'."
-
+    _aplicar_metadados_patch(novo_titulo, nova_descricao, nova_localizacao, patch_body, alteracoes)
+    erro_horario = _aplicar_horario_patch(alvo, novo_inicio_iso, nova_duracao_minutos, patch_body, alteracoes)
+    if erro_horario:
+        return erro_horario
     if not patch_body:
         return f"Nenhuma alteração foi solicitada para o evento '{titulo_antigo}'."
 
@@ -398,6 +429,6 @@ def editar_evento(
         titulo_final = updated_event.get('summary', titulo_antigo)
         return f"Evento '{titulo_final}' atualizado com sucesso{agenda_indicador}! Alterações realizadas: {', '.join(alteracoes)}."
     except Exception as e:
-        logger.error(f"Erro ao editar evento {event_id}: {e}")
+        logger.exception("Erro ao editar evento")
         return f"Ocorreu um erro ao tentar editar o evento '{titulo_antigo}': {e}"
 

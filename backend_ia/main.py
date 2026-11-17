@@ -6,7 +6,14 @@ from datetime import datetime, timezone, timedelta
 from routers import webhook, health, billing, dashboard, briefing, files, finance, translation
 from config.firebase import init_firebase
 from services.ai_service import AIService
-from services.briefing_service import enviar_briefing_matinal, verificar_e_disparar_briefings_agendados
+from typing import Optional
+from services.briefing_service import (
+    enviar_briefing_matinal,
+    verificar_e_disparar_briefings_agendados,
+    _obter_todos_usuarios_briefing,
+    obter_preferencias_briefing,
+    _normalizar_horario,
+)
 from services.tools.clash_of_clans_tool import alerta_raid_capital, alerta_clan_war
 from contextlib import asynccontextmanager
 
@@ -16,25 +23,98 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_briefing_schedule_changed = asyncio.Event()
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def notificar_mudanca_briefing() -> None:
+    """Acorda o scheduler de briefing de forma thread-safe quando preferências mudam."""
+    try:
+        if _main_loop is not None and _main_loop.is_running():
+            _main_loop.call_soon_threadsafe(_briefing_schedule_changed.set)
+        else:
+            _briefing_schedule_changed.set()
+    except Exception:
+        pass
+
+
+def _coletar_horarios_alvo() -> list[str]:
+    """Lê preferências dos usuários configurados e retorna horários únicos ordenados."""
+    horarios = set()
+    try:
+        for uid in _obter_todos_usuarios_briefing():
+            prefs = obter_preferencias_briefing(uid)
+            if prefs.get("ativo", True):
+                horarios.add(_normalizar_horario(prefs.get("horario", "08:00")))
+    except Exception as e:
+        logger.error(f"Erro ao coletar horários de briefing: {e}")
+    if not horarios:
+        horarios.add("08:00")
+    return sorted(horarios)
+
+
+def _calcular_segundos_ate(hora_alvo: str, tz) -> float:
+    """Calcula segundos até o próximo HH:MM alvo (+1s de margem contra wake-up precoce)."""
+    agora = datetime.now(tz)
+    partes = hora_alvo.split(":")
+    alvo_hoje = agora.replace(hour=int(partes[0]), minute=int(partes[1]), second=0, microsecond=0)
+    if alvo_hoje <= agora:
+        alvo_hoje += timedelta(days=1)
+    return max(1.0, (alvo_hoje - agora).total_seconds() + 1.0)
+
+
 async def _rotina_briefing_diario():
-    """Tarefa em background que verifica minuto a minuto os horários de briefing dos usuários ativos."""
+    """Scheduler event-driven: dorme até o próximo horário agendado sem polling no Firestore."""
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
     tz_br = timezone(timedelta(hours=-3))
-    ultimo_minuto_disparado = None
+    startup_catchup_done = False
+
     while True:
         try:
             agora = datetime.now(tz_br)
-            minuto_atual = agora.strftime("%Y-%m-%d %H:%M")
-            hora_minuto = agora.strftime("%H:%M")
+            hora_atual = agora.strftime("%H:%M")
 
-            if minuto_atual != ultimo_minuto_disparado:
-                ultimo_minuto_disparado = minuto_atual
-                disparados = await asyncio.to_thread(verificar_e_disparar_briefings_agendados, hora_minuto, False, True)
-                if disparados:
-                    logger.info(f"Morning Briefing disparado às {hora_minuto} para: {', '.join(disparados)}")
+            # Catch-up único na inicialização caso o servidor suba durante a janela matinal
+            if not startup_catchup_done:
+                startup_catchup_done = True
+                if "06:00" <= hora_atual < "12:00":
+                    logger.info(f"[Briefing Scheduler] Executando catch-up único de inicialização às {hora_atual}...")
+                    disparados_init = await asyncio.to_thread(
+                        verificar_e_disparar_briefings_agendados, hora_atual, False, True
+                    )
+                    if disparados_init:
+                        logger.info(f"[Briefing Scheduler] Catch-up enviado para: {', '.join(disparados_init)}")
+
+            _briefing_schedule_changed.clear()
+            horarios = await asyncio.to_thread(_coletar_horarios_alvo)
+            logger.info(f"[Briefing Scheduler] Horários agendados: {horarios}")
+
+            agora = datetime.now(tz_br)
+            hora_atual = agora.strftime("%H:%M")
+            proximos_hoje = [h for h in horarios if h > hora_atual]
+            proximo = proximos_hoje[0] if proximos_hoje else horarios[0]
+            segundos = _calcular_segundos_ate(proximo, tz_br)
+
+            logger.info(f"[Briefing Scheduler] Próximo disparo: {proximo} (em {int(segundos)}s)")
+
+            try:
+                await asyncio.wait_for(_briefing_schedule_changed.wait(), timeout=segundos)
+                logger.info("[Briefing Scheduler] Preferências alteradas, recalculando horários...")
+                continue
+            except asyncio.TimeoutError:
+                pass
+
+            hora_disparo = datetime.now(tz_br).strftime("%H:%M")
+            logger.info(f"[Briefing Scheduler] Disparando briefings para {hora_disparo}...")
+            disparados = await asyncio.to_thread(
+                verificar_e_disparar_briefings_agendados, hora_disparo, False, True
+            )
+            if disparados:
+                logger.info(f"[Briefing Scheduler] Briefing enviado para: {', '.join(disparados)}")
         except Exception as e:
-            logger.error(f"Erro no scheduler do briefing matinal: {e}")
-        
-        await asyncio.sleep(30)
+            logger.error(f"[Briefing Scheduler] Erro: {e}")
+            await asyncio.sleep(300)
 
 async def _rotina_raid_capital():
     """Job: Todo domingo as 12:00 (Brasilia) — Alerta de Raid Weekend da Capital do Cla."""

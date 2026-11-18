@@ -295,6 +295,10 @@ def alerta_raid_capital() -> None:
 async def _alerta_raid_capital_async() -> None:
     from services.whatsapp_service import WhatsAppService
     try:
+        if not WhatsAppService.is_connected():
+            logger.warning("[CoC Raid] Alerta ignorado: WhatsApp desconectado.")
+            return
+
         player_tag = settings.COC_PLAYER_TAG
         clan_tag_encoded = _encode_tag(settings.COC_CLAN_TAG)
         endpoint = f"clans/{clan_tag_encoded}/capitalraidseasons?limit=1"
@@ -308,8 +312,11 @@ async def _alerta_raid_capital_async() -> None:
 
         mensagem = _verificar_raid_season(items[0], player_tag)
         if mensagem:
-            WhatsAppService.send_message(settings.ALLOWED_PHONE_NUMBER, mensagem)
-            logger.info("[CoC Raid] Alerta de Raid Weekend enviado com sucesso.")
+            resp = WhatsAppService.send_text(settings.ALLOWED_PHONE_NUMBER, mensagem)
+            if resp is not None:
+                logger.info("[CoC Raid] Alerta de Raid Weekend enviado com sucesso.")
+            else:
+                logger.warning("[CoC Raid] Falha ao enviar alerta de Raid Weekend via WhatsApp.")
         else:
             logger.info("[CoC Raid] Nenhum alerta necessario — ataques ja completos ou season encerrada.")
 
@@ -330,6 +337,10 @@ def alerta_clan_war() -> None:
 async def _alerta_clan_war_async() -> None:
     from services.whatsapp_service import WhatsAppService
     try:
+        if not WhatsAppService.is_connected():
+            logger.warning("[CoC War] Alerta ignorado: WhatsApp desconectado.")
+            return
+
         player_tag = settings.COC_PLAYER_TAG
         clan_tag_encoded = _encode_tag(settings.COC_CLAN_TAG)
         endpoint = f"clans/{clan_tag_encoded}/currentwar"
@@ -338,8 +349,11 @@ async def _alerta_clan_war_async() -> None:
         mensagem = _verificar_clan_war(data, player_tag)
 
         if mensagem:
-            WhatsAppService.send_message(settings.ALLOWED_PHONE_NUMBER, mensagem)
-            logger.info("[CoC War] Alerta de Guerra de Clas enviado com sucesso.")
+            resp = WhatsAppService.send_text(settings.ALLOWED_PHONE_NUMBER, mensagem)
+            if resp is not None:
+                logger.info("[CoC War] Alerta de Guerra de Clas enviado com sucesso.")
+            else:
+                logger.warning("[CoC War] Falha ao enviar alerta de Guerra de Clas via WhatsApp.")
         else:
             logger.info("[CoC War] Nenhum alerta necessario — sem guerra ativa ou ataques completos.")
 

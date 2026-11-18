@@ -23,6 +23,8 @@ TZ_BRASILIA = timezone(timedelta(hours=-3))
 
 # Idempotência em memória (conjunto de strings de datas/usuários)
 _MEMORY_BRIEFING_LOGS = set()
+_MEMORY_BRIEFING_FAILURE_COOLDOWN: Dict[str, datetime] = {}
+FAILURE_COOLDOWN_MINUTES = 30
 
 # Configurações padrão de preferências por usuário
 _DEFAULT_PREFERENCES: Dict[str, Dict[str, Any]] = {
@@ -43,14 +45,19 @@ _DEFAULT_PREFERENCES: Dict[str, Dict[str, Any]] = {
 }
 
 _MEMORY_BRIEFING_PREFERENCES: Dict[str, Dict[str, Any]] = {}
+_MEMORY_BRIEFING_USERS: Optional[List[str]] = None
 
 def _reset_briefing_memory():
     """Auxiliar para testes unitários resetarem a memória de envio."""
     _MEMORY_BRIEFING_LOGS.clear()
+    _MEMORY_BRIEFING_FAILURE_COOLDOWN.clear()
+    WhatsAppService.reset_connection_state()
 
 def _reset_briefing_preferences():
     """Auxiliar para testes unitários resetarem as preferências."""
+    global _MEMORY_BRIEFING_USERS
     _MEMORY_BRIEFING_PREFERENCES.clear()
+    _MEMORY_BRIEFING_USERS = None
 
 def obter_preferencias_briefing(user_id: Optional[str] = None) -> Dict[str, Any]:
     """Obtém as preferências de briefing para o usuário informado (ou ativo)."""
@@ -82,11 +89,18 @@ def salvar_preferencias_briefing(user_id: str, prefs: Dict[str, Any]) -> None:
     """Persiste as preferências de briefing na memória e no Firestore."""
     uid = user_id.lower().strip()
     _MEMORY_BRIEFING_PREFERENCES[uid] = prefs
+    if _MEMORY_BRIEFING_USERS is not None and uid not in _MEMORY_BRIEFING_USERS:
+        _MEMORY_BRIEFING_USERS.append(uid)
     if firebase.db is not None:
         try:
             firebase.db.collection("briefing_preferences").document(uid).set(prefs)
         except Exception:
             logger.exception("Erro ao salvar preferências de briefing no Firestore")
+    try:
+        from main import notificar_mudanca_briefing
+        notificar_mudanca_briefing()
+    except Exception as exc:
+        logger.debug("Scheduler de briefing não ativo: %s", exc)
 
 def configurar_preferencias_briefing(
     horario: Optional[str] = None,
@@ -641,7 +655,11 @@ def _obter_telefone_usuario(user_id: str) -> str:
     return settings.ALLOWED_PHONE_NUMBER
 
 def _obter_todos_usuarios_briefing() -> List[str]:
-    """Retorna lista consolidada de usuários cadastrados para o briefing."""
+    """Retorna lista consolidada de usuários cadastrados para o briefing com cache em memória."""
+    global _MEMORY_BRIEFING_USERS
+    if _MEMORY_BRIEFING_USERS is not None:
+        return list(_MEMORY_BRIEFING_USERS)
+
     usuarios = ["daniel", "lari"]
     if firebase.db is not None:
         try:
@@ -650,8 +668,9 @@ def _obter_todos_usuarios_briefing() -> List[str]:
                 uid = doc.id.lower().strip()
                 if uid not in usuarios:
                     usuarios.append(uid)
-        except Exception:
-            logger.exception("Erro ao buscar preferências de briefing no Firestore")
+            _MEMORY_BRIEFING_USERS = list(usuarios)
+        except Exception as e:
+            logger.warning("Erro ao buscar preferências de briefing no Firestore (%s). Usando lista padrão.", e)
     return usuarios
 
 
@@ -663,9 +682,49 @@ def _normalizar_horario(horario: str) -> str:
     return f"{h}:{m}"
 
 
+def _registrar_resultado_disparo(uid: str, res: str) -> bool:
+    """Avalia o retorno de enviar_briefing_matinal e aplica cooldown de falha se necessário."""
+    sucesso = "✅" in res or "sucesso" in res.lower()
+    if sucesso:
+        _MEMORY_BRIEFING_FAILURE_COOLDOWN.pop(uid, None)
+        return True
+    if "já foi enviado" not in res.lower():
+        _MEMORY_BRIEFING_FAILURE_COOLDOWN[uid] = datetime.now(timezone.utc) + timedelta(minutes=FAILURE_COOLDOWN_MINUTES)
+        logger.warning(
+            "Falha no envio do briefing para %s (%s). Cooldown de %d min aplicado.",
+            uid, res, FAILURE_COOLDOWN_MINUTES,
+        )
+    return False
+
+
+def _verificar_briefing_ja_enviado_hoje(uid: str, hoje_str: str) -> bool:
+    """Verifica em memória e no Firestore se o briefing do usuário já foi entregue hoje."""
+    chave_user = f"{hoje_str}_{uid}"
+    if chave_user in _MEMORY_BRIEFING_LOGS:
+        return True
+    if firebase.db is None:
+        return False
+    try:
+        doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
+        if doc.exists and doc.to_dict().get("status") == "sucesso":
+            _MEMORY_BRIEFING_LOGS.add(chave_user)
+            return True
+        if uid == "daniel":
+            doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
+            if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
+                _MEMORY_BRIEFING_LOGS.add(chave_user)
+                return True
+    except Exception as exc:
+        logger.debug("Falha ao consultar log de briefing no Firestore (%s): %s", uid, exc)
+    return False
+
+
 def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool, permitir_catchup: bool = False) -> bool:
     """Verifica preferências e dispara o briefing caso o horário coincida ou se precisar de catch-up matinal."""
     try:
+        if not force and not WhatsAppService.is_connected():
+            return False
+
         prefs = obter_preferencias_briefing(uid)
         if not prefs.get("ativo", True):
             return False
@@ -673,49 +732,33 @@ def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: boo
         horario_user = _normalizar_horario(prefs.get("horario", "08:00"))
         hora_alvo = _normalizar_horario(hora_minuto)
 
-        # Se for disparo forçado, dispara se o horário coincidir
         if force:
             if horario_user == hora_alvo:
                 enviar_briefing_matinal(force=True, user_id=uid)
                 return True
             return False
 
+        cooldown_until = _MEMORY_BRIEFING_FAILURE_COOLDOWN.get(uid)
+        if cooldown_until and datetime.now(timezone.utc) < cooldown_until:
+            logger.info("Briefing de %s em cooldown após falha recente até %s.", uid, cooldown_until.isoformat())
+            return False
+
         # 1. Disparo no minuto exato configurado
         if horario_user == hora_alvo:
             logger.info("Disparando briefing matinal para %s no horário configurado (%s).", uid, horario_user)
             res = enviar_briefing_matinal(force=False, user_id=uid)
-            return "✅" in res or "sucesso" in res.lower()
+            return _registrar_resultado_disparo(uid, res)
 
-        # 2. Catch-up matinal resiliente (se habilitado pelo background worker):
-        # Dispara se estiver dentro do período matinal (entre horário do usuário e 12:00)
-        # e o briefing ainda NÃO tiver sido enviado hoje (ex: servidor reiniciou ou estava desligado no minuto exato)
+        # 2. Catch-up matinal resiliente (entre horário do usuário e 12:00)
         if permitir_catchup and horario_user < hora_alvo < "12:00":
-            hoje = _obter_data_brasilia()
-            hoje_str = hoje.strftime("%Y-%m-%d")
-            chave_user = f"{hoje_str}_{uid}"
-
-            ja_enviado = chave_user in _MEMORY_BRIEFING_LOGS
-            if not ja_enviado and firebase.db is not None:
-                try:
-                    doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
-                    if doc.exists and doc.to_dict().get("status") == "sucesso":
-                        _MEMORY_BRIEFING_LOGS.add(chave_user)
-                        ja_enviado = True
-                    elif uid == "daniel":
-                        doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
-                        if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
-                            _MEMORY_BRIEFING_LOGS.add(chave_user)
-                            ja_enviado = True
-                except Exception:
-                    pass
-
-            if not ja_enviado:
+            hoje_str = _obter_data_brasilia().strftime("%Y-%m-%d")
+            if not _verificar_briefing_ja_enviado_hoje(uid, hoje_str):
                 logger.info(
                     "Catch-up matinal: briefing de %s não foi enviado no minuto %s e horário atual (%s) está dentro da manhã. Disparando...",
                     uid, horario_user, hora_alvo
                 )
                 res = enviar_briefing_matinal(force=False, user_id=uid)
-                return "✅" in res or "sucesso" in res.lower()
+                return _registrar_resultado_disparo(uid, res)
 
     except Exception:
         logger.exception("Erro ao disparar briefing agendado para %s", uid)
@@ -732,6 +775,10 @@ def verificar_e_disparar_briefings_agendados(
     configurado coincidir com hora_minuto (ou catch-up matinal se habilitado).
     Retorna a lista de user_ids para os quais o disparo foi efetuado.
     """
+    if not force and not WhatsAppService.is_connected():
+        logger.warning("[Briefing] Disparo automático suspenso: WhatsApp desconectado.")
+        return []
+
     if not hora_minuto:
         hoje = _obter_data_brasilia()
         hora_minuto = hoje.strftime("%H:%M")
@@ -741,6 +788,9 @@ def verificar_e_disparar_briefings_agendados(
 
     disparados = []
     for uid in usuarios_alvo:
+        if not force and not WhatsAppService.is_connected():
+            logger.warning("[Briefing] Interrompendo fila de briefings: WhatsApp desconectado.")
+            break
         if _disparar_briefing_se_horario_correto(uid, hora_alvo, force, permitir_catchup):
             disparados.append(uid)
 
@@ -754,6 +804,10 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
         force (bool): Se True, reenvia mesmo que já tenha sido disparado hoje.
         user_id (str, opcional): Usuário alvo ('daniel' ou 'lari'). Se omitido, usa UserContext.
     """
+    if not force and not WhatsAppService.is_connected():
+        logger.warning("Envio de briefing matinal abortado: WhatsApp desconectado.")
+        return "⚠️ Briefing matinal suspenso: WhatsApp desconectado."
+
     target_user_id = (user_id or UserContext.get_user_id() or "daniel").lower().strip()
     target_user_name = _obter_target_user_name(target_user_id)
 

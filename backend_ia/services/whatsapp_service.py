@@ -1,13 +1,115 @@
 import base64
 import logging
 import re
+import time
 import requests
 from typing import Optional, Dict, Any
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+_DISCONNECT_BODY_KEYWORDS = (
+    "connection closed",
+    "not connected",
+    "disconnected",
+    "instance not found",
+    "device_removed",
+)
+
+
 class WhatsAppService:
+    _disconnected: bool = False
+    _disconnected_reason: str = ""
+    _last_state_check_monotonic: float = 0.0
+    STATE_CHECK_TTL_SECONDS: float = 30.0
+
+    @classmethod
+    def mark_disconnected(cls, reason: str = "connection_closed") -> None:
+        """Marca a instância do WhatsApp como desconectada e suspende retries automáticos."""
+        if not cls._disconnected or cls._disconnected_reason != reason:
+            logger.warning(
+                "WhatsApp desconectado (%s). Envios e retries automáticos suspensos até a reconexão.",
+                reason,
+            )
+        cls._disconnected = True
+        cls._disconnected_reason = reason
+        cls._last_state_check_monotonic = time.monotonic()
+
+    @classmethod
+    def mark_connected(cls) -> None:
+        """Restaura o estado conectado do WhatsApp quando a instância volta a ficar online."""
+        if cls._disconnected:
+            logger.info("WhatsApp reconectado (motivo anterior: %s). Retomando envios automáticos.", cls._disconnected_reason)
+        cls._disconnected = False
+        cls._disconnected_reason = ""
+        cls._last_state_check_monotonic = time.monotonic()
+
+    @classmethod
+    def reset_connection_state(cls) -> None:
+        """Reseta o cache em memória de conexão (auxiliar para testes unitários)."""
+        cls._disconnected = False
+        cls._disconnected_reason = ""
+        cls._last_state_check_monotonic = 0.0
+
+    @classmethod
+    def check_connection_state(cls, force: bool = False) -> str:
+        """Consulta /instance/connectionState na Evolution API com cache curto por TTL."""
+        agora = time.monotonic()
+        if (
+            not force
+            and cls._last_state_check_monotonic > 0.0
+            and (agora - cls._last_state_check_monotonic) < cls.STATE_CHECK_TTL_SECONDS
+        ):
+            return "close" if cls._disconnected else "open"
+
+        url = f"{settings.EVOLUTION_API_URL}/instance/connectionState/{settings.EVOLUTION_INSTANCE_NAME}"
+        headers = {"apikey": settings.EVOLUTION_API_KEY}
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
+            response.raise_for_status()
+            data = response.json() if response.content else {}
+            state = ""
+            if isinstance(data, dict):
+                instance_data = data.get("instance")
+                if isinstance(instance_data, dict):
+                    state = str(instance_data.get("state") or "").lower().strip()
+                if not state:
+                    state = str(data.get("state") or "").lower().strip()
+            cls._last_state_check_monotonic = time.monotonic()
+            if state == "open":
+                cls.mark_connected()
+                return "open"
+            cls.mark_disconnected(f"state={state or 'unknown'}")
+            return state or "unknown"
+        except requests.exceptions.RequestException as e:
+            cls._last_state_check_monotonic = time.monotonic()
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            cls.mark_disconnected(f"state=error:{status_code or type(e).__name__}")
+            return "error"
+
+    @classmethod
+    def is_connected(cls, verify_remote: bool = False) -> bool:
+        """Retorna True se o WhatsApp não estiver marcado como desconectado (opcionalmente verifica na Evolution API)."""
+        if verify_remote:
+            cls.check_connection_state()
+        return not cls._disconnected
+
+    @classmethod
+    def _inspect_request_exception(cls, exc: requests.exceptions.RequestException) -> None:
+        """Inspeciona falhas HTTP/rede da Evolution API e marca desconexão quando aplicável."""
+        if isinstance(exc, requests.exceptions.ConnectionError):
+            cls.mark_disconnected("connection_error")
+            return
+
+        resp = getattr(exc, "response", None)
+        if resp is None:
+            return
+
+        status_code = getattr(resp, "status_code", None)
+        body_lower = str(getattr(resp, "text", "") or "").lower()
+        if status_code in (401, 404, 428) or any(kw in body_lower for kw in _DISCONNECT_BODY_KEYWORDS):
+            cls.mark_disconnected(f"http_{status_code or 'error'}")
+
     @staticmethod
     def _format_destination_number(remote_jid: str) -> str:
         """
@@ -44,10 +146,14 @@ class WhatsAppService:
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=15)
             response.raise_for_status()
+            WhatsAppService.mark_connected()
             return response.json()
         except requests.exceptions.RequestException as e:
+            WhatsAppService._inspect_request_exception(e)
             logger.error(f"Erro ao enviar mensagem via WhatsApp: {e}")
             return None
+
+    send_message = send_text
 
     @staticmethod
     def send_voice_note(remote_jid: str, audio_bytes: bytes, mime_type: str = "audio/mp3") -> Optional[Dict[str, Any]]:
@@ -71,8 +177,10 @@ class WhatsAppService:
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=20)
             response.raise_for_status()
+            WhatsAppService.mark_connected()
             return response.json()
         except requests.exceptions.RequestException as e:
+            WhatsAppService._inspect_request_exception(e)
             logger.error(f"Erro ao enviar nota de voz via WhatsApp: {e}")
             return None
 
@@ -107,8 +215,10 @@ class WhatsAppService:
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
+            WhatsAppService.mark_connected()
             return response.json()
         except requests.exceptions.RequestException as e:
+            WhatsAppService._inspect_request_exception(e)
             logger.error(f"Erro ao enviar documento via WhatsApp: {e}")
             return None
 

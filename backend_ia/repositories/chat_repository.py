@@ -7,6 +7,15 @@ from services.user_context import UserContext
 
 logger = logging.getLogger(__name__)
 
+# Cache em memória como fallback quando Firestore está indisponível (ex: quota 429)
+_MEMORY_CHAT_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+_MEMORY_CACHE_MAX = 20
+
+
+def _reset_memory_chat_cache() -> None:
+    """Auxiliar para testes unitários limparem o cache em memória."""
+    _MEMORY_CHAT_CACHE.clear()
+
 
 class ChatRepository:
     COLLECTION = "chat_logs"
@@ -26,26 +35,31 @@ class ChatRepository:
 
     @staticmethod
     def save_log(remote_jid: str, from_me: bool, text: str, message_id: str = None):
+        now_utc = datetime.now(timezone.utc)
+        user_id = UserContext.get_user_id() or "daniel"
+        doc_data = {
+            "remoteJid": remote_jid,
+            "userId": user_id,
+            "fromMe": from_me,
+            "text": text,
+            "timestamp": now_utc
+        }
+        if message_id:
+            doc_data["messageId"] = message_id
+
+        cache = _MEMORY_CHAT_CACHE.setdefault(remote_jid, [])
+        cache.append(doc_data)
+        if len(cache) > _MEMORY_CACHE_MAX:
+            cache.pop(0)
+
         if firebase.db is None:
-            logger.warning("Firebase não inicializado, pulando salvamento de log.")
+            logger.warning("Firebase não inicializado, log salvo apenas em memória.")
             return
 
         try:
-            now_utc = datetime.now(timezone.utc)
-            user_id = UserContext.get_user_id() or "daniel"
-            doc_data = {
-                "remoteJid": remote_jid,
-                "userId": user_id,
-                "fromMe": from_me,
-                "text": text,
-                "timestamp": now_utc
-            }
-            if message_id:
-                doc_data["messageId"] = message_id
-
             firebase.db.collection(ChatRepository.COLLECTION).add(doc_data)
-        except Exception:
-            logger.exception("Erro ao salvar chat log no Firestore")
+        except Exception as e:
+            logger.warning("Firestore indisponível ao salvar chat log (%s). Usando cache em memória.", e)
 
     @staticmethod
     def _filtrar_mensagens_alvo(docs_query, target_date: str) -> list:
@@ -141,58 +155,65 @@ class ChatRepository:
         Se houver histórico compactado indexado dos dias anteriores, injeta-o como
         contexto anterior para preservar a continuidade de memória da IA.
         """
-        if firebase.db is None:
-            return []
+        now_br = get_brasilia_now()
+        today_start_br = now_br.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        try:
-            now_br = get_brasilia_now()
-            today_start_br = now_br.replace(hour=0, minute=0, second=0, microsecond=0)
-
-            # 1. Busca mensagens recentes ativas
-            docs = (
-                firebase.db.collection(ChatRepository.COLLECTION)
-                .where("remoteJid", "==", remote_jid)
-                .order_by("timestamp", direction="DESCENDING")
-                .limit(limit)
-                .stream()
-            )
-
-            history = []
-            for doc in docs:
-                data = doc.to_dict()
-                ts = data.get("timestamp")
-                if ts:
-                    ts_br = to_brasilia(ts) if hasattr(ts, "astimezone") else ts
-                    if ts_br >= today_start_br:
-                        history.append(data)
-
-            history.reverse()
-
-            # 2. Se o histórico ativo for pequeno ou inicial, busca o histórico compactado mais recente
+        if firebase.db is not None:
             try:
-                compacted_docs = (
-                    firebase.db.collection(ChatRepository.COMPACTED_COLLECTION)
+                # 1. Busca mensagens recentes ativas
+                docs = (
+                    firebase.db.collection(ChatRepository.COLLECTION)
                     .where("remoteJid", "==", remote_jid)
-                    .order_by("date", direction="DESCENDING")
-                    .limit(1)
+                    .order_by("timestamp", direction="DESCENDING")
+                    .limit(limit)
                     .stream()
                 )
-                for cdoc in compacted_docs:
-                    cdata = cdoc.to_dict()
-                    compacted_summary = cdata.get("compactedText")
-                    if compacted_summary:
-                        context_msg = {
-                            "remoteJid": remote_jid,
-                            "fromMe": False,
-                            "text": f"[Histórico compactado dos dias anteriores]:\n{compacted_summary}",
-                            "timestamp": today_start_br - timedelta(seconds=1)
-                        }
-                        history.insert(0, context_msg)
-                        break
-            except Exception as ce:
-                logger.debug(f"Nenhum histórico compactado recuperado ou erro silencioso: {ce}")
 
-            return history
-        except Exception:
-            logger.exception("Erro ao recuperar histórico recente no Firestore")
-            return []
+                history = []
+                for doc in docs:
+                    data = doc.to_dict()
+                    ts = data.get("timestamp")
+                    if ts:
+                        ts_br = to_brasilia(ts) if hasattr(ts, "astimezone") else ts
+                        if ts_br >= today_start_br:
+                            history.append(data)
+
+                history.reverse()
+
+                # 2. Se o histórico ativo for pequeno ou inicial, busca o histórico compactado mais recente
+                try:
+                    compacted_docs = (
+                        firebase.db.collection(ChatRepository.COMPACTED_COLLECTION)
+                        .where("remoteJid", "==", remote_jid)
+                        .order_by("date", direction="DESCENDING")
+                        .limit(1)
+                        .stream()
+                    )
+                    for cdoc in compacted_docs:
+                        cdata = cdoc.to_dict()
+                        compacted_summary = cdata.get("compactedText")
+                        if compacted_summary:
+                            context_msg = {
+                                "remoteJid": remote_jid,
+                                "fromMe": False,
+                                "text": f"[Histórico compactado dos dias anteriores]:\n{compacted_summary}",
+                                "timestamp": today_start_br - timedelta(seconds=1)
+                            }
+                            history.insert(0, context_msg)
+                            break
+                except Exception as ce:
+                    logger.debug(f"Nenhum histórico compactado recuperado ou erro silencioso: {ce}")
+
+                return history
+            except Exception as e:
+                logger.warning("Firestore indisponível ao buscar histórico (%s). Usando cache em memória.", e)
+
+        cache = _MEMORY_CHAT_CACHE.get(remote_jid, [])
+        history = []
+        for msg in cache:
+            ts = msg.get("timestamp")
+            if ts:
+                ts_br = to_brasilia(ts) if hasattr(ts, "astimezone") else ts
+                if ts_br >= today_start_br:
+                    history.append(msg)
+        return history[-limit:]

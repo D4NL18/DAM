@@ -116,10 +116,10 @@ logger = logging.getLogger(__name__)
 
 
 class AIService:
-    # P-1111: Modelo primário 'gemini-flash-latest' e cadeia determinística de fallback
-    PRIMARY_MODEL = "gemini-flash-latest"
+    # P-1111: Modelo primário 'gemini-4-hydrogen' e cadeia determinística de fallback
+    PRIMARY_MODEL = "gemini-4-hydrogen"
     GEMINI_MODEL_CHAIN = [
-        "gemini-flash-latest",
+        "gemini-4-hydrogen",
         "gemini-3.8-flash",
         "gemini-3.6-flash",
         "gemini-3.5-flash",

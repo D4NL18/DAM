@@ -265,13 +265,13 @@ Este arquivo armazena decisões definitivas e sumarizadas das funcionalidades co
   - Valores projetados compõem `totalFixed`, impactam `totalSpent`, são deduzidos do `balance`, compõem o Donut Chart (`expensesByCategory`) e a série histórica de tendências sem gerar escritas no Firestore.
 
 
-## GP-04.4 & PC-11.1: Títulos Bilíngues (Japonês e Inglês) de Animes no Resumo Diário e Cadeia de Modelos Gemini (`gemini-flash-latest` + Fallback) [P-0423, P-1111]
+## GP-04.4 & PC-11.1: Títulos Bilíngues (Japonês e Inglês) de Animes no Resumo Diário e Cadeia de Modelos Gemini (`gemini-4-hydrogen` + Fallback) [P-0423, P-1111]
 - **Exibição Bilíngue de Animes no Resumo Diário (P-0423):**
   - No Morning Briefing (`briefing_service.py`: `_formatar_titulo_anime_briefing`, `_obter_info_animes_briefing`, `_obter_animes_lancando_hoje` e `montar_resumo_matinal`), sempre que um anime possuir título em inglês (`titulo_ingles`) distinto do título em japonês/romaji (`titulo_romaji` / `titulo_principal`), o resumo diário exibe ambos os nomes no formato `Nome em Japonês (Nome em Inglês)` — tanto para lançamentos do dia quanto para o alerta de próximo lançamento (`⏰ *Próximo:*`).
   - A sincronização e a renovação automática de episódios do AniList (`anime_tracker_tool.py`) preservam explicitamente `titulo_romaji`, `titulo_ingles` e `titulo_principal`.
-- **Modelo Primário `gemini-flash-latest` e Cadeia de Fallback Determinística (P-1111):**
-  - `AIService` (`backend_ia/services/ai_service.py`) e `menu_translator_tool.py` operam sempre com o modelo primário `gemini-flash-latest` e percorrem automaticamente a cadeia de fallback em ordem estrita:
-    1. `gemini-flash-latest` (Primário)
+- **Modelo Primário `gemini-4-hydrogen` e Cadeia de Fallback Determinística (P-1111):**
+  - `AIService` (`backend_ia/services/ai_service.py`) e `menu_translator_tool.py` operam sempre com o modelo primário `gemini-4-hydrogen` e percorrem automaticamente a cadeia de fallback em ordem estrita:
+    1. `gemini-4-hydrogen` (Primário)
     2. `gemini-3.8-flash` (Fallback 1)
     3. `gemini-3.6-flash` (Fallback 2)
     4. `gemini-3.5-flash` (Fallback 3)

@@ -450,7 +450,7 @@ def traduzir_e_explicar_cardapio(
                 f"⚠️ **Alérgenos Conhecidos:** [Liste glúten, lactose, ovos, frutos do mar, nozes, soja se houver]\n"
                 f"🚨 **Alerta de Restrições:** [Se o usuário passou restrições, confirme se é seguro ou se há conflito]."
             )
-            for m_name in ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']:
+            for m_name in ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']:
                 try:
                     model = genai.GenerativeModel(m_name)
                     resp = model.generate_content(prompt_culinario)

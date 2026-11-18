@@ -93,28 +93,28 @@ class TestAIServiceResilience:
     def test_gemini_model_chain_constants_and_primary_model(self):
         """
         P-1111: AIService.GEMINI_MODEL_CHAIN deve ser exatamente
-        ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']
-        e AIService.PRIMARY_MODEL deve ser 'gemini-flash-latest'.
+        ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']
+        e AIService.PRIMARY_MODEL deve ser 'gemini-4-hydrogen'.
         """
         expected_chain = [
-            "gemini-flash-latest",
+            "gemini-4-hydrogen",
             "gemini-3.8-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash",
         ]
         assert hasattr(AIService, "GEMINI_MODEL_CHAIN")
         assert list(AIService.GEMINI_MODEL_CHAIN) == expected_chain
-        assert getattr(AIService, "PRIMARY_MODEL", AIService.GEMINI_MODEL_CHAIN[0]) == "gemini-flash-latest"
+        assert getattr(AIService, "PRIMARY_MODEL", AIService.GEMINI_MODEL_CHAIN[0]) == "gemini-4-hydrogen"
 
     @patch("services.ai_service.ConversationCacheService.get_cached_response", return_value=None)
     @patch("services.ai_service.ChatRepository.get_recent_history", return_value=[])
     @patch("services.ai_service.genai.GenerativeModel")
-    def test_primary_model_used_first_is_gemini_flash_latest(
+    def test_primary_model_used_first_is_gemini_4_hydrogen(
         self, mock_genai_model, mock_history, mock_cache
     ):
         """
         P-1111: Na execução normal de AIService.process_message, o primeiro modelo
-        instanciado em genai.GenerativeModel utiliza model_name='gemini-flash-latest'.
+        instanciado em genai.GenerativeModel utiliza model_name='gemini-4-hydrogen'.
         """
         model = MagicMock()
         chat = MagicMock()
@@ -122,7 +122,7 @@ class TestAIServiceResilience:
         candidate = MagicMock()
         candidate.finish_reason = 1
         response.candidates = [candidate]
-        response.text = "Resposta com modelo primário gemini-flash-latest"
+        response.text = "Resposta com modelo primário gemini-4-hydrogen"
         chat.send_message.return_value = response
         model.start_chat.return_value = chat
         mock_genai_model.return_value = model
@@ -132,10 +132,10 @@ class TestAIServiceResilience:
             user_text="Bom dia!"
         )
 
-        assert result == "Resposta com modelo primário gemini-flash-latest"
+        assert result == "Resposta com modelo primário gemini-4-hydrogen"
         assert mock_genai_model.call_count == 1
         first_call_kwargs = mock_genai_model.call_args_list[0][1]
-        assert first_call_kwargs.get("model_name") == "gemini-flash-latest"
+        assert first_call_kwargs.get("model_name") == "gemini-4-hydrogen"
 
     @patch("services.ai_service.ConversationCacheService.get_cached_response", return_value=None)
     @patch("services.ai_service.ChatRepository.get_recent_history", return_value=[])
@@ -144,13 +144,13 @@ class TestAIServiceResilience:
         self, mock_genai_model, mock_history, mock_cache
     ):
         """
-        P-1111: Se 'gemini-flash-latest' e 'gemini-3.8-flash' falharem ao enviar mensagem
+        P-1111: Se 'gemini-4-hydrogen' e 'gemini-3.8-flash' falharem ao enviar mensagem
         e 'gemini-3.6-flash' funcionar, devem ser feitas 3 chamadas a genai.GenerativeModel
-        na ordem exata ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash'].
+        na ordem exata ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-3.6-flash'].
         """
         model_primary = MagicMock()
         chat_primary = MagicMock()
-        chat_primary.send_message.side_effect = Exception("404 Model gemini-flash-latest not found")
+        chat_primary.send_message.side_effect = Exception("404 Model gemini-4-hydrogen not found")
         model_primary.start_chat.return_value = chat_primary
 
         model_fb1 = MagicMock()
@@ -179,7 +179,7 @@ class TestAIServiceResilience:
         assert mock_genai_model.call_count == 3
         called_models = [call[1].get("model_name") for call in mock_genai_model.call_args_list]
         assert called_models == [
-            "gemini-flash-latest",
+            "gemini-4-hydrogen",
             "gemini-3.8-flash",
             "gemini-3.6-flash",
         ]
@@ -195,7 +195,7 @@ class TestAIServiceResilience:
         'gemini-3.5-flash' na ordem exata da cadeia.
         """
         failing_models = []
-        for name in ["gemini-flash-latest", "gemini-3.8-flash", "gemini-3.6-flash"]:
+        for name in ["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.6-flash"]:
             m = MagicMock()
             c = MagicMock()
             c.send_message.side_effect = Exception(f"Unavailable: {name}")
@@ -222,7 +222,7 @@ class TestAIServiceResilience:
         assert result == "Respondido pelo último fallback gemini-3.5-flash!"
         called_models = [call[1].get("model_name") for call in mock_genai_model.call_args_list]
         assert called_models == [
-            "gemini-flash-latest",
+            "gemini-4-hydrogen",
             "gemini-3.8-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash",

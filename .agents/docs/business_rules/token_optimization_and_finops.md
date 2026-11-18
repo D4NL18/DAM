@@ -53,10 +53,10 @@ Este documento estabelece as regras canônicas de negócio para redução drást
 - O Google Cloud Logging **DEVE** configurar filtro de exclusão no Log Sink para descartar mensagens de severidade inferior a `WARNING` originadas dos containers de aplicação, prevenindo custos de ingestão além da cota de 50 GiB/mês.
 - O sistema **DEVE** monitorar continuamente as notificações de faturamento (`/api/billing-alert`). Se o consumo acumulado do mês atingir ou superar 95% do teto orçamentário configurado, o sistema **DEVE** ativar automaticamente o *Circuit Breaker Orçamentário*, operando em modo econômico e notificando os administradores via WhatsApp.
 
-### P-1111: Modelo Primário `gemini-flash-latest` e Cadeia de Fallback Determinística
-- O serviço central de IA (`AIService` em `backend_ia/services/ai_service.py` e chamadas auxiliares ao Gemini) **DEVE** utilizar sempre como modelo primário o **`gemini-flash-latest`**.
+### P-1111: Modelo Primário `gemini-4-hydrogen` e Cadeia de Fallback Determinística
+- O serviço central de IA (`AIService` em `backend_ia/services/ai_service.py` e chamadas auxiliares ao Gemini) **DEVE** utilizar sempre como modelo primário o **`gemini-4-hydrogen`**.
 - Em caso de indisponibilidade, erro de modelo não encontrado ou falha de chamada na API no modelo primário, o sistema **DEVE** percorrer automaticamente a cadeia de fallback com nomes específicos na ordem exata:
-  1. `gemini-flash-latest` (Primário)
+  1. `gemini-4-hydrogen` (Primário)
   2. `gemini-3.8-flash` (Fallback 1)
   3. `gemini-3.6-flash` (Fallback 2)
   4. `gemini-3.5-flash` (Fallback 3)

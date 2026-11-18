@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
+from fastapi.testclient import TestClient
 from google.api_core.exceptions import ResourceExhausted
 
 from config.firebase import (
@@ -14,15 +16,20 @@ from config.firebase import (
     is_circuit_breaker_open,
     reset_circuit_breaker,
 )
+from config.settings import settings
+from main import app
 from repositories.chat_repository import ChatRepository, _reset_memory_chat_cache
 from services.briefing_service import (
     _disparar_briefing_se_horario_correto,
     _obter_todos_usuarios_briefing,
     _reset_briefing_memory,
     _reset_briefing_preferences,
+    enviar_briefing_matinal,
     salvar_preferencias_briefing,
+    verificar_e_disparar_briefings_agendados,
 )
 from services.user_context import UserContext
+from services.whatsapp_service import WhatsAppService
 
 
 @pytest.fixture(autouse=True)
@@ -31,12 +38,14 @@ def clean_resilience_state():
     _reset_memory_chat_cache()
     _reset_briefing_memory()
     _reset_briefing_preferences()
+    WhatsAppService.reset_connection_state()
     UserContext.set_user("daniel", "5571991269995")
     yield
     reset_circuit_breaker()
     _reset_memory_chat_cache()
     _reset_briefing_memory()
     _reset_briefing_preferences()
+    WhatsAppService.reset_connection_state()
     UserContext.set_user("daniel", "5571991269995")
 
 
@@ -164,3 +173,119 @@ class TestBriefingCooldownAndUserCache:
         assert users_first == ["daniel", "lari", "convidado"]
         assert users_second == ["daniel", "lari", "convidado"]
         mock_db.collection.return_value.stream.assert_called_once()
+
+
+class TestWhatsAppDisconnectionDetection:
+    def test_check_connection_state_tracks_open_close_and_error(self):
+        resp_close = MagicMock()
+        resp_close.content = b'{"instance": {"state": "close"}}'
+        resp_close.json.return_value = {"instance": {"instanceName": "dam_bot", "state": "close"}}
+        resp_close.raise_for_status.return_value = None
+
+        with patch("services.whatsapp_service.requests.get", return_value=resp_close):
+            state = WhatsAppService.check_connection_state(force=True)
+            assert state == "close"
+            assert WhatsAppService.is_connected() is False
+
+        resp_open = MagicMock()
+        resp_open.content = b'{"instance": {"state": "open"}}'
+        resp_open.json.return_value = {"instance": {"instanceName": "dam_bot", "state": "open"}}
+        resp_open.raise_for_status.return_value = None
+
+        with patch("services.whatsapp_service.requests.get", return_value=resp_open):
+            state = WhatsAppService.check_connection_state(force=True)
+            assert state == "open"
+            assert WhatsAppService.is_connected() is True
+
+        with patch(
+            "services.whatsapp_service.requests.get",
+            side_effect=requests.exceptions.ConnectionError("Evolution API down"),
+        ):
+            state = WhatsAppService.check_connection_state(force=True)
+            assert state == "error"
+            assert WhatsAppService.is_connected() is False
+
+    def test_send_text_marks_disconnected_on_http_428_connection_closed(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 428
+        mock_resp.text = '{"status":428,"error":"Precondition Required","message":"Connection Closed"}'
+        err = requests.exceptions.HTTPError("428 Client Error", response=mock_resp)
+        mock_resp.raise_for_status.side_effect = err
+
+        with patch("services.whatsapp_service.requests.post", return_value=mock_resp):
+            result = WhatsAppService.send_text("5571991269995@s.whatsapp.net", "Olá")
+
+        assert result is None
+        assert WhatsAppService.is_connected() is False
+
+    def test_webhook_connection_update_updates_state(self):
+        client = TestClient(app)
+        headers = {"apikey": settings.WEBHOOK_TOKEN} if settings.WEBHOOK_TOKEN else {}
+
+        res_close = client.post(
+            "/api/whatsapp/webhook",
+            json={"event": "connection.update", "data": {"state": "close", "statusReason": 401}},
+            headers=headers,
+        )
+        assert res_close.status_code == 200
+        assert res_close.json()["state"] == "close"
+        assert WhatsAppService.is_connected() is False
+
+        res_open = client.post(
+            "/api/whatsapp/webhook",
+            json={"event": "connection.update", "data": {"state": "open"}},
+            headers=headers,
+        )
+        assert res_open.status_code == 200
+        assert res_open.json()["state"] == "open"
+        assert WhatsAppService.is_connected() is True
+
+    @patch("services.briefing_service.montar_resumo_matinal")
+    @patch("services.briefing_service.WhatsAppService.send_text")
+    def test_briefing_aborts_immediately_when_whatsapp_disconnected(self, mock_send, mock_resumo):
+        salvar_preferencias_briefing(
+            "daniel",
+            {"userId": "daniel", "horario": "08:00", "ativo": True, "topicos": ["agenda"]},
+        )
+        salvar_preferencias_briefing(
+            "lari",
+            {"userId": "lari", "horario": "08:00", "ativo": True, "topicos": ["agenda"]},
+        )
+
+        WhatsAppService.mark_disconnected("webhook:connection.update:close")
+
+        with patch("services.briefing_service.firebase.db", None):
+            msg = enviar_briefing_matinal(force=False, user_id="daniel")
+            disparados = verificar_e_disparar_briefings_agendados(hora_minuto="08:00", force=False)
+
+        assert "desconectado" in msg.lower()
+        assert disparados == []
+        mock_resumo.assert_not_called()
+        mock_send.assert_not_called()
+
+    @patch("services.briefing_service.montar_resumo_matinal", return_value="Resumo")
+    def test_scheduler_stops_remaining_users_after_first_428_disconnect(self, _mock_resumo):
+        salvar_preferencias_briefing(
+            "daniel",
+            {"userId": "daniel", "horario": "08:00", "ativo": True, "topicos": ["agenda"]},
+        )
+        salvar_preferencias_briefing(
+            "lari",
+            {"userId": "lari", "horario": "08:00", "ativo": True, "topicos": ["agenda"]},
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 428
+        mock_resp.text = "Connection Closed"
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError("428", response=mock_resp)
+
+        with patch("services.briefing_service.firebase.db", None), patch(
+            "services.whatsapp_service.requests.post", return_value=mock_resp
+        ) as mock_post:
+            disparados = verificar_e_disparar_briefings_agendados(hora_minuto="08:00", force=False)
+
+        assert disparados == []
+        assert WhatsAppService.is_connected() is False
+        # Deve tentar no máximo uma vez (o primeiro usuário detecta 428 e interrompe o restante da fila)
+        mock_post.assert_called_once()
+

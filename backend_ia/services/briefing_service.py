@@ -51,6 +51,7 @@ def _reset_briefing_memory():
     """Auxiliar para testes unitários resetarem a memória de envio."""
     _MEMORY_BRIEFING_LOGS.clear()
     _MEMORY_BRIEFING_FAILURE_COOLDOWN.clear()
+    WhatsAppService.reset_connection_state()
 
 def _reset_briefing_preferences():
     """Auxiliar para testes unitários resetarem as preferências."""
@@ -699,6 +700,9 @@ def _registrar_resultado_disparo(uid: str, res: str) -> bool:
 def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool, permitir_catchup: bool = False) -> bool:
     """Verifica preferências e dispara o briefing caso o horário coincida ou se precisar de catch-up matinal."""
     try:
+        if not force and not WhatsAppService.is_connected():
+            return False
+
         prefs = obter_preferencias_briefing(uid)
         if not prefs.get("ativo", True):
             return False
@@ -770,6 +774,10 @@ def verificar_e_disparar_briefings_agendados(
     configurado coincidir com hora_minuto (ou catch-up matinal se habilitado).
     Retorna a lista de user_ids para os quais o disparo foi efetuado.
     """
+    if not force and not WhatsAppService.is_connected():
+        logger.warning("[Briefing] Disparo automático suspenso: WhatsApp desconectado.")
+        return []
+
     if not hora_minuto:
         hoje = _obter_data_brasilia()
         hora_minuto = hoje.strftime("%H:%M")
@@ -779,6 +787,9 @@ def verificar_e_disparar_briefings_agendados(
 
     disparados = []
     for uid in usuarios_alvo:
+        if not force and not WhatsAppService.is_connected():
+            logger.warning("[Briefing] Interrompendo fila de briefings: WhatsApp desconectado.")
+            break
         if _disparar_briefing_se_horario_correto(uid, hora_alvo, force, permitir_catchup):
             disparados.append(uid)
 
@@ -792,6 +803,10 @@ def enviar_briefing_matinal(force: bool = False, user_id: Optional[str] = None) 
         force (bool): Se True, reenvia mesmo que já tenha sido disparado hoje.
         user_id (str, opcional): Usuário alvo ('daniel' ou 'lari'). Se omitido, usa UserContext.
     """
+    if not force and not WhatsAppService.is_connected():
+        logger.warning("Envio de briefing matinal abortado: WhatsApp desconectado.")
+        return "⚠️ Briefing matinal suspenso: WhatsApp desconectado."
+
     target_user_id = (user_id or UserContext.get_user_id() or "daniel").lower().strip()
     target_user_name = _obter_target_user_name(target_user_id)
 

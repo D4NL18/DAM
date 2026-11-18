@@ -15,6 +15,7 @@ from services.briefing_service import (
     _normalizar_horario,
 )
 from services.tools.clash_of_clans_tool import alerta_raid_capital, alerta_clan_war
+from services.whatsapp_service import WhatsAppService
 from contextlib import asynccontextmanager
 
 logging.basicConfig(
@@ -79,12 +80,15 @@ async def _rotina_briefing_diario():
             if not startup_catchup_done:
                 startup_catchup_done = True
                 if "06:00" <= hora_atual < "12:00":
-                    logger.info(f"[Briefing Scheduler] Executando catch-up único de inicialização às {hora_atual}...")
-                    disparados_init = await asyncio.to_thread(
-                        verificar_e_disparar_briefings_agendados, hora_atual, False, True
-                    )
-                    if disparados_init:
-                        logger.info(f"[Briefing Scheduler] Catch-up enviado para: {', '.join(disparados_init)}")
+                    if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+                        logger.warning("[Briefing Scheduler] WhatsApp desconectado. Catch-up de inicialização ignorado.")
+                    else:
+                        logger.info(f"[Briefing Scheduler] Executando catch-up único de inicialização às {hora_atual}...")
+                        disparados_init = await asyncio.to_thread(
+                            verificar_e_disparar_briefings_agendados, hora_atual, False, True
+                        )
+                        if disparados_init:
+                            logger.info(f"[Briefing Scheduler] Catch-up enviado para: {', '.join(disparados_init)}")
 
             _briefing_schedule_changed.clear()
             horarios = await asyncio.to_thread(_coletar_horarios_alvo)
@@ -105,6 +109,10 @@ async def _rotina_briefing_diario():
             except asyncio.TimeoutError:
                 pass
 
+            if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+                logger.warning("[Briefing Scheduler] WhatsApp desconectado. Disparo agendado ignorado sem retries.")
+                continue
+
             hora_disparo = datetime.now(tz_br).strftime("%H:%M")
             logger.info(f"[Briefing Scheduler] Disparando briefings para {hora_disparo}...")
             disparados = await asyncio.to_thread(
@@ -123,8 +131,11 @@ async def _rotina_raid_capital():
         try:
             agora = datetime.now(tz_br)
             if agora.weekday() == 6 and agora.hour == 12 and agora.minute == 0:
-                logger.info("[CoC Scheduler] Disparando alerta de Raid Weekend (Domingo 12:00 Brasilia).")
-                await asyncio.to_thread(alerta_raid_capital)
+                if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+                    logger.warning("[CoC Scheduler] WhatsApp desconectado. Alerta de Raid Weekend ignorado.")
+                else:
+                    logger.info("[CoC Scheduler] Disparando alerta de Raid Weekend (Domingo 12:00 Brasilia).")
+                    await asyncio.to_thread(alerta_raid_capital)
                 await asyncio.sleep(65)
         except Exception as e:
             logger.error(f"[CoC Scheduler] Erro no scheduler de Raid Weekend: {e}")
@@ -137,8 +148,11 @@ async def _rotina_guerra_clas():
         try:
             agora = datetime.now(tz_br)
             if agora.hour == 6 and agora.minute == 0:
-                logger.info("[CoC Scheduler] Disparando alerta de Guerra de Clas (06:00 Brasilia).")
-                await asyncio.to_thread(alerta_clan_war)
+                if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+                    logger.warning("[CoC Scheduler] WhatsApp desconectado. Alerta de Guerra de Clas ignorado.")
+                else:
+                    logger.info("[CoC Scheduler] Disparando alerta de Guerra de Clas (06:00 Brasilia).")
+                    await asyncio.to_thread(alerta_clan_war)
                 await asyncio.sleep(65)
         except Exception as e:
             logger.error(f"[CoC Scheduler] Erro no scheduler de Guerra de Clas: {e}")

@@ -196,11 +196,24 @@ async def whatsapp_webhook(
         logger.exception("Erro ao parsear JSON do webhook")
         return {"status": "error", "message": "Invalid JSON"}
 
-    event = str(payload.get("event", "")).lower()
+    event = str(payload.get("event", "")).lower().strip()
+
+    # Atualiza estado de conexão em tempo real a partir dos webhooks da Evolution API
+    if event in ["connection.update", "connection_update", "status.instance", "status_instance"]:
+        conn_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        state = str(conn_data.get("state") or conn_data.get("status") or "").lower().strip()
+        status_reason = conn_data.get("statusReason")
+        if state == "open":
+            WhatsAppService.mark_connected()
+        elif state in ("close", "closed", "refused", "connecting") or status_reason == 401:
+            WhatsAppService.mark_disconnected(f"webhook:{event}:{state or status_reason}")
+        return {"status": "ok", "event": event, "state": state}
 
     # Guard clause: processa unicamente messages.upsert
     if event not in ["messages.upsert", "messages_upsert"]:
         return {"status": "ignored", "reason": "not_messages_upsert"}
+
+    WhatsAppService.mark_connected()
 
     data = payload.get("data")
     if not isinstance(data, dict):

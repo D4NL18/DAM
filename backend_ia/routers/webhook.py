@@ -176,6 +176,20 @@ async def process_and_reply(
         logger.exception("--> [BACKGROUND ERROR] Falha no processamento da mensagem")
 
 
+def _tratar_evento_conexao(event: str, payload: dict) -> Optional[dict]:
+    """Atualiza estado de conexão do WhatsApp a partir de webhooks da Evolution API."""
+    if event not in ["connection.update", "connection_update", "status.instance", "status_instance"]:
+        return None
+    conn_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    state = str(conn_data.get("state") or conn_data.get("status") or "").lower().strip()
+    status_reason = conn_data.get("statusReason")
+    if state == "open":
+        WhatsAppService.mark_connected()
+    elif state in ("close", "closed", "refused", "connecting") or status_reason == 401:
+        WhatsAppService.mark_disconnected(f"webhook:{event}:{state or status_reason}")
+    return {"status": "ok", "event": event, "state": state}
+
+
 @router.post("/api/whatsapp/webhook")
 async def whatsapp_webhook(
     request: Request, 
@@ -198,16 +212,9 @@ async def whatsapp_webhook(
 
     event = str(payload.get("event", "")).lower().strip()
 
-    # Atualiza estado de conexão em tempo real a partir dos webhooks da Evolution API
-    if event in ["connection.update", "connection_update", "status.instance", "status_instance"]:
-        conn_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        state = str(conn_data.get("state") or conn_data.get("status") or "").lower().strip()
-        status_reason = conn_data.get("statusReason")
-        if state == "open":
-            WhatsAppService.mark_connected()
-        elif state in ("close", "closed", "refused", "connecting") or status_reason == 401:
-            WhatsAppService.mark_disconnected(f"webhook:{event}:{state or status_reason}")
-        return {"status": "ok", "event": event, "state": state}
+    conn_result = _tratar_evento_conexao(event, payload)
+    if conn_result is not None:
+        return conn_result
 
     # Guard clause: processa unicamente messages.upsert
     if event not in ["messages.upsert", "messages_upsert"]:

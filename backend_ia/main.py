@@ -35,8 +35,8 @@ def notificar_mudanca_briefing() -> None:
             _main_loop.call_soon_threadsafe(_briefing_schedule_changed.set)
         else:
             _briefing_schedule_changed.set()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao sinalizar evento de briefing: %s", exc)
 
 
 def _coletar_horarios_alvo() -> list[str]:
@@ -64,6 +64,43 @@ def _calcular_segundos_ate(hora_alvo: str, tz) -> float:
     return max(1.0, (alvo_hoje - agora).total_seconds() + 1.0)
 
 
+async def _executar_catchup_inicial_briefing(hora_atual: str) -> None:
+    """Executa catch-up único na inicialização se o servidor subir na janela matinal."""
+    if not ("06:00" <= hora_atual < "12:00"):
+        return
+    if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+        logger.warning("[Briefing Scheduler] WhatsApp desconectado. Catch-up de inicialização ignorado.")
+        return
+    logger.info(f"[Briefing Scheduler] Executando catch-up único de inicialização às {hora_atual}...")
+    disparados_init = await asyncio.to_thread(
+        verificar_e_disparar_briefings_agendados, hora_atual, False, True
+    )
+    if disparados_init:
+        logger.info(f"[Briefing Scheduler] Catch-up enviado para: {', '.join(disparados_init)}")
+
+
+async def _disparar_briefings_se_conectado(hora_disparo: str) -> None:
+    """Dispara os briefings agendados se a instância do WhatsApp estiver conectada."""
+    if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+        logger.warning("[Briefing Scheduler] WhatsApp desconectado. Disparo agendado ignorado sem retries.")
+        return
+    logger.info(f"[Briefing Scheduler] Disparando briefings para {hora_disparo}...")
+    disparados = await asyncio.to_thread(
+        verificar_e_disparar_briefings_agendados, hora_disparo, False, True
+    )
+    if disparados:
+        logger.info(f"[Briefing Scheduler] Briefing enviado para: {', '.join(disparados)}")
+
+
+async def _executar_job_coc_se_conectado(job_fn, label: str) -> None:
+    """Executa job agendado do Clash of Clans apenas se o WhatsApp estiver conectado."""
+    if not await asyncio.to_thread(WhatsAppService.is_connected, True):
+        logger.warning(f"[CoC Scheduler] WhatsApp desconectado. Alerta de {label} ignorado.")
+        return
+    logger.info(f"[CoC Scheduler] Disparando alerta de {label}.")
+    await asyncio.to_thread(job_fn)
+
+
 async def _rotina_briefing_diario():
     """Scheduler event-driven: dorme até o próximo horário agendado sem polling no Firestore."""
     global _main_loop
@@ -73,30 +110,18 @@ async def _rotina_briefing_diario():
 
     while True:
         try:
-            agora = datetime.now(tz_br)
-            hora_atual = agora.strftime("%H:%M")
+            hora_atual = datetime.now(tz_br).strftime("%H:%M")
 
-            # Catch-up único na inicialização caso o servidor suba durante a janela matinal
             if not startup_catchup_done:
                 startup_catchup_done = True
-                if "06:00" <= hora_atual < "12:00":
-                    if not await asyncio.to_thread(WhatsAppService.is_connected, True):
-                        logger.warning("[Briefing Scheduler] WhatsApp desconectado. Catch-up de inicialização ignorado.")
-                    else:
-                        logger.info(f"[Briefing Scheduler] Executando catch-up único de inicialização às {hora_atual}...")
-                        disparados_init = await asyncio.to_thread(
-                            verificar_e_disparar_briefings_agendados, hora_atual, False, True
-                        )
-                        if disparados_init:
-                            logger.info(f"[Briefing Scheduler] Catch-up enviado para: {', '.join(disparados_init)}")
+                await _executar_catchup_inicial_briefing(hora_atual)
 
             _briefing_schedule_changed.clear()
             horarios = await asyncio.to_thread(_coletar_horarios_alvo)
             logger.info(f"[Briefing Scheduler] Horários agendados: {horarios}")
 
-            agora = datetime.now(tz_br)
-            hora_atual = agora.strftime("%H:%M")
-            proximos_hoje = [h for h in horarios if h > hora_atual]
+            hora_ref = datetime.now(tz_br).strftime("%H:%M")
+            proximos_hoje = [h for h in horarios if h > hora_ref]
             proximo = proximos_hoje[0] if proximos_hoje else horarios[0]
             segundos = _calcular_segundos_ate(proximo, tz_br)
 
@@ -107,19 +132,9 @@ async def _rotina_briefing_diario():
                 logger.info("[Briefing Scheduler] Preferências alteradas, recalculando horários...")
                 continue
             except asyncio.TimeoutError:
-                pass
+                logger.debug("[Briefing Scheduler] Horário alvo %s atingido.", proximo)
 
-            if not await asyncio.to_thread(WhatsAppService.is_connected, True):
-                logger.warning("[Briefing Scheduler] WhatsApp desconectado. Disparo agendado ignorado sem retries.")
-                continue
-
-            hora_disparo = datetime.now(tz_br).strftime("%H:%M")
-            logger.info(f"[Briefing Scheduler] Disparando briefings para {hora_disparo}...")
-            disparados = await asyncio.to_thread(
-                verificar_e_disparar_briefings_agendados, hora_disparo, False, True
-            )
-            if disparados:
-                logger.info(f"[Briefing Scheduler] Briefing enviado para: {', '.join(disparados)}")
+            await _disparar_briefings_se_conectado(datetime.now(tz_br).strftime("%H:%M"))
         except Exception as e:
             logger.error(f"[Briefing Scheduler] Erro: {e}")
             await asyncio.sleep(300)
@@ -131,11 +146,7 @@ async def _rotina_raid_capital():
         try:
             agora = datetime.now(tz_br)
             if agora.weekday() == 6 and agora.hour == 12 and agora.minute == 0:
-                if not await asyncio.to_thread(WhatsAppService.is_connected, True):
-                    logger.warning("[CoC Scheduler] WhatsApp desconectado. Alerta de Raid Weekend ignorado.")
-                else:
-                    logger.info("[CoC Scheduler] Disparando alerta de Raid Weekend (Domingo 12:00 Brasilia).")
-                    await asyncio.to_thread(alerta_raid_capital)
+                await _executar_job_coc_se_conectado(alerta_raid_capital, "Raid Weekend (Domingo 12:00 Brasilia)")
                 await asyncio.sleep(65)
         except Exception as e:
             logger.error(f"[CoC Scheduler] Erro no scheduler de Raid Weekend: {e}")
@@ -148,11 +159,7 @@ async def _rotina_guerra_clas():
         try:
             agora = datetime.now(tz_br)
             if agora.hour == 6 and agora.minute == 0:
-                if not await asyncio.to_thread(WhatsAppService.is_connected, True):
-                    logger.warning("[CoC Scheduler] WhatsApp desconectado. Alerta de Guerra de Clas ignorado.")
-                else:
-                    logger.info("[CoC Scheduler] Disparando alerta de Guerra de Clas (06:00 Brasilia).")
-                    await asyncio.to_thread(alerta_clan_war)
+                await _executar_job_coc_se_conectado(alerta_clan_war, "Guerra de Clas (06:00 Brasilia)")
                 await asyncio.sleep(65)
         except Exception as e:
             logger.error(f"[CoC Scheduler] Erro no scheduler de Guerra de Clas: {e}")

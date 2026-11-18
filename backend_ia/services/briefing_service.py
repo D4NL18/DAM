@@ -99,8 +99,8 @@ def salvar_preferencias_briefing(user_id: str, prefs: Dict[str, Any]) -> None:
     try:
         from main import notificar_mudanca_briefing
         notificar_mudanca_briefing()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Scheduler de briefing não ativo: %s", exc)
 
 def configurar_preferencias_briefing(
     horario: Optional[str] = None,
@@ -697,6 +697,28 @@ def _registrar_resultado_disparo(uid: str, res: str) -> bool:
     return False
 
 
+def _verificar_briefing_ja_enviado_hoje(uid: str, hoje_str: str) -> bool:
+    """Verifica em memória e no Firestore se o briefing do usuário já foi entregue hoje."""
+    chave_user = f"{hoje_str}_{uid}"
+    if chave_user in _MEMORY_BRIEFING_LOGS:
+        return True
+    if firebase.db is None:
+        return False
+    try:
+        doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
+        if doc.exists and doc.to_dict().get("status") == "sucesso":
+            _MEMORY_BRIEFING_LOGS.add(chave_user)
+            return True
+        if uid == "daniel":
+            doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
+            if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
+                _MEMORY_BRIEFING_LOGS.add(chave_user)
+                return True
+    except Exception as exc:
+        logger.debug("Falha ao consultar log de briefing no Firestore (%s): %s", uid, exc)
+    return False
+
+
 def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: bool, permitir_catchup: bool = False) -> bool:
     """Verifica preferências e dispara o briefing caso o horário coincida ou se precisar de catch-up matinal."""
     try:
@@ -710,7 +732,6 @@ def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: boo
         horario_user = _normalizar_horario(prefs.get("horario", "08:00"))
         hora_alvo = _normalizar_horario(hora_minuto)
 
-        # Se for disparo forçado, dispara se o horário coincidir
         if force:
             if horario_user == hora_alvo:
                 enviar_briefing_matinal(force=True, user_id=uid)
@@ -728,30 +749,10 @@ def _disparar_briefing_se_horario_correto(uid: str, hora_minuto: str, force: boo
             res = enviar_briefing_matinal(force=False, user_id=uid)
             return _registrar_resultado_disparo(uid, res)
 
-        # 2. Catch-up matinal resiliente (se habilitado pelo background worker):
-        # Dispara se estiver dentro do período matinal (entre horário do usuário e 12:00)
-        # e o briefing ainda NÃO tiver sido enviado hoje (ex: servidor reiniciou ou estava desligado no minuto exato)
+        # 2. Catch-up matinal resiliente (entre horário do usuário e 12:00)
         if permitir_catchup and horario_user < hora_alvo < "12:00":
-            hoje = _obter_data_brasilia()
-            hoje_str = hoje.strftime("%Y-%m-%d")
-            chave_user = f"{hoje_str}_{uid}"
-
-            ja_enviado = chave_user in _MEMORY_BRIEFING_LOGS
-            if not ja_enviado and firebase.db is not None:
-                try:
-                    doc = firebase.db.collection("briefing_logs").document(f"briefing_{chave_user}").get()
-                    if doc.exists and doc.to_dict().get("status") == "sucesso":
-                        _MEMORY_BRIEFING_LOGS.add(chave_user)
-                        ja_enviado = True
-                    elif uid == "daniel":
-                        doc_leg = firebase.db.collection("briefing_logs").document(f"briefing_{hoje_str}").get()
-                        if doc_leg.exists and doc_leg.to_dict().get("status") == "sucesso":
-                            _MEMORY_BRIEFING_LOGS.add(chave_user)
-                            ja_enviado = True
-                except Exception:
-                    pass
-
-            if not ja_enviado:
+            hoje_str = _obter_data_brasilia().strftime("%Y-%m-%d")
+            if not _verificar_briefing_ja_enviado_hoje(uid, hoje_str):
                 logger.info(
                     "Catch-up matinal: briefing de %s não foi enviado no minuto %s e horário atual (%s) está dentro da manhã. Disparando...",
                     uid, horario_user, hora_alvo

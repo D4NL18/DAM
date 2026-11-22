@@ -22,6 +22,7 @@ subagent: true
 - @.agents/skills/n8n-workflow-expert/SKILL.md
 - @.agents/skills/gcp-finops-expert/SKILL.md
 - @.agents/skills/gcp-cloud-run/SKILL.md
+- @.agents/skills/langgraph-expert/SKILL.md
 - Google Cloud Platform (`gcloud`, `finding-google-skills`, `retrieving-developer-knowledge`)
 - Supabase (`supabase`, `supabase-postgres-best-practices`: arquitetura BaaS, auth e edge functions)
 

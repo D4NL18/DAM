@@ -26,6 +26,8 @@ subagent: true
 - @.agents/skills/auth-implementation-patterns/SKILL.md
 - @.agents/skills/n8n-workflow-expert/SKILL.md
 - @.agents/skills/openai-api-expert/SKILL.md
+- @.agents/skills/langchain-expert/SKILL.md
+- @.agents/skills/langgraph-expert/SKILL.md
 - Figma (`figma-design-to-code`, `figma-code-connect`: tradução de componentes Figma em código tipado)
 - Supabase (`supabase`, `supabase-postgres-best-practices`: SDK client, geração de types TypeScript e Edge Functions)
 

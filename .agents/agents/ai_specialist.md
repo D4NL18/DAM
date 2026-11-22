@@ -12,6 +12,8 @@ subagent: true
 **Repertório autorizado (carregar somente as skills pertinentes à tarefa):**
 - @.agents/skills/ai-expert/SKILL.md
 - @.agents/skills/rag-expert/SKILL.md
+- @.agents/skills/langchain-expert/SKILL.md
+- @.agents/skills/langgraph-expert/SKILL.md
 - @.agents/skills/ml-pipeline-expert/SKILL.md
 - @.agents/skills/deep-learning-cv-expert/SKILL.md
 - @.agents/skills/fastapi-expert/SKILL.md

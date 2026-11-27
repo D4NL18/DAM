@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta, timezone
 from main import app
 
 client = TestClient(app)
@@ -112,12 +113,17 @@ class TestDashboardAPI:
 
     def test_agenda_summary_with_real_reminders(self):
         """P-DASH-03: Separa ativos e histórico, ignora notas e recalcula recorrência."""
+        # Datas relativas a "agora": datas fixas vencem com o tempo e quebram o teste
+        # (rem-1 deixaria de ser futuro e iria para o historico).
+        agora = datetime.now(timezone(timedelta(hours=-3)))
+        futuro = (agora + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+        base_recorrente = (agora - timedelta(days=90)).replace(day=15, hour=0, minute=0).strftime("%Y-%m-%d %H:%M")
         mock_itens = [
             {
                 "id": "rem-1",
                 "tipo": "lembrete",
                 "titulo": "Pagar fatura",
-                "data_hora_lembrete": "2026-11-20 09:00",
+                "data_hora_lembrete": futuro,
                 "status": "pendente"
             },
             {
@@ -137,7 +143,7 @@ class TestDashboardAPI:
                 "id": "rem-4",
                 "tipo": "lembrete",
                 "titulo": "Aniversário de namoro",
-                "data_hora_lembrete": "2026-09-25 00:00",
+                "data_hora_lembrete": base_recorrente,
                 "recorrencia": "mensal",
                 "status": "pendente"
             }
